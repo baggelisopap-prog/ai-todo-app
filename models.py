@@ -1,0 +1,65 @@
+from datetime import datetime
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, Literal
+
+
+class SingleTask(BaseModel):
+    """
+    Schema 1 — What the AI produces from natural language. 
+    Does not include application state or database metadata.
+    """
+    task_name: str = Field(max_length=80)
+    description: str
+    category: Literal["Business", "Personal", "Unknown"]
+    priority: Literal["P1", "P2", "P3"]
+    due_date: Optional[str] = None
+    due_time: Optional[str] = None
+    checklist: list[str] = Field(default_factory=list)
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, v):
+        if v is None:
+            return v
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("due_date must be a valid date in YYYY-MM-DD format")
+        return v
+
+    @field_validator("due_time")
+    @classmethod
+    def validate_due_time(cls, v):
+        if v is None:
+            return v
+        try:
+            datetime.strptime(v, "%H:%M")
+        except ValueError:
+            raise ValueError("due_time must be a valid time in HH:MM 24-hour format")
+        return v
+
+
+class TaskList(BaseModel):
+    """
+    Wrapper for multiple SingleTasks.
+    Used when the AI extracts several tasks from a single natural language input.
+    """
+    items: list[SingleTask]
+
+
+class TaskRecord(SingleTask):
+    """
+    Schema 2 — What is stored in the database (Airtable).
+    Inherits from SingleTask and adds application state, AI snapshots, and database metadata.
+    """
+    approval_status: bool = False
+    is_completed: bool = False
+    is_rejected: bool = False
+
+    # Frozen snapshots of the original AI output, kept for the future learning loop.
+    # These must never change after creation to preserve the original AI intent.
+    ai_suggested_category: Literal["Business", "Personal", "Unknown"] = Field(frozen=True)
+    ai_suggested_priority: Literal["P1", "P2", "P3"] = Field(frozen=True)
+    
+    record_id: Optional[str] = None
+    created_time: Optional[str] = None
