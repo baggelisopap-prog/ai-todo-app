@@ -21,7 +21,10 @@ from pydantic import BaseModel
 from typing import Optional
 from models import TaskRecord
 from services import TaskService
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 # Request/Response Schemas
 class ExtractRequest(BaseModel):
     """Request body for POST /extract"""
@@ -66,12 +69,15 @@ app = FastAPI(
 )
 
 # CORS middleware
+# Read allowed origins from environment variable, with localhost as fallback for local dev
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # React default
-        "http://localhost:5173",  # Vite default
-    ],
+    allow_origins=[origin.strip() for origin in ALLOWED_ORIGINS],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
