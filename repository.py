@@ -51,7 +51,7 @@ class AirtableTaskRepository:
         fields.pop("created_time", None)
 
         # Airtable expects lists to be JSON strings if storing in a Long Text field
-       fields["checklist"] = json.dumps(fields.get("checklist", []), ensure_ascii=False)
+        fields["checklist"] = json.dumps(fields.get("checklist", []), ensure_ascii=False)
 
         return fields
 
