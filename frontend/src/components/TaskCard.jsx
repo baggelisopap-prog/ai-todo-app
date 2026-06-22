@@ -10,11 +10,16 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
+  const [optimisticChecklist, setOptimisticChecklist] = useState(null);
+  const [pendingToggleIdx, setPendingToggleIdx] = useState(null);
+  const [toggleError, setToggleError] = useState(null);
+
   const cardRef = useRef(null);
 
   const isPending = !task.approval_status;
   const isCompleted = task.is_completed;
   const isRejected = task.is_rejected;
+  const displayChecklist = optimisticChecklist ?? task.checklist;
 
   // Initialize draft on expand, clear on collapse
   useEffect(() => {
@@ -101,6 +106,24 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
     }
   }
 
+  async function handleToggleChecklistItem(idx) {
+    const newChecklist = task.checklist.map((it, i) =>
+      i === idx ? { ...it, done: !it.done } : it
+    );
+    setOptimisticChecklist(newChecklist);
+    setPendingToggleIdx(idx);
+    setToggleError(null);
+    try {
+      await onUpdate(task.record_id, { checklist: newChecklist });
+      setOptimisticChecklist(null);
+    } catch (err) {
+      setOptimisticChecklist(null);
+      setToggleError(err.message);
+    } finally {
+      setPendingToggleIdx(null);
+    }
+  }
+
   function updateDraft(field, value) {
     setDraft((d) => ({ ...d, [field]: value }));
   }
@@ -113,7 +136,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
   }
 
   function addChecklistItem() {
-    setDraft((d) => ({ ...d, checklist: [...d.checklist, ''] }));
+    setDraft((d) => ({ ...d, checklist: [...d.checklist, { text: '', done: false }] }));
   }
 
   function removeChecklistItem(index) {
@@ -174,15 +197,33 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
             )}
           </div>
 
-          {task.checklist && task.checklist.length > 0 && (
-            <ul className="mt-3 space-y-1">
-              {task.checklist.map((item, index) => (
-                <li key={index} className="text-xs text-slate-400 flex items-start gap-2">
-                  <span className="text-slate-600 mt-0.5">•</span>
-                  <span>{item}</span>
+          {displayChecklist && displayChecklist.length > 0 && (
+            <ul className="mt-3 space-y-0.5">
+              {displayChecklist.map((item, index) => (
+                <li key={index} className="text-xs">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+  e.stopPropagation();
+  handleToggleChecklistItem(index);
+}}
+                    disabled={pendingToggleIdx !== null}
+                    className="flex items-center gap-2 w-full text-left py-0.5 px-1 hover:bg-slate-800/40 rounded transition-colors disabled:cursor-wait"
+                  >
+                    {item.done ? <CheckedBox /> : <EmptyBox />}
+                    <span className={item.done ? 'line-through text-slate-500' : 'text-slate-400'}>
+                      {item.text}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
+          )}
+
+          {toggleError && (
+            <div className="mt-1 text-xs text-red-400">
+              Failed to update: {toggleError}
+            </div>
           )}
 
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-slate-800/50">
@@ -338,8 +379,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
                 <div key={index} className="flex items-center gap-2">
                   <input
                     type="text"
-                    value={item}
-                    onChange={(e) => updateChecklistItem(index, e.target.value)}
+                    value={item.text}
+                    onChange={(e) => updateChecklistItem(index, { ...item, text: e.target.value })}
                     placeholder={`Item ${index + 1}`}
                     className="flex-1 px-3 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:border-slate-500"
                   />
@@ -516,6 +557,23 @@ function PriorityBadge({ priority }) {
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${colorClass}`}>
       {priority}
     </span>
+  );
+}
+
+function EmptyBox() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-slate-600">
+      <rect x="1" y="1" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
+function CheckedBox() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-slate-400">
+      <rect x="1" y="1" width="12" height="12" rx="2" fill="currentColor" fillOpacity="0.15" />
+      <path d="M3.5 7L5.5 9.5L10.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
