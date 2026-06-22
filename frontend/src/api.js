@@ -1,7 +1,7 @@
 // Centralized API client. All backend HTTP calls go through this file.
 // If the backend URL or auth requirements change, update here only.
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 /**
  * Generic helper for HTTP requests. Handles JSON encoding, error responses,
