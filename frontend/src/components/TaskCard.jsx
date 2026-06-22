@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { deleteTask } from '../api';
 
-function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
+function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted }) {
   // Action state (Approve/Complete/Uncomplete buttons)
   const [pendingAction, setPendingAction] = useState(null);
   const [actionError, setActionError] = useState(null);
@@ -13,6 +14,9 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
   const [optimisticChecklist, setOptimisticChecklist] = useState(null);
   const [pendingToggleIdx, setPendingToggleIdx] = useState(null);
   const [toggleError, setToggleError] = useState(null);
+
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const cardRef = useRef(null);
 
@@ -121,6 +125,23 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
       setToggleError(err.message);
     } finally {
       setPendingToggleIdx(null);
+    }
+  }
+
+  async function handleDelete() {
+    const confirmed = window.confirm(
+      'Are you sure you want to permanently delete this task? This cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteTask(task.record_id);
+      onTaskDeleted(task.record_id);
+    } catch (err) {
+      setDeleteError(err.message);
+      setIsDeleting(false);
     }
   }
 
@@ -404,10 +425,15 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
             </div>
           </Field>
 
-          {/* Save error */}
+          {/* Save / delete errors */}
           {saveError && (
             <div className="text-xs text-red-400">
               Failed to save: {saveError}
+            </div>
+          )}
+          {deleteError && (
+            <div className="text-xs text-red-400">
+              Failed to delete: {deleteError}
             </div>
           )}
 
@@ -416,7 +442,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
             <button
               type="button"
               onClick={handleSave}
-              disabled={isSaving || !draft.task_name.trim()}
+              disabled={isSaving || isDeleting || !draft.task_name.trim()}
               className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
             >
               {isSaving ? 'Saving...' : 'Save'}
@@ -424,7 +450,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
             <button
               type="button"
               onClick={handleCancel}
-              disabled={isSaving}
+              disabled={isSaving || isDeleting}
               className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed transition-colors"
             >
               Cancel
@@ -488,6 +514,15 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate }) {
                 )}
               </>
             )}
+
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isSaving || isDeleting || pendingAction !== null}
+              className="ml-auto inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-red-950/50 text-red-300 hover:bg-red-900/50 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </button>
           </div>
         </div>
       )}

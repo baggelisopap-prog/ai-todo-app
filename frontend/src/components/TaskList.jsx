@@ -1,6 +1,6 @@
 import TaskCard from './TaskCard';
 
-function TaskList({ tasks, sortBy = 'newest', expandedTaskId, onToggleExpand, onUpdateTask }) {
+function TaskList({ tasks, sortBy = 'newest', expandedTaskId, onToggleExpand, onUpdateTask, onTaskDeleted }) {
   if (tasks.length === 0) {
     return (
       <div className="p-8 text-center text-slate-500 text-sm">
@@ -20,6 +20,7 @@ function TaskList({ tasks, sortBy = 'newest', expandedTaskId, onToggleExpand, on
             isExpanded={expandedTaskId === task.record_id}
             onToggleExpand={onToggleExpand}
             onUpdate={onUpdateTask}
+            onTaskDeleted={onTaskDeleted}
           />
         </li>
       ))}

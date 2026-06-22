@@ -108,3 +108,23 @@ export async function updateTask(recordId, updates) {
     body: JSON.stringify(updates),
   });
 }
+
+/**
+ * DELETE /tasks/{record_id} — permanently delete a task.
+ * Returns void on success (204 No Content).
+ */
+export async function deleteTask(recordId) {
+  const response = await fetch(`${API_BASE_URL}/tasks/${recordId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    let detail;
+    try {
+      const errorBody = await response.json();
+      detail = errorBody.detail || JSON.stringify(errorBody);
+    } catch {
+      detail = response.statusText;
+    }
+    throw new Error(`API error ${response.status}: ${detail}`);
+  }
+}

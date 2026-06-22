@@ -56,6 +56,10 @@ function App() {
     return updatedTask;
   }
 
+  function handleTaskDeleted(recordId) {
+    setTasks((prev) => prev.filter((t) => t.record_id !== recordId));
+  }
+
   // Toggle expand: if same id, collapse; if different, switch; null collapses all
   function handleToggleExpand(recordId) {
     setExpandedTaskId((current) => {
@@ -160,6 +164,7 @@ function App() {
               expandedTaskId={expandedTaskId}
               onToggleExpand={handleToggleExpand}
               onUpdateTask={handleUpdateTask}
+              onTaskDeleted={handleTaskDeleted}
             />
           )}
         </section>

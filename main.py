@@ -211,3 +211,19 @@ async def update_task(record_id: str, request: UpdateTaskRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update task: {str(e)}"
         )
+
+@app.delete("/tasks/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(record_id: str):
+    """
+    Permanently delete a task. Returns 204 No Content on success.
+    This is a HARD delete — the record is gone from Airtable.
+    For soft delete (preserves data for AI learning), use PATCH with is_rejected=true.
+    """
+    try:
+        service.delete_task(record_id)
+    except Exception as e:
+        logger.exception(f"Failed to delete task {record_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete task: {str(e)}"
+        )

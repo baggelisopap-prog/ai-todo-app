@@ -115,3 +115,12 @@ class TaskService:
         Updates an existing task in the database.
         """
         return self.repository.update_task(record_id, updates)
+
+    def delete_task(self, record_id: str) -> None:
+        """
+        Permanently deletes a task. No return value — raises on failure.
+        """
+        success = self.repository.delete_task(record_id)
+        if not success:
+            raise RuntimeError(f"Failed to delete task {record_id}")
+        logger.info(f"Deleted task {record_id}.")

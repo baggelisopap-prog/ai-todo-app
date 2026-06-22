@@ -176,6 +176,16 @@ class AirtableTaskRepository:
         mapped_updates.pop("created_time", None)
 
         response = self.table.update(record_id, mapped_updates)
-        
+
         logger.info(f"Successfully updated task in Airtable. ID: {record_id}")
         return self._airtable_to_task(response)
+
+    def delete_task(self, record_id: str) -> bool:
+        """
+        Permanently deletes a task from Airtable.
+        Returns True if deletion succeeded.
+        Raises an exception on failure (network, not found, etc.).
+        """
+        response = self.table.delete(record_id)
+        logger.info(f"Successfully deleted task from Airtable. ID: {record_id}")
+        return response.get("deleted", False)
