@@ -51,7 +51,7 @@ class AirtableTaskRepository:
         fields.pop("created_time", None)
 
         # Airtable expects lists to be JSON strings if storing in a Long Text field
-        fields["checklist"] = json.dumps(fields.get("checklist", []))
+       fields["checklist"] = json.dumps(fields.get("checklist", []), ensure_ascii=False)
 
         return fields
 
@@ -156,7 +156,7 @@ class AirtableTaskRepository:
 
         # Apply data mapping rules to the partial update dictionary
         if "checklist" in mapped_updates:
-            mapped_updates["checklist"] = json.dumps(mapped_updates["checklist"])
+            mapped_updates["checklist"] = json.dumps(mapped_updates["checklist"], ensure_ascii=False)
             
         # Prevent accidental overwrites of read-only fields
         mapped_updates.pop("record_id", None)
