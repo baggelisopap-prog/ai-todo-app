@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-from models import TaskRecord
+from models import ChecklistItem, TaskRecord
 from services import TaskService
 import os
 from dotenv import load_dotenv
@@ -51,7 +51,7 @@ class UpdateTaskRequest(BaseModel):
     description: Optional[str] = None
     due_date: Optional[str] = None
     due_time: Optional[str] = None
-    checklist: Optional[list[str]] = None
+    checklist: Optional[list[ChecklistItem]] = None
 
 class HealthResponse(BaseModel):
     status: str

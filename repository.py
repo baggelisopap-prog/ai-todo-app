@@ -77,6 +77,15 @@ class AirtableTaskRepository:
         else:
             checklist = []
 
+        # Normalize to new format; accept legacy list[str] and new list[dict] transparently
+        normalized = []
+        for item in checklist:
+            if isinstance(item, str):
+                normalized.append({"text": item, "done": False})
+            elif isinstance(item, dict) and "text" in item:
+                normalized.append({"text": item["text"], "done": item.get("done", False)})
+        checklist = normalized
+
         # Enforce strict data integrity on immutable snapshot fields
         if "ai_suggested_category" not in fields:
             raise ValueError(
@@ -156,7 +165,11 @@ class AirtableTaskRepository:
 
         # Apply data mapping rules to the partial update dictionary
         if "checklist" in mapped_updates:
-            mapped_updates["checklist"] = json.dumps(mapped_updates["checklist"], ensure_ascii=False)
+            serializable = [
+                item if isinstance(item, dict) else item.model_dump()
+                for item in mapped_updates["checklist"]
+            ]
+            mapped_updates["checklist"] = json.dumps(serializable, ensure_ascii=False)
             
         # Prevent accidental overwrites of read-only fields
         mapped_updates.pop("record_id", None)

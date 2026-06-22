@@ -40,7 +40,8 @@ When extracting tasks:
 - due_date must be YYYY-MM-DD format (resolve "tomorrow", "Friday", etc. to actual dates). If no date is mentioned, set to null. Never invent dates.
 - due_time must be HH:MM 24-hour format. If no time is mentioned, set to null. Never invent times.
 - category: Business (work), Personal (life), Unknown (unclear).
-- priority: P1 (urgent), P2 (normal), P3 (low)."""
+- priority: P1 (urgent), P2 (normal), P3 (low).
+- checklist: each item must be an object with 'text' (string) and 'done' (boolean, always false for new tasks). Example: [{{"text": "item 1", "done": false}}, {{"text": "item 2", "done": false}}]."""
 
 
 # ==========================================

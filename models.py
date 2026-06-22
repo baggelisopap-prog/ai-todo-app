@@ -3,9 +3,14 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Literal
 
 
+class ChecklistItem(BaseModel):
+    text: str
+    done: bool = False
+
+
 class SingleTask(BaseModel):
     """
-    Schema 1 — What the AI produces from natural language. 
+    Schema 1 — What the AI produces from natural language.
     Does not include application state or database metadata.
     """
     task_name: str = Field(max_length=80)
@@ -14,7 +19,10 @@ class SingleTask(BaseModel):
     priority: Literal["P1", "P2", "P3"]
     due_date: Optional[str] = None
     due_time: Optional[str] = None
-    checklist: list[str] = Field(default_factory=list)
+    checklist: list[ChecklistItem] = Field(
+        default_factory=list,
+        description="List of checklist items. Each item is an object with 'text' (the item description) and 'done' (whether completed, defaults to false). AI should always set done=false for new tasks.",
+    )
 
     @field_validator("due_date")
     @classmethod
