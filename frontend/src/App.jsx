@@ -1,29 +1,27 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getAllTasks, updateTask } from './api';
-import TaskList from './components/TaskList';
-import FilterBar from './components/FilterBar';
-import NewTaskInput from './components/NewTaskInput';
+import BottomNav from './components/BottomNav';
+import InboxView from './components/InboxView';
+import TodayView from './components/TodayView';
+import UpcomingView from './components/UpcomingView';
+import BrowseView from './components/BrowseView';
+import FloatingActionButtons from './components/FloatingActionButtons';
+import AddTaskModal from './components/AddTaskModal';
 import Toast from './components/Toast';
 
 function App() {
-  // Data state
+  const { t } = useTranslation();
+
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Filter state
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [sortBy, setSortBy] = useState('newest');
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [showRejected, setShowRejected] = useState(false);
-
-  // Expand state — only one card open at a time
+  const [activeTab, setActiveTab] = useState('inbox');
   const [expandedTaskId, setExpandedTaskId] = useState(null);
-
-  // Toast state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Fetch tasks on mount
   useEffect(() => {
     async function loadTasks() {
       try {
@@ -44,137 +42,90 @@ function App() {
     setTasks((current) => [...newTasks, ...current]);
     const count = newTasks.length;
     setToastMessage(
-      count === 1 ? 'Added 1 task' : `Added ${count} tasks`
+      count === 1 ? t('toast.added_one') : t('toast.added_many', { count })
     );
   }
 
   async function handleUpdateTask(recordId, updates) {
     const updatedTask = await updateTask(recordId, updates);
     setTasks((current) =>
-      current.map((t) => (t.record_id === recordId ? updatedTask : t))
+      current.map((task) => (task.record_id === recordId ? updatedTask : task))
     );
     return updatedTask;
   }
 
   function handleTaskDeleted(recordId) {
-    setTasks((prev) => prev.filter((t) => t.record_id !== recordId));
+    setTasks((prev) => prev.filter((task) => task.record_id !== recordId));
   }
 
-  // Toggle expand: if same id, collapse; if different, switch; null collapses all
   function handleToggleExpand(recordId) {
     setExpandedTaskId((current) => {
       if (recordId === null) return null;
-      if (current === recordId) return null; // collapse if already open
-      return recordId; // open this one (auto-collapses any other)
+      if (current === recordId) return null;
+      return recordId;
     });
   }
 
-  // Category counts (excludes completed/rejected per current toggle state)
-  const categoryCounts = useMemo(() => {
-    let relevantTasks = tasks;
-    if (!showCompleted) {
-      relevantTasks = relevantTasks.filter((t) => !t.is_completed);
-    }
-    if (!showRejected) {
-      relevantTasks = relevantTasks.filter((t) => !t.is_rejected);
-    }
-    return {
-      All: relevantTasks.length,
-      Business: relevantTasks.filter((t) => t.category === 'Business').length,
-      Personal: relevantTasks.filter((t) => t.category === 'Personal').length,
-      Unknown: relevantTasks.filter((t) => t.category === 'Unknown').length,
-    };
-  }, [tasks, showCompleted, showRejected]);
+  function handleTabChange(tab) {
+    setActiveTab(tab);
+    setExpandedTaskId(null);
+  }
 
-  const completedCount = useMemo(
-    () => tasks.filter((t) => t.is_completed).length,
-    [tasks]
-  );
-
-  const rejectedCount = useMemo(
-    () => tasks.filter((t) => t.is_rejected).length,
-    [tasks]
-  );
-
-  const filteredTasks = useMemo(() => {
-    let result = tasks;
-    if (!showCompleted) {
-      result = result.filter((t) => !t.is_completed);
-    }
-    if (!showRejected) {
-      result = result.filter((t) => !t.is_rejected);
-    }
-    if (selectedCategory !== 'All') {
-      result = result.filter((t) => t.category === selectedCategory);
-    }
-    return result;
-  }, [tasks, selectedCategory, showCompleted, showRejected]);
-
-  const visibleCount = filteredTasks.length;
-  const pendingCount = filteredTasks.filter((t) => !t.approval_status).length;
+  const viewProps = {
+    tasks,
+    expandedTaskId,
+    onToggleExpand: handleToggleExpand,
+    onTaskUpdate: handleUpdateTask,
+    onTaskDeleted: handleTaskDeleted,
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <header className="mb-8">
-          <h1 className="text-2xl font-semibold text-white">AI To-Do</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            {isLoading
-              ? 'Loading...'
-              : `${visibleCount} tasks${pendingCount > 0 ? ` · ${pendingCount} pending` : ''}`}
-          </p>
-        </header>
-
-        {!isLoading && !error && (
-          <FilterBar
-            categoryCounts={categoryCounts}
-            selectedCategory={selectedCategory}
-            onSelectCategory={setSelectedCategory}
-            sortBy={sortBy}
-            onSelectSort={setSortBy}
-            showCompleted={showCompleted}
-            onToggleCompleted={() => setShowCompleted((v) => !v)}
-            completedCount={completedCount}
-            showRejected={showRejected}
-            onToggleRejected={() => setShowRejected((v) => !v)}
-            rejectedCount={rejectedCount}
-          />
+    <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
+      <main className="flex-1 pb-20">
+        {isLoading && (
+          <div className="max-w-3xl mx-auto px-4 py-6 text-slate-500 text-sm">
+            {t('app.loading_tasks')}
+          </div>
         )}
 
-        {!isLoading && !error && (
-          <NewTaskInput onTasksAdded={handleTasksAdded} />
-        )}
-
-        <section>
-          {error && (
+        {error && (
+          <div className="max-w-3xl mx-auto px-4 py-6">
             <div className="p-4 rounded-lg border border-red-900 bg-red-950 text-red-300">
-              <p className="font-medium">Failed to load tasks</p>
+              <p className="font-medium">{t('errors.load_tasks_failed')}</p>
               <p className="text-sm mt-1 opacity-80">{error}</p>
             </div>
-          )}
+          </div>
+        )}
 
-          {!error && isLoading && (
-            <div className="p-4 text-slate-500 text-sm">Loading tasks...</div>
-          )}
+        {!isLoading && !error && (
+          <>
+            {activeTab === 'inbox' && <InboxView {...viewProps} />}
+            {activeTab === 'today' && <TodayView {...viewProps} />}
+            {activeTab === 'upcoming' && <UpcomingView {...viewProps} />}
+            {activeTab === 'browse' && <BrowseView {...viewProps} />}
+          </>
+        )}
+      </main>
 
-          {!error && !isLoading && (
-            <TaskList
-              tasks={filteredTasks}
-              sortBy={sortBy}
-              expandedTaskId={expandedTaskId}
-              onToggleExpand={handleToggleExpand}
-              onUpdateTask={handleUpdateTask}
-              onTaskDeleted={handleTaskDeleted}
-            />
-          )}
-        </section>
-      </div>
+      <FloatingActionButtons
+        onAddClick={() => setIsAddModalOpen(true)}
+        onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
+      />
+
+      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
+
+      {isAddModalOpen && (
+        <AddTaskModal
+          onClose={() => setIsAddModalOpen(false)}
+          onTasksAdded={(newTasks) => {
+            handleTasksAdded(newTasks);
+            setIsAddModalOpen(false);
+          }}
+        />
+      )}
 
       {toastMessage && (
-        <Toast
-          message={toastMessage}
-          onDismiss={() => setToastMessage(null)}
-        />
+        <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
       )}
     </div>
   );

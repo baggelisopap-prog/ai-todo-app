@@ -13,7 +13,7 @@ function Toast({ message, onDismiss, duration = 3000 }) {
   }, [onDismiss, duration]);
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-emerald-900 border border-emerald-700 text-emerald-100 shadow-lg text-sm font-medium flex items-center gap-2">
+    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-emerald-900 border border-emerald-700 text-emerald-100 shadow-lg text-sm font-medium flex items-center gap-2">
       <span className="text-emerald-400">✓</span>
       <span>{message}</span>
     </div>

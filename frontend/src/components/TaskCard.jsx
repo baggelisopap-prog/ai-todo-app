@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { deleteTask } from '../api';
 
 function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted }) {
-  // Action state (Approve/Complete/Uncomplete buttons)
+  const { t } = useTranslation();
+
   const [pendingAction, setPendingAction] = useState(null);
   const [actionError, setActionError] = useState(null);
 
-  // Edit state — draft is initialized when the card expands
   const [draft, setDraft] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -25,7 +26,10 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
   const isRejected = task.is_rejected;
   const displayChecklist = optimisticChecklist ?? task.checklist;
 
-  // Initialize draft on expand, clear on collapse
+  const dateDisplay = task.due_date
+    ? (task.due_time ? `${task.due_date} ${task.due_time}` : task.due_date)
+    : t('task.no_date');
+
   useEffect(() => {
     if (isExpanded) {
       setDraft({
@@ -44,7 +48,6 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
     }
   }, [isExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Click outside the card collapses it
   useEffect(() => {
     if (!isExpanded) return;
     function handleClickOutside(e) {
@@ -90,7 +93,6 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
 
     try {
       await onUpdate(task.record_id, updates);
-      // Success: stay expanded so the user can verify changes
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -129,9 +131,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
   }
 
   async function handleDelete() {
-    const confirmed = window.confirm(
-      'Are you sure you want to permanently delete this task? This cannot be undone.'
-    );
+    const confirmed = window.confirm(t('confirm.delete_task'));
     if (!confirmed) return;
 
     setIsDeleting(true);
@@ -183,8 +183,6 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
     isCompleted ? 'line-through' : '',
   ].filter(Boolean).join(' ');
 
-  const dateDisplay = formatDateTime(task.due_date, task.due_time);
-
   return (
     <article ref={cardRef} onClick={handleCardClick} className={cardClasses}>
       {/* === COLLAPSED VIEW === */}
@@ -194,8 +192,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
             {isPending && (
               <span
                 className="flex-shrink-0 mt-0.5 text-amber-400"
-                title="Pending approval"
-                aria-label="Pending approval"
+                title={t('task.pending_approval')}
+                aria-label={t('task.pending_approval')}
               >
                 ⊕
               </span>
@@ -214,7 +212,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
             <PriorityBadge priority={task.priority} />
             <span className="text-xs text-slate-500">{dateDisplay}</span>
             {isPending && (
-              <span className="text-xs text-amber-400 font-medium">Pending</span>
+              <span className="text-xs text-amber-400 font-medium">{t('task.pending')}</span>
             )}
           </div>
 
@@ -225,9 +223,9 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                   <button
                     type="button"
                     onClick={(e) => {
-  e.stopPropagation();
-  handleToggleChecklistItem(index);
-}}
+                      e.stopPropagation();
+                      handleToggleChecklistItem(index);
+                    }}
                     disabled={pendingToggleIdx !== null}
                     className="flex items-center gap-2 w-full text-left py-0.5 px-1 hover:bg-slate-800/40 rounded transition-colors disabled:cursor-wait"
                   >
@@ -243,15 +241,15 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
 
           {toggleError && (
             <div className="mt-1 text-xs text-red-400">
-              Failed to update: {toggleError}
+              {t('errors.failed_update')}: {toggleError}
             </div>
           )}
 
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-slate-800/50">
             {isRejected ? (
               <ActionButton
-                label="Unreject"
-                loadingLabel="Restoring..."
+                label={t('actions.unreject')}
+                loadingLabel={t('actions.unrejecting')}
                 isLoading={pendingAction === 'unreject'}
                 disabled={pendingAction !== null}
                 onClick={() => handleAction('unreject', { is_rejected: false })}
@@ -261,8 +259,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               <>
                 {isPending && (
                   <ActionButton
-                    label="Approve"
-                    loadingLabel="Approving..."
+                    label={t('actions.approve')}
+                    loadingLabel={t('actions.approving')}
                     isLoading={pendingAction === 'approve'}
                     disabled={pendingAction !== null}
                     onClick={() => handleAction('approve', { approval_status: true })}
@@ -271,8 +269,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 )}
                 {!isCompleted && (
                   <ActionButton
-                    label="Complete"
-                    loadingLabel="Completing..."
+                    label={t('actions.complete')}
+                    loadingLabel={t('actions.completing')}
                     isLoading={pendingAction === 'complete'}
                     disabled={pendingAction !== null}
                     onClick={() =>
@@ -286,8 +284,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 )}
                 {isCompleted && (
                   <ActionButton
-                    label="Uncomplete"
-                    loadingLabel="Reverting..."
+                    label={t('actions.uncomplete')}
+                    loadingLabel={t('actions.uncompleting')}
                     isLoading={pendingAction === 'uncomplete'}
                     disabled={pendingAction !== null}
                     onClick={() => handleAction('uncomplete', { is_completed: false })}
@@ -296,8 +294,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 )}
                 {!isRejected && (
                   <ActionButton
-                    label="Reject"
-                    loadingLabel="Rejecting..."
+                    label={t('actions.reject')}
+                    loadingLabel={t('actions.rejecting')}
                     isLoading={pendingAction === 'reject'}
                     disabled={pendingAction !== null}
                     onClick={() => handleAction('reject', { is_rejected: true })}
@@ -310,20 +308,19 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
         </>
       )}
 
-      {/* === EXPANDED VIEW: form + unified button row === */}
+      {/* === EXPANDED VIEW === */}
       {isExpanded && draft && (
         <div
           data-no-toggle
           className="space-y-3"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Task name — prominent at the top */}
           <div className="flex items-start gap-2">
             {isPending && (
               <span
                 className="flex-shrink-0 mt-2 text-amber-400"
-                title="Pending approval"
-                aria-label="Pending approval"
+                title={t('task.pending_approval')}
+                aria-label={t('task.pending_approval')}
               >
                 ⊕
               </span>
@@ -332,13 +329,12 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               type="text"
               value={draft.task_name}
               onChange={(e) => updateDraft('task_name', e.target.value)}
-              placeholder="Task name"
+              placeholder={t('task.name_placeholder')}
               className={`w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm font-medium text-white focus:outline-none focus:border-slate-500 ${isCompleted ? 'line-through' : ''}`}
             />
           </div>
 
-          {/* Description */}
-          <Field label="Description">
+          <Field label={t('task.description_label')}>
             <textarea
               value={draft.description}
               onChange={(e) => updateDraft('description', e.target.value)}
@@ -347,20 +343,19 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
             />
           </Field>
 
-          {/* Category + Priority side by side */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Category">
+            <Field label={t('task.category_label')}>
               <select
                 value={draft.category}
                 onChange={(e) => updateDraft('category', e.target.value)}
                 className="w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-slate-500"
               >
-                <option value="Business">Business</option>
-                <option value="Personal">Personal</option>
-                <option value="Unknown">Unknown</option>
+                <option value="Business">{t('browse.filter_business')}</option>
+                <option value="Personal">{t('browse.filter_personal')}</option>
+                <option value="Unknown">{t('browse.filter_unknown')}</option>
               </select>
             </Field>
-            <Field label="Priority">
+            <Field label={t('task.priority_label')}>
               <select
                 value={draft.priority}
                 onChange={(e) => updateDraft('priority', e.target.value)}
@@ -373,9 +368,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
             </Field>
           </div>
 
-          {/* Due date + due time side by side */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Due date">
+            <Field label={t('task.due_date_label')}>
               <input
                 type="date"
                 value={draft.due_date}
@@ -383,7 +377,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 className="w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-slate-500"
               />
             </Field>
-            <Field label="Due time">
+            <Field label={t('task.due_time_label')}>
               <input
                 type="time"
                 value={draft.due_time}
@@ -393,8 +387,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
             </Field>
           </div>
 
-          {/* Checklist editor */}
-          <Field label="Checklist">
+          <Field label={t('task.checklist_label')}>
             <div className="space-y-2">
               {draft.checklist.map((item, index) => (
                 <div key={index} className="flex items-center gap-2">
@@ -402,14 +395,14 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                     type="text"
                     value={item.text}
                     onChange={(e) => updateChecklistItem(index, { ...item, text: e.target.value })}
-                    placeholder={`Item ${index + 1}`}
+                    placeholder={t('task.checklist_item_placeholder', { n: index + 1 })}
                     className="flex-1 px-3 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:border-slate-500"
                   />
                   <button
                     type="button"
                     onClick={() => removeChecklistItem(index)}
                     className="px-2 py-1.5 rounded-md text-xs text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
-                    title="Remove item"
+                    title={t('task.remove_item')}
                   >
                     ✕
                   </button>
@@ -420,24 +413,22 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 onClick={addChecklistItem}
                 className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
               >
-                + Add checklist item
+                {t('task.add_checklist_item')}
               </button>
             </div>
           </Field>
 
-          {/* Save / delete errors */}
           {saveError && (
             <div className="text-xs text-red-400">
-              Failed to save: {saveError}
+              {t('errors.failed_save')}: {saveError}
             </div>
           )}
           {deleteError && (
             <div className="text-xs text-red-400">
-              Failed to delete: {deleteError}
+              {t('errors.failed_delete')}: {deleteError}
             </div>
           )}
 
-          {/* Unified button row: Save, Cancel, then action buttons */}
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/50">
             <button
               type="button"
@@ -445,7 +436,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               disabled={isSaving || isDeleting || !draft.task_name.trim()}
               className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
             >
-              {isSaving ? 'Saving...' : 'Save'}
+              {isSaving ? t('actions.saving') : t('actions.save')}
             </button>
             <button
               type="button"
@@ -453,13 +444,13 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               disabled={isSaving || isDeleting}
               className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed transition-colors"
             >
-              Cancel
+              {t('actions.cancel')}
             </button>
 
             {isRejected ? (
               <ActionButton
-                label="Unreject"
-                loadingLabel="Restoring..."
+                label={t('actions.unreject')}
+                loadingLabel={t('actions.unrejecting')}
                 isLoading={pendingAction === 'unreject'}
                 disabled={pendingAction !== null}
                 onClick={() => handleAction('unreject', { is_rejected: false })}
@@ -469,8 +460,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               <>
                 {isPending && (
                   <ActionButton
-                    label="Approve"
-                    loadingLabel="Approving..."
+                    label={t('actions.approve')}
+                    loadingLabel={t('actions.approving')}
                     isLoading={pendingAction === 'approve'}
                     disabled={pendingAction !== null}
                     onClick={() => handleAction('approve', { approval_status: true })}
@@ -479,8 +470,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 )}
                 {!isCompleted && (
                   <ActionButton
-                    label="Complete"
-                    loadingLabel="Completing..."
+                    label={t('actions.complete')}
+                    loadingLabel={t('actions.completing')}
                     isLoading={pendingAction === 'complete'}
                     disabled={pendingAction !== null}
                     onClick={() =>
@@ -494,8 +485,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 )}
                 {isCompleted && (
                   <ActionButton
-                    label="Uncomplete"
-                    loadingLabel="Reverting..."
+                    label={t('actions.uncomplete')}
+                    loadingLabel={t('actions.uncompleting')}
                     isLoading={pendingAction === 'uncomplete'}
                     disabled={pendingAction !== null}
                     onClick={() => handleAction('uncomplete', { is_completed: false })}
@@ -504,8 +495,8 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 )}
                 {!isRejected && (
                   <ActionButton
-                    label="Reject"
-                    loadingLabel="Rejecting..."
+                    label={t('actions.reject')}
+                    loadingLabel={t('actions.rejecting')}
                     isLoading={pendingAction === 'reject'}
                     disabled={pendingAction !== null}
                     onClick={() => handleAction('reject', { is_rejected: true })}
@@ -521,16 +512,15 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               disabled={isSaving || isDeleting || pendingAction !== null}
               className="ml-auto inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-red-950/50 text-red-300 hover:bg-red-900/50 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
             >
-              {isDeleting ? 'Deleting...' : 'Delete'}
+              {isDeleting ? t('actions.deleting') : t('actions.delete')}
             </button>
           </div>
         </div>
       )}
 
-      {/* Action error */}
       {actionError && (
         <div className="mt-2 text-xs text-red-400">
-          Failed to update: {actionError}
+          {t('errors.failed_update')}: {actionError}
         </div>
       )}
     </article>
@@ -610,12 +600,6 @@ function CheckedBox() {
       <path d="M3.5 7L5.5 9.5L10.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
-}
-
-function formatDateTime(date, time) {
-  if (!date) return 'No date';
-  if (time) return `${date} ${time}`;
-  return date;
 }
 
 export default TaskCard;

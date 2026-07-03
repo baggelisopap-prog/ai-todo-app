@@ -1,0 +1,100 @@
+{
+  "nav": {
+    "inbox": "Inbox",
+    "today": "Today",
+    "upcoming": "Upcoming",
+    "browse": "All"
+  },
+  "app": {
+    "title": "AI To-Do",
+    "loading": "Loading...",
+    "loading_tasks": "Loading tasks..."
+  },
+  "sections": {
+    "today_header": "Today",
+    "overdue_header": "Overdue"
+  },
+  "empty": {
+    "inbox": "All clear! No new tasks waiting.",
+    "today": "Nothing for today 🎉",
+    "upcoming": "No upcoming tasks.",
+    "browse": "No tasks found.",
+    "default": "No tasks to show."
+  },
+  "actions": {
+    "add": "Add",
+    "adding": "Adding...",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "approve": "Approve",
+    "approving": "Approving...",
+    "complete": "Complete",
+    "completing": "Completing...",
+    "uncomplete": "Uncomplete",
+    "uncompleting": "Reverting...",
+    "reject": "Reject",
+    "rejecting": "Rejecting...",
+    "unreject": "Unreject",
+    "unrejecting": "Restoring...",
+    "delete": "Delete",
+    "deleting": "Deleting...",
+    "edit": "Edit"
+  },
+  "modal": {
+    "add_task_title": "New Task",
+    "placeholder": "Type a task in any language...",
+    "submit_hint": "Ctrl+Enter to submit",
+    "submitting": "Extracting tasks..."
+  },
+  "voice": {
+    "label": "Voice",
+    "processing": "Extracting...",
+    "too_short": "Recording too short. Hold longer.",
+    "permission_denied": "Microphone access denied or not available.",
+    "error_title": "Voice error"
+  },
+  "task": {
+    "no_date": "No date",
+    "pending": "Pending",
+    "pending_approval": "Pending approval",
+    "name_placeholder": "Task name",
+    "description_label": "Description",
+    "checklist_label": "Checklist",
+    "category_label": "Category",
+    "priority_label": "Priority",
+    "due_date_label": "Due date",
+    "due_time_label": "Due time",
+    "add_checklist_item": "+ Add checklist item",
+    "checklist_item_placeholder": "Item {{n}}",
+    "remove_item": "Remove item"
+  },
+  "confirm": {
+    "delete_task": "Are you sure you want to permanently delete this task? This cannot be undone."
+  },
+  "errors": {
+    "load_tasks_failed": "Failed to load tasks",
+    "network_error": "Network error",
+    "failed_update": "Failed to update",
+    "failed_save": "Failed to save",
+    "failed_delete": "Failed to delete",
+    "failed_add": "Failed to add task"
+  },
+  "browse": {
+    "filter_all": "All",
+    "filter_business": "Business",
+    "filter_personal": "Personal",
+    "filter_unknown": "Unknown",
+    "show_completed": "Show completed",
+    "show_rejected": "Show rejected",
+    "sort_label": "Sort:",
+    "sort_newest": "Newest",
+    "sort_oldest": "Oldest",
+    "sort_priority": "Priority",
+    "sort_due_date": "Due date"
+  },
+  "toast": {
+    "added_one": "Added 1 task",
+    "added_many": "Added {{count}} tasks"
+  }
+}

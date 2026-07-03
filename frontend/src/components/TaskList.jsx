@@ -1,10 +1,13 @@
+import { useTranslation } from 'react-i18next';
 import TaskCard from './TaskCard';
 
 function TaskList({ tasks, sortBy = 'newest', expandedTaskId, onToggleExpand, onUpdateTask, onTaskDeleted }) {
+  const { t } = useTranslation();
+
   if (tasks.length === 0) {
     return (
       <div className="p-8 text-center text-slate-500 text-sm">
-        No tasks to show.
+        {t('empty.default')}
       </div>
     );
   }
