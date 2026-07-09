@@ -12,14 +12,17 @@
   },
   "sections": {
     "today_header": "Today",
-    "overdue_header": "Overdue"
+    "overdue_header": "Overdue",
+    "tomorrow": "TOMORROW",
+    "no_date": "NO DATE"
   },
   "empty": {
     "inbox": "All clear! No new tasks waiting.",
     "today": "Nothing for today 🎉",
     "upcoming": "No upcoming tasks.",
     "browse": "No tasks found.",
-    "default": "No tasks to show."
+    "default": "No tasks to show.",
+    "no_tasks": "No tasks"
   },
   "actions": {
     "add": "Add",
