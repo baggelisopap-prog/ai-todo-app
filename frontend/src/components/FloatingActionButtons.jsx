@@ -14,13 +14,13 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete }) {
   const { t } = useTranslation();
 
   return (
-    <div className="fixed bottom-24 right-4 flex flex-col gap-3 z-30 items-center">
+    <div className="fixed bottom-24 right-4 z-30 flex flex-col gap-3 items-end">
       <VoiceButton onComplete={onVoiceComplete} />
       <button
         type="button"
         onClick={onAddClick}
         aria-label={t('actions.add')}
-        className="w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center transition-colors"
+        className="w-12 h-12 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-colors"
       >
         <PlusIcon />
       </button>

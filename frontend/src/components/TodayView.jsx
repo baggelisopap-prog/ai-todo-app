@@ -24,19 +24,37 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const isEmpty = todayTasks.length === 0 && overdueTasks.length === 0;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6">
-      <h2 className="text-lg font-semibold text-white mb-4">{t('nav.today')}</h2>
+    <div className="max-w-3xl mx-auto p-4 md:p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t('nav.today')}</h1>
+      </div>
 
       {isEmpty ? (
-        <div className="p-8 text-center text-slate-500 text-sm">{t('empty.today')}</div>
+        <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>
       ) : (
         <>
+          {overdueTasks.length > 0 && (
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+                {t('sections.overdue_header')} <span className="ml-1 text-[var(--priority-p1)]">({overdueTasks.length})</span>
+              </h2>
+              <TaskList
+                tasks={overdueTasks}
+                sortBy="due_date"
+                expandedTaskId={expandedTaskId}
+                onToggleExpand={onToggleExpand}
+                onUpdateTask={onTaskUpdate}
+                onTaskDeleted={onTaskDeleted}
+              />
+            </div>
+          )}
+
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">
-              {t('sections.today_header')} ({todayTasks.length})
-            </h3>
+            <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+              {t('sections.today_header')} <span className="ml-1 text-[var(--text-muted)]">({todayTasks.length})</span>
+            </h2>
             {todayTasks.length === 0 ? (
-              <div className="py-4 text-center text-slate-600 text-sm">{t('empty.today')}</div>
+              <div className="py-4 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>
             ) : (
               <TaskList
                 tasks={todayTasks}
@@ -48,22 +66,6 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
               />
             )}
           </div>
-
-          {overdueTasks.length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-red-400 uppercase tracking-wide mb-3">
-                {t('sections.overdue_header')} ({overdueTasks.length})
-              </h3>
-              <TaskList
-                tasks={overdueTasks}
-                sortBy="due_date"
-                expandedTaskId={expandedTaskId}
-                onToggleExpand={onToggleExpand}
-                onUpdateTask={onTaskUpdate}
-                onTaskDeleted={onTaskDeleted}
-              />
-            </div>
-          )}
         </>
       )}
     </div>

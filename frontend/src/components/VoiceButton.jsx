@@ -143,25 +143,25 @@ function VoiceButton({ onComplete }) {
   return (
     <div className="relative flex flex-col items-center gap-1">
       {voiceError && (
-        <div className="absolute bottom-full mb-2 right-0 w-52 p-2 rounded-lg border border-red-900 bg-red-950 text-red-300 text-xs shadow-lg z-10">
+        <div className="absolute bottom-full mb-2 right-0 w-52 p-2 rounded-lg border border-red-200 bg-[var(--bg-card)] text-[var(--danger)] text-xs shadow-[var(--shadow-menu)] z-10">
           {voiceError}
         </div>
       )}
       <div className="relative flex items-center justify-center">
         {recordingState === 'recording' && (
-          <span className="absolute w-16 h-16 rounded-full bg-red-600 opacity-25 animate-ping" />
+          <span className="absolute w-16 h-16 rounded-full bg-[var(--danger)] opacity-25 animate-ping" />
         )}
         <button
           type="button"
           onClick={handleClick}
           disabled={isProcessing}
           aria-label={t('voice.label')}
-          className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-colors shadow-lg
+          className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-colors shadow-[var(--shadow-fab)]
             ${recordingState === 'idle'
-              ? 'bg-blue-600 hover:bg-blue-500 text-white'
+              ? 'bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white'
               : recordingState === 'recording'
-              ? 'bg-red-600 text-white'
-              : 'bg-slate-700 text-slate-400'
+              ? 'bg-[var(--danger)] text-white'
+              : 'bg-[var(--bg-hover)] text-[var(--text-secondary)]'
             } disabled:cursor-not-allowed`}
         >
           {recordingState === 'idle' && <MicIcon />}
@@ -169,7 +169,7 @@ function VoiceButton({ onComplete }) {
           {recordingState === 'processing' && <SpinnerIcon />}
         </button>
       </div>
-      <span className="text-xs text-slate-400 text-center min-w-[56px]">
+      <span className="text-xs text-[var(--text-secondary)] text-center min-w-[56px]">
         {recordingState === 'idle' && t('voice.label')}
         {recordingState === 'recording' && formatTime(recordingSeconds)}
         {recordingState === 'processing' && t('voice.processing')}

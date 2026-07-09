@@ -1,6 +1,32 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { deleteTask } from '../api';
+import { formatDate } from '../utils/formatDate';
+import CustomSelect from './CustomSelect';
+
+function priorityColor(priority) {
+  switch (priority) {
+    case 'P1':
+      return 'var(--priority-p1)';
+    case 'P2':
+      return 'var(--priority-p2)';
+    case 'P3':
+      return 'var(--priority-p3)';
+    default:
+      return 'var(--text-muted)';
+  }
+}
+
+function categoryColor(category) {
+  switch (category) {
+    case 'Business':
+      return 'var(--category-business)';
+    case 'Personal':
+      return 'var(--category-personal)';
+    default:
+      return 'var(--category-unknown)';
+  }
+}
 
 function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted }) {
   const { t } = useTranslation();
@@ -16,19 +42,33 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
   const [pendingToggleIdx, setPendingToggleIdx] = useState(null);
   const [toggleError, setToggleError] = useState(null);
 
+  const [optimisticCompleted, setOptimisticCompleted] = useState(null);
+
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   const cardRef = useRef(null);
+  const menuRef = useRef(null);
 
   const isPending = !task.approval_status;
-  const isCompleted = task.is_completed;
+  const isCompleted = optimisticCompleted ?? task.is_completed;
   const isRejected = task.is_rejected;
   const displayChecklist = optimisticChecklist ?? task.checklist;
+  const showDescription = task.description && task.description !== task.task_name;
 
-  const dateDisplay = task.due_date
-    ? (task.due_time ? `${task.due_date} ${task.due_time}` : task.due_date)
-    : t('task.no_date');
+  const categoryOptions = [
+    { value: 'Business', label: t('browse.filter_business') },
+    { value: 'Personal', label: t('browse.filter_personal') },
+    { value: 'Unknown', label: t('browse.filter_unknown') },
+  ];
+
+  const priorityOptions = [
+    { value: 'P1', label: 'P1' },
+    { value: 'P2', label: 'P2' },
+    { value: 'P3', label: 'P3' },
+  ];
 
   useEffect(() => {
     if (isExpanded) {
@@ -59,6 +99,17 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isExpanded, isSaving, onToggleExpand]);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setIsMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMenuOpen]);
 
   function handleCardClick(e) {
     const tag = e.target.tagName;
@@ -101,6 +152,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
   }
 
   async function handleAction(actionName, updates) {
+    setIsMenuOpen(false);
     setPendingAction(actionName);
     setActionError(null);
     try {
@@ -109,6 +161,23 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
       setActionError(err.message);
     } finally {
       setPendingAction(null);
+    }
+  }
+
+  async function handleToggleCompleted(e) {
+    e.stopPropagation();
+    const newValue = !task.is_completed;
+    setOptimisticCompleted(newValue);
+    setActionError(null);
+    try {
+      await onUpdate(task.record_id, {
+        is_completed: newValue,
+        ...(newValue && isPending ? { approval_status: true } : {}),
+      });
+      setOptimisticCompleted(null);
+    } catch (err) {
+      setOptimisticCompleted(null);
+      setActionError(err.message);
     }
   }
 
@@ -131,6 +200,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
   }
 
   async function handleDelete() {
+    setIsMenuOpen(false);
     const confirmed = window.confirm(t('confirm.delete_task'));
     if (!confirmed) return;
 
@@ -143,6 +213,11 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
       setDeleteError(err.message);
       setIsDeleting(false);
     }
+  }
+
+  function handleEdit() {
+    setIsMenuOpen(false);
+    onToggleExpand(task.record_id);
   }
 
   function updateDraft(field, value) {
@@ -168,19 +243,16 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
   }
 
   const cardClasses = [
-    'rounded-lg border p-4 transition-colors cursor-pointer',
-    isRejected
-      ? 'border-red-900/50 bg-red-950/20'
-      : isPending
-      ? 'border-amber-900/50 bg-amber-950/30'
-      : 'border-slate-800 bg-slate-900',
-    isExpanded ? 'ring-1 ring-slate-600' : '',
-    isRejected ? 'opacity-60' : isCompleted ? 'opacity-50' : '',
+    'bg-[var(--bg-card)] border border-[var(--border-subtle)]',
+    'rounded-lg p-4 shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]',
+    'transition-shadow cursor-pointer',
+    isExpanded ? 'ring-2 ring-[var(--border-focus)]/20' : '',
+    isRejected ? 'opacity-60' : isCompleted ? 'opacity-70' : '',
   ].filter(Boolean).join(' ');
 
   const titleClasses = [
-    'text-sm font-medium text-white',
-    isCompleted ? 'line-through' : '',
+    'text-base font-medium text-[var(--text-primary)] break-words',
+    isCompleted ? 'line-through text-[var(--text-muted)]' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -188,122 +260,114 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
       {/* === COLLAPSED VIEW === */}
       {!isExpanded && (
         <>
-          <div className="flex items-start gap-2">
-            {isPending && (
-              <span
-                className="flex-shrink-0 mt-0.5 text-amber-400"
-                title={t('task.pending_approval')}
-                aria-label={t('task.pending_approval')}
-              >
-                ⊕
-              </span>
-            )}
-            <h3 className={titleClasses}>{task.task_name}</h3>
-          </div>
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={handleToggleCompleted}
+              className={`w-5 h-5 mt-0.5 rounded-full flex-shrink-0 flex items-center justify-center transition-all
+                ${isCompleted
+                  ? 'bg-[var(--success)] border-2 border-[var(--success)]'
+                  : 'border-2 border-[var(--border-medium)] hover:border-[var(--text-secondary)]'}`}
+              aria-label={isCompleted ? t('task.mark_incomplete') : t('task.mark_complete')}
+            >
+              {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
+            </button>
 
-          {task.description && (
-            <p className="text-sm text-slate-400 mt-2 whitespace-pre-wrap">
-              {task.description}
-            </p>
-          )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: priorityColor(task.priority) }}
+                  aria-label={`Priority ${task.priority}`}
+                />
+                <h3 className={titleClasses}>{task.task_name}</h3>
+              </div>
 
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <CategoryBadge category={task.category} />
-            <PriorityBadge priority={task.priority} />
-            <span className="text-xs text-slate-500">{dateDisplay}</span>
-            {isPending && (
-              <span className="text-xs text-amber-400 font-medium">{t('task.pending')}</span>
-            )}
-          </div>
+              {showDescription && (
+                <p className="text-sm text-[var(--text-secondary)] mt-1 ml-6 truncate">
+                  {task.description}
+                </p>
+              )}
 
-          {displayChecklist && displayChecklist.length > 0 && (
-            <ul className="mt-3 space-y-0.5">
-              {displayChecklist.map((item, index) => (
-                <li key={index} className="text-xs">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleChecklistItem(index);
-                    }}
-                    disabled={pendingToggleIdx !== null}
-                    className="flex items-center gap-2 w-full text-left py-0.5 px-1 hover:bg-slate-800/40 rounded transition-colors disabled:cursor-wait"
-                  >
-                    {item.done ? <CheckedBox /> : <EmptyBox />}
-                    <span className={item.done ? 'line-through text-slate-500' : 'text-slate-400'}>
-                      {item.text}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {toggleError && (
-            <div className="mt-1 text-xs text-red-400">
-              {t('errors.failed_update')}: {toggleError}
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-slate-800/50">
-            {isRejected ? (
-              <ActionButton
-                label={t('actions.unreject')}
-                loadingLabel={t('actions.unrejecting')}
-                isLoading={pendingAction === 'unreject'}
-                disabled={pendingAction !== null}
-                onClick={() => handleAction('unreject', { is_rejected: false })}
-                variant="secondary"
-              />
-            ) : (
-              <>
+              <div className="flex flex-wrap items-center gap-3 mt-2 ml-6 text-xs text-[var(--text-secondary)]">
+                {task.due_date && (
+                  <span className="flex items-center gap-1">
+                    <CalendarIcon className="w-3 h-3" />
+                    {formatDate(task.due_date, task.due_time)}
+                  </span>
+                )}
+                {task.category && task.category !== 'Unknown' && (
+                  <span className="flex items-center gap-1" style={{ color: categoryColor(task.category) }}>
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ backgroundColor: categoryColor(task.category) }}
+                    />
+                    {task.category}
+                  </span>
+                )}
                 {isPending && (
-                  <ActionButton
-                    label={t('actions.approve')}
-                    loadingLabel={t('actions.approving')}
-                    isLoading={pendingAction === 'approve'}
-                    disabled={pendingAction !== null}
-                    onClick={() => handleAction('approve', { approval_status: true })}
-                    variant="primary"
-                  />
+                  <span className="text-[var(--priority-p2)] font-medium">{t('task.pending')}</span>
                 )}
-                {!isCompleted && (
-                  <ActionButton
-                    label={t('actions.complete')}
-                    loadingLabel={t('actions.completing')}
-                    isLoading={pendingAction === 'complete'}
-                    disabled={pendingAction !== null}
-                    onClick={() =>
-                      handleAction('complete', {
-                        is_completed: true,
-                        ...(isPending ? { approval_status: true } : {}),
-                      })
-                    }
-                    variant="secondary"
-                  />
-                )}
-                {isCompleted && (
-                  <ActionButton
-                    label={t('actions.uncomplete')}
-                    loadingLabel={t('actions.uncompleting')}
-                    isLoading={pendingAction === 'uncomplete'}
-                    disabled={pendingAction !== null}
-                    onClick={() => handleAction('uncomplete', { is_completed: false })}
-                    variant="secondary"
-                  />
-                )}
-                {!isRejected && (
-                  <ActionButton
-                    label={t('actions.reject')}
-                    loadingLabel={t('actions.rejecting')}
-                    isLoading={pendingAction === 'reject'}
-                    disabled={pendingAction !== null}
-                    onClick={() => handleAction('reject', { is_rejected: true })}
-                    variant="danger"
-                  />
-                )}
-              </>
-            )}
+              </div>
+
+              {displayChecklist && displayChecklist.length > 0 && (
+                <ul className="mt-3 space-y-0.5 ml-6">
+                  {displayChecklist.map((item, index) => (
+                    <li key={index} className="text-xs">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleChecklistItem(index);
+                        }}
+                        disabled={pendingToggleIdx !== null}
+                        className="flex items-center gap-2 w-full text-left py-0.5 px-2 hover:bg-[var(--bg-hover)] rounded transition-colors disabled:cursor-wait"
+                      >
+                        {item.done ? <CheckedBox /> : <EmptyBox />}
+                        <span className={item.done ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}>
+                          {item.text}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {toggleError && (
+                <div className="mt-1 ml-6 text-xs text-[var(--danger)]">
+                  {t('errors.failed_update')}: {toggleError}
+                </div>
+              )}
+
+              {actionError && (
+                <div className="mt-2 ml-6 text-xs text-[var(--danger)]">
+                  {t('errors.failed_update')}: {actionError}
+                </div>
+              )}
+
+              {deleteError && (
+                <div className="mt-2 ml-6 text-xs text-[var(--danger)]">
+                  {t('errors.failed_delete')}: {deleteError}
+                </div>
+              )}
+            </div>
+
+            <TaskMenu
+              menuRef={menuRef}
+              isOpen={isMenuOpen}
+              onToggle={() => setIsMenuOpen((v) => !v)}
+              isPending={isPending}
+              isCompleted={isCompleted}
+              isRejected={isRejected}
+              pendingAction={pendingAction}
+              onApprove={() => handleAction('approve', { approval_status: true })}
+              onUncomplete={() => handleAction('uncomplete', { is_completed: false })}
+              onReject={() => handleAction('reject', { is_rejected: true })}
+              onUnreject={() => handleAction('unreject', { is_rejected: false })}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              t={t}
+            />
           </div>
         </>
       )}
@@ -315,22 +379,39 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
           className="space-y-3"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-start gap-2">
-            {isPending && (
-              <span
-                className="flex-shrink-0 mt-2 text-amber-400"
-                title={t('task.pending_approval')}
-                aria-label={t('task.pending_approval')}
-              >
-                ⊕
-              </span>
-            )}
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={handleToggleCompleted}
+              className={`w-5 h-5 mt-2 rounded-full flex-shrink-0 flex items-center justify-center transition-all
+                ${isCompleted
+                  ? 'bg-[var(--success)] border-2 border-[var(--success)]'
+                  : 'border-2 border-[var(--border-medium)] hover:border-[var(--text-secondary)]'}`}
+              aria-label={isCompleted ? t('task.mark_incomplete') : t('task.mark_complete')}
+            >
+              {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
+            </button>
             <input
               type="text"
               value={draft.task_name}
               onChange={(e) => updateDraft('task_name', e.target.value)}
               placeholder={t('task.name_placeholder')}
-              className={`w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm font-medium text-white focus:outline-none focus:border-slate-500 ${isCompleted ? 'line-through' : ''}`}
+              className={`w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors ${isCompleted ? 'line-through' : ''}`}
+            />
+            <TaskMenu
+              menuRef={menuRef}
+              isOpen={isMenuOpen}
+              onToggle={() => setIsMenuOpen((v) => !v)}
+              isPending={isPending}
+              isCompleted={isCompleted}
+              isRejected={isRejected}
+              pendingAction={pendingAction}
+              onApprove={() => handleAction('approve', { approval_status: true })}
+              onUncomplete={() => handleAction('uncomplete', { is_completed: false })}
+              onReject={() => handleAction('reject', { is_rejected: true })}
+              onUnreject={() => handleAction('unreject', { is_rejected: false })}
+              onDelete={handleDelete}
+              t={t}
             />
           </div>
 
@@ -339,32 +420,26 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               value={draft.description}
               onChange={(e) => updateDraft('description', e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-slate-500 resize-none"
+              className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 resize-none transition-colors"
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('task.category_label')}>
-              <select
+              <CustomSelect
                 value={draft.category}
-                onChange={(e) => updateDraft('category', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-slate-500"
-              >
-                <option value="Business">{t('browse.filter_business')}</option>
-                <option value="Personal">{t('browse.filter_personal')}</option>
-                <option value="Unknown">{t('browse.filter_unknown')}</option>
-              </select>
+                options={categoryOptions}
+                onChange={(value) => updateDraft('category', value)}
+                ariaLabel={t('task.category_label')}
+              />
             </Field>
             <Field label={t('task.priority_label')}>
-              <select
+              <CustomSelect
                 value={draft.priority}
-                onChange={(e) => updateDraft('priority', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-slate-500"
-              >
-                <option value="P1">P1</option>
-                <option value="P2">P2</option>
-                <option value="P3">P3</option>
-              </select>
+                options={priorityOptions}
+                onChange={(value) => updateDraft('priority', value)}
+                ariaLabel={t('task.priority_label')}
+              />
             </Field>
           </div>
 
@@ -374,7 +449,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 type="date"
                 value={draft.due_date}
                 onChange={(e) => updateDraft('due_date', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-slate-500"
+                className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
               />
             </Field>
             <Field label={t('task.due_time_label')}>
@@ -382,7 +457,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                 type="time"
                 value={draft.due_time}
                 onChange={(e) => updateDraft('due_time', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-slate-500"
+                className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
               />
             </Field>
           </div>
@@ -396,12 +471,12 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
                     value={item.text}
                     onChange={(e) => updateChecklistItem(index, { ...item, text: e.target.value })}
                     placeholder={t('task.checklist_item_placeholder', { n: index + 1 })}
-                    className="flex-1 px-3 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:border-slate-500"
+                    className="flex-1 px-3 py-1.5 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => removeChecklistItem(index)}
-                    className="px-2 py-1.5 rounded-md text-xs text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                    className="px-2 py-1.5 rounded-md text-xs text-[var(--text-secondary)] hover:text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors"
                     title={t('task.remove_item')}
                   >
                     ✕
@@ -411,7 +486,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               <button
                 type="button"
                 onClick={addChecklistItem}
-                className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
               >
                 {t('task.add_checklist_item')}
               </button>
@@ -419,22 +494,27 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
           </Field>
 
           {saveError && (
-            <div className="text-xs text-red-400">
+            <div className="text-xs text-[var(--danger)]">
               {t('errors.failed_save')}: {saveError}
             </div>
           )}
           {deleteError && (
-            <div className="text-xs text-red-400">
+            <div className="text-xs text-[var(--danger)]">
               {t('errors.failed_delete')}: {deleteError}
             </div>
           )}
+          {actionError && (
+            <div className="text-xs text-[var(--danger)]">
+              {t('errors.failed_update')}: {actionError}
+            </div>
+          )}
 
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/50">
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--border-subtle)]">
             <button
               type="button"
               onClick={handleSave}
               disabled={isSaving || isDeleting || !draft.task_name.trim()}
-              className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-hover)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors"
             >
               {isSaving ? t('actions.saving') : t('actions.save')}
             </button>
@@ -442,95 +522,104 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
               type="button"
               onClick={handleCancel}
               disabled={isSaving || isDeleting}
-              className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-transparent text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed transition-colors"
             >
               {t('actions.cancel')}
             </button>
-
-            {isRejected ? (
-              <ActionButton
-                label={t('actions.unreject')}
-                loadingLabel={t('actions.unrejecting')}
-                isLoading={pendingAction === 'unreject'}
-                disabled={pendingAction !== null}
-                onClick={() => handleAction('unreject', { is_rejected: false })}
-                variant="secondary"
-              />
-            ) : (
-              <>
-                {isPending && (
-                  <ActionButton
-                    label={t('actions.approve')}
-                    loadingLabel={t('actions.approving')}
-                    isLoading={pendingAction === 'approve'}
-                    disabled={pendingAction !== null}
-                    onClick={() => handleAction('approve', { approval_status: true })}
-                    variant="primary"
-                  />
-                )}
-                {!isCompleted && (
-                  <ActionButton
-                    label={t('actions.complete')}
-                    loadingLabel={t('actions.completing')}
-                    isLoading={pendingAction === 'complete'}
-                    disabled={pendingAction !== null}
-                    onClick={() =>
-                      handleAction('complete', {
-                        is_completed: true,
-                        ...(isPending ? { approval_status: true } : {}),
-                      })
-                    }
-                    variant="secondary"
-                  />
-                )}
-                {isCompleted && (
-                  <ActionButton
-                    label={t('actions.uncomplete')}
-                    loadingLabel={t('actions.uncompleting')}
-                    isLoading={pendingAction === 'uncomplete'}
-                    disabled={pendingAction !== null}
-                    onClick={() => handleAction('uncomplete', { is_completed: false })}
-                    variant="secondary"
-                  />
-                )}
-                {!isRejected && (
-                  <ActionButton
-                    label={t('actions.reject')}
-                    loadingLabel={t('actions.rejecting')}
-                    isLoading={pendingAction === 'reject'}
-                    disabled={pendingAction !== null}
-                    onClick={() => handleAction('reject', { is_rejected: true })}
-                    variant="danger"
-                  />
-                )}
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={isSaving || isDeleting || pendingAction !== null}
-              className="ml-auto inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-red-950/50 text-red-300 hover:bg-red-900/50 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
-            >
-              {isDeleting ? t('actions.deleting') : t('actions.delete')}
-            </button>
           </div>
-        </div>
-      )}
-
-      {actionError && (
-        <div className="mt-2 text-xs text-red-400">
-          {t('errors.failed_update')}: {actionError}
         </div>
       )}
     </article>
   );
 }
 
+function TaskMenu({
+  menuRef,
+  isOpen,
+  onToggle,
+  isPending,
+  isCompleted,
+  isRejected,
+  pendingAction,
+  onApprove,
+  onUncomplete,
+  onReject,
+  onUnreject,
+  onEdit,
+  onDelete,
+  t,
+}) {
+  return (
+    <div className="relative flex-shrink-0" data-no-toggle ref={menuRef}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={t('menu.open_menu')}
+        className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+      >
+        <DotsIcon />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-8 z-20 w-40 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-[var(--shadow-menu)] py-1 overflow-hidden">
+          {isPending && (
+            <MenuItem
+              label={pendingAction === 'approve' ? t('actions.approving') : t('actions.approve')}
+              disabled={pendingAction !== null}
+              onClick={onApprove}
+            />
+          )}
+          {isCompleted && (
+            <MenuItem
+              label={pendingAction === 'uncomplete' ? t('actions.uncompleting') : t('actions.uncomplete')}
+              disabled={pendingAction !== null}
+              onClick={onUncomplete}
+            />
+          )}
+          {!isRejected && (
+            <MenuItem
+              label={pendingAction === 'reject' ? t('actions.rejecting') : t('actions.reject')}
+              disabled={pendingAction !== null}
+              onClick={onReject}
+            />
+          )}
+          {isRejected && (
+            <MenuItem
+              label={pendingAction === 'unreject' ? t('actions.unrejecting') : t('actions.unreject')}
+              disabled={pendingAction !== null}
+              onClick={onUnreject}
+            />
+          )}
+          {onEdit && (
+            <MenuItem label={t('actions.edit')} onClick={onEdit} />
+          )}
+          <hr className="my-1 border-[var(--border-subtle)]" />
+          <MenuItem label={t('actions.delete')} onClick={onDelete} danger />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({ label, onClick, disabled, danger }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`block w-full text-left px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 hover:bg-[var(--bg-hover)] ${
+        danger ? 'text-[var(--danger)]' : 'text-[var(--text-primary)]'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="text-xs text-slate-400 font-medium uppercase tracking-wide block mb-1">
+      <span className="text-xs text-[var(--text-secondary)] font-medium uppercase tracking-wide block mb-1">
         {label}
       </span>
       {children}
@@ -538,56 +627,9 @@ function Field({ label, children }) {
   );
 }
 
-function ActionButton({ label, loadingLabel, isLoading, disabled, onClick, variant }) {
-  const variantClasses = variant === 'primary'
-    ? 'bg-blue-600 text-white hover:bg-blue-500 disabled:bg-blue-800'
-    : variant === 'danger'
-    ? 'bg-red-950/50 text-red-300 hover:bg-red-900/50 disabled:bg-slate-900'
-    : 'bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:bg-slate-900';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium border border-transparent disabled:cursor-not-allowed disabled:text-slate-500 transition-colors ${variantClasses}`}
-    >
-      {isLoading ? loadingLabel : label}
-    </button>
-  );
-}
-
-function CategoryBadge({ category }) {
-  const colors = {
-    Business: 'bg-blue-950 text-blue-300 border-blue-900',
-    Personal: 'bg-purple-950 text-purple-300 border-purple-900',
-    Unknown: 'bg-slate-800 text-slate-400 border-slate-700',
-  };
-  const colorClass = colors[category] || colors.Unknown;
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${colorClass}`}>
-      {category}
-    </span>
-  );
-}
-
-function PriorityBadge({ priority }) {
-  const colors = {
-    P1: 'bg-red-950 text-red-300 border-red-900',
-    P2: 'bg-yellow-950 text-yellow-300 border-yellow-900',
-    P3: 'bg-slate-800 text-slate-400 border-slate-700',
-  };
-  const colorClass = colors[priority] || colors.P3;
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${colorClass}`}>
-      {priority}
-    </span>
-  );
-}
-
 function EmptyBox() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-slate-600">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-[var(--border-medium)]">
       <rect x="1" y="1" width="12" height="12" rx="2" />
     </svg>
   );
@@ -595,9 +637,38 @@ function EmptyBox() {
 
 function CheckedBox() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-slate-400">
-      <rect x="1" y="1" width="12" height="12" rx="2" fill="currentColor" fillOpacity="0.15" />
-      <path d="M3.5 7L5.5 9.5L10.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
+      <rect x="1" y="1" width="12" height="12" rx="2" fill="var(--success)" />
+      <path d="M3.5 7L5.5 9.5L10.5 4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }) {
+  return (
+    <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <path d="M3 7L5.5 9.5L11 4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CalendarIcon({ className }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function DotsIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="5" r="1.75" />
+      <circle cx="12" cy="12" r="1.75" />
+      <circle cx="12" cy="19" r="1.75" />
     </svg>
   );
 }

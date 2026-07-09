@@ -6,7 +6,7 @@ function TaskList({ tasks, sortBy = 'newest', expandedTaskId, onToggleExpand, on
 
   if (tasks.length === 0) {
     return (
-      <div className="p-8 text-center text-slate-500 text-sm">
+      <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">
         {t('empty.default')}
       </div>
     );
@@ -15,7 +15,7 @@ function TaskList({ tasks, sortBy = 'newest', expandedTaskId, onToggleExpand, on
   const sortedTasks = sortTasks(tasks, sortBy);
 
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-2">
       {sortedTasks.map((task) => (
         <li key={task.record_id}>
           <TaskCard

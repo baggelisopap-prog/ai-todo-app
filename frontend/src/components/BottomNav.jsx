@@ -58,7 +58,7 @@ function BottomNav({ activeTab, onTabChange }) {
   const { t } = useTranslation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 z-40">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-card)] border-t border-[var(--border-subtle)] shadow-[0_-1px_3px_rgba(0,0,0,0.03)]">
       <div className="flex justify-around max-w-3xl mx-auto">
         {TABS.map(({ id, labelKey, Icon }) => {
           const isActive = activeTab === id;
@@ -68,7 +68,7 @@ function BottomNav({ activeTab, onTabChange }) {
               type="button"
               onClick={() => onTabChange(id)}
               className={`flex-1 flex flex-col items-center py-3 transition-colors min-h-[56px] ${
-                isActive ? 'text-blue-400' : 'text-slate-400 hover:text-slate-200'
+                isActive ? 'text-[var(--brand-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
               aria-pressed={isActive}
             >

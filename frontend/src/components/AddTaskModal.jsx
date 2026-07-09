@@ -47,53 +47,51 @@ function AddTaskModal({ onClose, onTasksAdded }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center"
+      className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center"
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-slate-900 w-full md:max-w-md md:rounded-lg rounded-t-2xl p-4 border border-slate-700 shadow-xl"
+        className="w-full md:max-w-md bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl p-4 shadow-[var(--shadow-modal)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3">
-          <h2 className="text-sm font-semibold text-white">{t('modal.add_task_title')}</h2>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('modal.add_task_title')}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 transition-colors p-1 rounded"
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 rounded"
             aria-label={t('actions.cancel')}
           >
             ✕
           </button>
         </div>
 
-        <div className="rounded-lg border border-slate-700 bg-slate-950 overflow-hidden focus-within:border-slate-500 transition-colors">
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={t('modal.placeholder')}
-            rows={4}
-            disabled={isSubmitting}
-            className="w-full bg-transparent text-sm text-slate-100 placeholder:text-slate-500 px-4 py-3 resize-none focus:outline-none disabled:opacity-50"
-          />
-        </div>
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={t('modal.placeholder')}
+          rows={4}
+          disabled={isSubmitting}
+          className="w-full px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-medium)] rounded-md text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 resize-none transition-colors disabled:opacity-50"
+        />
 
         {error && (
-          <div className="mt-2 p-2 rounded border border-red-900 bg-red-950 text-red-300 text-xs">
+          <div className="mt-2 p-2 rounded border border-red-200 bg-red-50 text-red-800 text-xs">
             {t('errors.failed_add')}: {error}
           </div>
         )}
 
         <div className="flex justify-between items-center mt-3">
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-[var(--text-muted)]">
             {isSubmitting ? t('modal.submitting') : t('modal.submit_hint')}
           </span>
           <button
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="inline-flex items-center px-4 py-1.5 rounded-md text-xs font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-sm font-medium disabled:bg-[var(--bg-hover)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors"
           >
             {isSubmitting ? t('actions.adding') : t('actions.add')}
           </button>

@@ -80,17 +80,17 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
-      <main className="flex-1 pb-20">
+    <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
+      <main className="flex-1 pb-24">
         {isLoading && (
-          <div className="max-w-3xl mx-auto px-4 py-6 text-slate-500 text-sm">
+          <div className="max-w-3xl mx-auto p-4 text-[var(--text-muted)] text-sm italic">
             {t('app.loading_tasks')}
           </div>
         )}
 
         {error && (
-          <div className="max-w-3xl mx-auto px-4 py-6">
-            <div className="p-4 rounded-lg border border-red-900 bg-red-950 text-red-300">
+          <div className="max-w-3xl mx-auto p-4">
+            <div className="p-4 rounded-lg border border-red-200 bg-red-50 text-red-800">
               <p className="font-medium">{t('errors.load_tasks_failed')}</p>
               <p className="text-sm mt-1 opacity-80">{error}</p>
             </div>

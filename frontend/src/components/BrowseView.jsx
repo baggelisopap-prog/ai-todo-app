@@ -33,10 +33,10 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
   }, [tasks, selectedCategory, showCompleted, showRejected]);
 
   const categoryOptions = [
-    { value: 'All', labelKey: 'browse.filter_all', accentClass: 'hover:border-slate-600', selectedClass: 'border-slate-400 bg-slate-800' },
-    { value: 'Business', labelKey: 'browse.filter_business', accentClass: 'hover:border-blue-700', selectedClass: 'border-blue-500 bg-blue-950' },
-    { value: 'Personal', labelKey: 'browse.filter_personal', accentClass: 'hover:border-purple-700', selectedClass: 'border-purple-500 bg-purple-950' },
-    { value: 'Unknown', labelKey: 'browse.filter_unknown', accentClass: 'hover:border-slate-600', selectedClass: 'border-slate-400 bg-slate-800' },
+    { value: 'All', labelKey: 'browse.filter_all', accentClass: 'hover:border-[var(--text-secondary)]', selectedClass: 'border-[var(--text-secondary)] bg-[var(--bg-hover)]' },
+    { value: 'Business', labelKey: 'browse.filter_business', accentClass: 'hover:border-[var(--category-business)]/60', selectedClass: 'border-[var(--category-business)] bg-[var(--category-business)]/10' },
+    { value: 'Personal', labelKey: 'browse.filter_personal', accentClass: 'hover:border-[var(--category-personal)]/60', selectedClass: 'border-[var(--category-personal)] bg-[var(--category-personal)]/10' },
+    { value: 'Unknown', labelKey: 'browse.filter_unknown', accentClass: 'hover:border-[var(--text-secondary)]', selectedClass: 'border-[var(--text-secondary)] bg-[var(--bg-hover)]' },
   ];
 
   const sortOptions = [
@@ -47,8 +47,10 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
   ];
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6">
-      <h2 className="text-lg font-semibold text-white mb-4">{t('nav.browse')}</h2>
+    <div className="max-w-3xl mx-auto p-4 md:p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t('nav.browse')}</h1>
+      </div>
 
       <div className="mb-6 space-y-4">
         {/* Category cards */}
@@ -64,13 +66,13 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
                 className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-colors cursor-pointer text-center ${
                   isSelected
                     ? selectedClass
-                    : `border-slate-800 bg-slate-900 ${accentClass}`
+                    : `border-[var(--border-subtle)] bg-[var(--bg-card)] ${accentClass}`
                 }`}
               >
-                <span className="text-xs text-slate-400 font-medium uppercase tracking-wide">
+                <span className="text-xs text-[var(--text-secondary)] font-medium uppercase tracking-wide">
                   {t(labelKey)}
                 </span>
-                <span className="text-xl font-semibold text-white mt-0.5">
+                <span className="text-xl font-semibold text-[var(--text-primary)] mt-0.5">
                   {categoryCounts[value]}
                 </span>
               </button>
@@ -80,7 +82,7 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
 
         {/* Sort buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 mr-1">{t('browse.sort_label')}</span>
+          <span className="text-xs text-[var(--text-secondary)] mr-1">{t('browse.sort_label')}</span>
           {sortOptions.map(({ value, labelKey }) => {
             const isActive = sortBy === value;
             return (
@@ -89,10 +91,10 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
                 type="button"
                 onClick={() => setSortBy(value)}
                 aria-pressed={isActive}
-                className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
                   isActive
-                    ? 'border-slate-500 bg-slate-700 text-white'
-                    : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700'
+                    ? 'bg-[var(--brand-primary)] text-white'
+                    : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)]'
                 }`}
               >
                 {t(labelKey)}
@@ -106,42 +108,30 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
           <button
             type="button"
             onClick={() => setShowCompleted((v) => !v)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
               showCompleted
-                ? 'border-slate-600 bg-slate-800 text-slate-100'
-                : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700'
+                ? 'bg-[var(--brand-primary)] text-white'
+                : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)]'
             }`}
           >
-            <span
-              className={`w-3 h-3 rounded-sm border ${
-                showCompleted ? 'border-slate-400 bg-slate-400' : 'border-slate-600 bg-transparent'
-              }`}
-              aria-hidden="true"
-            />
             {t('browse.show_completed')} ({completedCount})
           </button>
           <button
             type="button"
             onClick={() => setShowRejected((v) => !v)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
               showRejected
-                ? 'border-red-800 bg-red-950/50 text-red-200'
-                : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700'
+                ? 'bg-[var(--brand-primary)] text-white'
+                : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)]'
             }`}
           >
-            <span
-              className={`w-3 h-3 rounded-sm border ${
-                showRejected ? 'border-red-400 bg-red-400' : 'border-slate-600 bg-transparent'
-              }`}
-              aria-hidden="true"
-            />
             {t('browse.show_rejected')} ({rejectedCount})
           </button>
         </div>
       </div>
 
       {filteredTasks.length === 0 ? (
-        <div className="p-8 text-center text-slate-500 text-sm">{t('empty.browse')}</div>
+        <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">{t('empty.browse')}</div>
       ) : (
         <TaskList
           tasks={filteredTasks}
