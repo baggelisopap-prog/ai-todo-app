@@ -67,13 +67,13 @@ def extract_tasks(raw_input: str) -> Optional[TaskList]:
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 contents=raw_input,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     response_mime_type="application/json",
                     response_schema=TaskList,
-                    temperature=0.0,
+                   
                 )
             )
 
@@ -136,7 +136,7 @@ def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str) -> Optional[Tas
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 contents=[{
                     "role": "user",
                     "parts": [
@@ -148,7 +148,7 @@ def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str) -> Optional[Tas
                     system_instruction=system_instruction,
                     response_mime_type="application/json",
                     response_schema=TaskList,
-                    temperature=0.0,
+                    
                 )
             )
 
