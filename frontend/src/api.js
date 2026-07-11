@@ -99,6 +99,40 @@ export async function extractTasksFromAudio(audioBlob) {
 }
 
 /**
+ * POST /extract-image — sends an image to AI, gets back saved tasks.
+ * Uses FormData (multipart). Cannot go through request() which hardcodes JSON headers.
+ * Returns { saved_tasks: [...], count: N }
+ */
+export async function extractTasksFromImage(imageBlob) {
+  const formData = new FormData();
+  const extension = imageBlob.type.split('/')[1]?.split(';')[0] || 'jpg';
+  formData.append('image', imageBlob, `photo.${extension}`);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/extract-image`, {
+      method: 'POST',
+      body: formData,
+    });
+  } catch (error) {
+    throw new Error(`Network error: ${error.message}`);
+  }
+
+  if (!response.ok) {
+    let detail;
+    try {
+      const errorBody = await response.json();
+      detail = errorBody.detail || JSON.stringify(errorBody);
+    } catch {
+      detail = response.statusText;
+    }
+    throw new Error(`API error ${response.status}: ${detail}`);
+  }
+
+  return response.json();
+}
+
+/**
  * PATCH /tasks/{record_id} — updates specific fields of a task.
  * Returns the updated task object.
  */

@@ -113,5 +113,12 @@
   },
   "inbox": {
     "hint": "Tap ○ to approve"
+  },
+  "photo": {
+    "label": "Photo",
+    "preview_title": "Extract tasks from image",
+    "extract": "Extract",
+    "retake": "Cancel",
+    "processing": "Extracting..."
   }
 }

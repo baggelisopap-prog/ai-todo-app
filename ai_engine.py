@@ -189,3 +189,73 @@ def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str) -> Optional[Tas
     except Exception as e:
         logging.error(f"Unexpected error during audio parsing: {e}")
         return None
+
+
+def extract_tasks_from_image(image_bytes: bytes, mime_type: str) -> Optional[TaskList]:
+    """
+    Extracts structured task data from an image via Gemini multimodal input.
+    Image is sent inline and never stored to disk.
+    """
+    logging.info(f"Processing image input: {len(image_bytes)} bytes, type={mime_type}")
+
+    system_instruction = _build_system_instruction()
+
+    max_retries = 3
+    response_text = None
+
+    # 1. API Call with Exponential Backoff
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.5-flash",
+                contents=[{
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {"mime_type": mime_type, "data": image_bytes}},
+                        {"text": "Look at this image and extract all tasks mentioned. Handwritten notes, receipts, screenshots, whiteboards, and typed text all qualify. If the image contains multiple distinct action items, return them as separate tasks."},
+                    ],
+                }],
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    response_mime_type="application/json",
+                    response_schema=TaskList,
+                )
+            )
+
+            # Guard the response: Model can occasionally return None/empty
+            if not response or not response.text:
+                logging.warning(f"Attempt {attempt + 1}: Received empty response from model.")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                continue
+
+            response_text = response.text
+            break  # Success, exit the retry loop
+
+        # Widened catch to gracefully handle both SDK API errors AND raw transport/network drops.
+        except (errors.APIError, ConnectionError, TimeoutError) as e:
+            logging.error(f"Attempt {attempt + 1} API/Network Error: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            else:
+                logging.error("Max retries reached. Image API extraction failed.")
+                return None
+
+    # If the loop finished without ever getting text
+    if not response_text:
+        return None
+
+    # Parse and Validate with Pydantic
+    try:
+        parsed_data = TaskList.model_validate_json(response_text)
+        logging.info("Successfully extracted and validated tasks from image.")
+        return parsed_data
+
+    except ValidationError as e:
+        logging.error(f"Pydantic Validation Error: The AI image output violated our schema rules.")
+        logging.error(f"Validation Details: {e}")
+        logging.error(f"Raw Model Output was: {response_text}")
+        return None
+    except Exception as e:
+        logging.error(f"Unexpected error during image parsing: {e}")
+        return None

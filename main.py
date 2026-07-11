@@ -87,6 +87,10 @@ app.add_middleware(
 MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_AUDIO_MIME_PREFIX = "audio/"
 
+# Image upload constraints
+MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_IMAGE_MIME_PREFIX = "image/"
+
 # Service instance
 service = TaskService()
 
@@ -166,6 +170,52 @@ async def extract_voice(audio: UploadFile = File(...)):
         )
     except Exception as e:
         logger.exception("Unexpected error in /extract-voice")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+
+@app.post("/extract-image", response_model=ExtractResponse, status_code=status.HTTP_201_CREATED)
+async def extract_image(image: UploadFile = File(...)):
+    """
+    Extract tasks from an image and save them to the database.
+    Accepts any image/* MIME type up to 10 MB. Image is processed in memory and never stored.
+    """
+    # Validate MIME type
+    if not image.content_type or not image.content_type.startswith(ALLOWED_IMAGE_MIME_PREFIX):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Unsupported media type: {image.content_type}. Expected image/*"
+        )
+
+    # Read and validate size
+    image_bytes = await image.read()
+    if len(image_bytes) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty image file"
+        )
+    if len(image_bytes) > MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Image file too large. Max {MAX_IMAGE_SIZE_BYTES // (1024 * 1024)} MB."
+        )
+
+    try:
+        saved_tasks = service.extract_and_save_from_image(
+            image_bytes=image_bytes,
+            mime_type=image.content_type,
+        )
+        return ExtractResponse(saved_tasks=saved_tasks, count=len(saved_tasks))
+    except RuntimeError as e:
+        logger.error(f"Extract-image failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Task extraction or save failed: {str(e)}"
+        )
+    except Exception as e:
+        logger.exception("Unexpected error in /extract-image")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"

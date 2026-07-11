@@ -118,6 +118,7 @@ function App() {
       <FloatingActionButtons
         onAddClick={() => setIsAddModalOpen(true)}
         onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
+        onPhotoComplete={(newTasks) => handleTasksAdded(newTasks)}
       />
 
       <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />

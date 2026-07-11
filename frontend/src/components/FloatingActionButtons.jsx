@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import VoiceButton from './VoiceButton';
+import PhotoButton from './PhotoButton';
 
 function PlusIcon() {
   return (
@@ -10,7 +11,7 @@ function PlusIcon() {
   );
 }
 
-function FloatingActionButtons({ onAddClick, onVoiceComplete }) {
+function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete }) {
   const { t } = useTranslation();
 
   return (
@@ -24,6 +25,7 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete }) {
       >
         <PlusIcon />
       </button>
+      <PhotoButton onComplete={onPhotoComplete} />
     </div>
   );
 }

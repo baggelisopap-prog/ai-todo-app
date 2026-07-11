@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 from models import SingleTask, TaskList, TaskRecord
-from ai_engine import extract_tasks, extract_tasks_from_audio
+from ai_engine import extract_tasks, extract_tasks_from_audio, extract_tasks_from_image
 from repository import AirtableTaskRepository
 
 logger = logging.getLogger(__name__)
@@ -102,6 +102,38 @@ class TaskService:
             raise RuntimeError("All extracted tasks failed to save to the database.")
 
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from audio to database.")
+        return saved_tasks
+
+    def extract_and_save_from_image(self, image_bytes: bytes, mime_type: str) -> list[TaskRecord]:
+        """
+        Extracts tasks from an image via AI and saves them to the database.
+        Mirrors extract_and_save exactly — only the AI call differs.
+        """
+        logger.info("Processing image input for extraction and save...")
+
+        # 1. AI Extraction
+        task_list = extract_tasks_from_image(image_bytes, mime_type)
+
+        if not task_list:
+            raise RuntimeError("AI extraction failed to produce valid tasks from image.")
+
+        saved_tasks = []
+
+        # 2. Conversion and Saving
+        for task in task_list.items:
+            task_record = self._single_task_to_record(task)
+
+            try:
+                saved_task = self.repository.save_task(task_record)
+                saved_tasks.append(saved_task)
+            except Exception as e:
+                logger.error(f"Failed to save task '{task.task_name}' to database: {e}")
+
+        # 3. Final Validation
+        if not saved_tasks and len(task_list.items) > 0:
+            raise RuntimeError("All extracted tasks failed to save to the database.")
+
+        logger.info(f"Successfully saved {len(saved_tasks)} tasks from image to database.")
         return saved_tasks
 
     def get_all_tasks(self) -> list[TaskRecord]:
