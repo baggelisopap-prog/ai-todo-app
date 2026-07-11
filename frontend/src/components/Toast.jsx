@@ -15,9 +15,10 @@ const VARIANT_ICON_CLASSES = {
 /**
  * Toast — brief notification that auto-dismisses.
  * * Receives a message and an onDismiss callback. After `duration` ms,
- * automatically calls onDismiss to remove itself.
+ * automatically calls onDismiss to remove itself. An optional `action`
+ * ({ label, onClick }) renders a button that runs onClick then dismisses.
  */
-function Toast({ message, onDismiss, duration = 3000, variant = 'success' }) {
+function Toast({ message, onDismiss, duration = 3000, variant = 'success', action }) {
   useEffect(() => {
     const timer = setTimeout(onDismiss, duration);
     // Cleanup if component unmounts before timeout
@@ -29,6 +30,15 @@ function Toast({ message, onDismiss, duration = 3000, variant = 'success' }) {
       {variant === 'success' && <span className={VARIANT_ICON_CLASSES.success}>✓</span>}
       {variant === 'error' && <span className={VARIANT_ICON_CLASSES.error}>✕</span>}
       <span>{message}</span>
+      {action && (
+        <button
+          type="button"
+          onClick={() => { action.onClick(); onDismiss(); }}
+          className="font-semibold underline underline-offset-2 hover:no-underline"
+        >
+          {action.label}
+        </button>
+      )}
     </div>
   );
 }

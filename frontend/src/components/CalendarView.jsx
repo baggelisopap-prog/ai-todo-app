@@ -1,5 +1,16 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  DndContext,
+  DragOverlay,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+} from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
 import { toLocalISODate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
@@ -106,6 +117,10 @@ function statusRank(task) {
   return STATUS_RANK.approved;
 }
 
+function isTaskDraggable(task) {
+  return !task.is_completed && !task.is_rejected;
+}
+
 export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
 
@@ -131,6 +146,16 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     return d;
   });
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [activeDragTask, setActiveDragTask] = useState(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+    })
+  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -169,6 +194,62 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     onTaskDeleted(recordId);
   }
 
+  function handleReschedule(task, dropTargetId) {
+    const [kind, ...rest] = dropTargetId.split(':');
+
+    let newDate;
+    let newTime;
+
+    if (kind === 'day') {
+      newDate = rest[0];
+      newTime = task.due_time || null;
+    } else if (kind === 'cell') {
+      newDate = rest[0];
+      newTime = `${rest[1].padStart(2, '0')}:00`;
+    } else if (kind === 'allday') {
+      newDate = rest[0];
+      newTime = null;
+    } else {
+      return;
+    }
+
+    if (newDate === task.due_date && newTime === (task.due_time || null)) return;
+
+    const previousDate = task.due_date;
+    const previousTime = task.due_time || null;
+
+    onTaskUpdate(task.record_id, { due_date: newDate, due_time: newTime }).catch(() => {});
+
+    onShowToast({
+      message: t('calendar.rescheduled'),
+      variant: 'success',
+      duration: 5000,
+      action: {
+        label: t('calendar.undo'),
+        onClick: () => {
+          onTaskUpdate(task.record_id, { due_date: previousDate, due_time: previousTime }).catch(() => {});
+        },
+      },
+    });
+  }
+
+  function handleDragStart(event) {
+    const taskId = event.active.id;
+    const task = tasks.find((tk) => tk.record_id === taskId);
+    setActiveDragTask(task || null);
+  }
+
+  function handleDragEnd(event) {
+    setActiveDragTask(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const task = tasks.find((tk) => tk.record_id === active.id);
+    if (!task) return;
+
+    handleReschedule(task, over.id);
+  }
+
   const tasksByDate = tasks.reduce((acc, task) => {
     if (!task.due_date) return acc;
     if (task.is_rejected) return acc;
@@ -186,100 +267,142 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const selectedTask = selectedTaskId ? tasks.find((tk) => tk.record_id === selectedTaskId) : null;
 
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-6 pb-24">
-      <div className="flex justify-center mb-4">
-        <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5">
-          <button
-            onClick={() => setViewMode('monthly')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'monthly'
-                ? 'bg-[var(--brand-primary)] text-white'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-            }`}
-          >
-            {t('calendar.monthly')}
-          </button>
-          <button
-            onClick={() => setViewMode('weekly')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'weekly'
-                ? 'bg-[var(--brand-primary)] text-white'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-            }`}
-          >
-            {t('calendar.weekly')}
-          </button>
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="max-w-3xl mx-auto p-4 md:p-6 pb-24">
+        <div className="flex justify-center mb-4">
+          <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5">
+            <button
+              onClick={() => setViewMode('monthly')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                viewMode === 'monthly'
+                  ? 'bg-[var(--brand-primary)] text-white'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+              }`}
+            >
+              {t('calendar.monthly')}
+            </button>
+            <button
+              onClick={() => setViewMode('weekly')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                viewMode === 'weekly'
+                  ? 'bg-[var(--brand-primary)] text-white'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+              }`}
+            >
+              {t('calendar.weekly')}
+            </button>
+          </div>
         </div>
+
+        {viewMode === 'monthly' ? (
+          <>
+            <MonthlyGrid
+              currentMonth={currentMonth}
+              onPrevMonth={handlePrevMonth}
+              onNextMonth={handleNextMonth}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              tasksByDate={tasksByDate}
+              todayISO={todayISO}
+              t={t}
+            />
+
+            <div className="mt-6">
+              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+                {formatSelectedDayLabel(selectedDate)}
+                <span className="ml-1 text-[var(--text-muted)]">
+                  ({selectedDayTasks.length})
+                </span>
+              </h2>
+              {selectedDayTasks.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedDayTasks.map((task) => (
+                    <div key={task.record_id} className="flex items-start gap-1">
+                      <DragHandle task={task} t={t} />
+                      <div className="flex-1 min-w-0">
+                        <TaskCard
+                          task={task}
+                          isExpanded={expandedTaskId === task.record_id}
+                          onToggleExpand={onToggleExpand}
+                          onUpdate={onTaskUpdate}
+                          onTaskDeleted={onTaskDeleted}
+                          onShowToast={onShowToast}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--text-muted)] italic ml-1">
+                  {t('empty.no_tasks')}
+                </p>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <WeeklyGrid
+              currentWeekStart={currentWeekStart}
+              onPrevWeek={handlePrevWeek}
+              onNextWeek={handleNextWeek}
+              tasks={tasks}
+              todayISO={todayISO}
+              onTaskClick={handleTaskClick}
+              t={t}
+            />
+
+            {selectedTask && (
+              <div className="mt-6">
+                <TaskCard
+                  task={selectedTask}
+                  isExpanded={expandedTaskId === selectedTask.record_id}
+                  onToggleExpand={onToggleExpand}
+                  onUpdate={onTaskUpdate}
+                  onTaskDeleted={handleWeeklyTaskDeleted}
+                  onShowToast={onShowToast}
+                />
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {viewMode === 'monthly' ? (
-        <>
-          <MonthlyGrid
-            currentMonth={currentMonth}
-            onPrevMonth={handlePrevMonth}
-            onNextMonth={handleNextMonth}
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            tasksByDate={tasksByDate}
-            todayISO={todayISO}
-            t={t}
-          />
+      <DragOverlay>
+        {activeDragTask && <TaskChip task={activeDragTask} isOverlay />}
+      </DragOverlay>
+    </DndContext>
+  );
+}
 
-          <div className="mt-6">
-            <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
-              {formatSelectedDayLabel(selectedDate)}
-              <span className="ml-1 text-[var(--text-muted)]">
-                ({selectedDayTasks.length})
-              </span>
-            </h2>
-            {selectedDayTasks.length > 0 ? (
-              <div className="space-y-2">
-                {selectedDayTasks.map((task) => (
-                  <TaskCard
-                    key={task.record_id}
-                    task={task}
-                    isExpanded={expandedTaskId === task.record_id}
-                    onToggleExpand={onToggleExpand}
-                    onUpdate={onTaskUpdate}
-                    onTaskDeleted={onTaskDeleted}
-                    onShowToast={onShowToast}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--text-muted)] italic ml-1">
-                {t('empty.no_tasks')}
-              </p>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <WeeklyGrid
-            currentWeekStart={currentWeekStart}
-            onPrevWeek={handlePrevWeek}
-            onNextWeek={handleNextWeek}
-            tasks={tasks}
-            todayISO={todayISO}
-            onTaskClick={handleTaskClick}
-            t={t}
-          />
+function DragHandle({ task, t }) {
+  const draggable = isTaskDraggable(task);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: task.record_id,
+    disabled: !draggable,
+  });
 
-          {selectedTask && (
-            <div className="mt-6">
-              <TaskCard
-                task={selectedTask}
-                isExpanded={expandedTaskId === selectedTask.record_id}
-                onToggleExpand={onToggleExpand}
-                onUpdate={onTaskUpdate}
-                onTaskDeleted={handleWeeklyTaskDeleted}
-                onShowToast={onShowToast}
-              />
-            </div>
-          )}
-        </>
-      )}
-    </div>
+  if (!draggable) {
+    return <div className="w-7 flex-shrink-0" />;
+  }
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      type="button"
+      onClick={(e) => e.stopPropagation()}
+      className="w-7 h-10 mt-1 flex-shrink-0 flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-grab active:cursor-grabbing touch-none transition-colors"
+      aria-label={t('calendar.drag_hint')}
+    >
+      <GripIcon />
+    </button>
   );
 }
 
@@ -320,40 +443,54 @@ function MonthlyGrid({ currentMonth, onPrevMonth, onNextMonth, selectedDate, onS
       <div className="grid grid-cols-7 gap-1">
         {cells.map((cell) => {
           const cellISO = toLocalISODate(cell.date);
-          const dayTasks = tasksByDate[cellISO] || [];
-          const selected = cellISO === selectedISO;
-          const todayCell = cellISO === todayISO;
-
           return (
-            <button
+            <MonthlyDayCell
               key={cellISO}
-              onClick={() => onSelectDate(cell.date)}
-              className={`
-                aspect-square p-1 rounded flex flex-col items-center justify-start gap-1
-                ${cell.inCurrentMonth ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}
-                ${selected ? 'bg-[var(--brand-primary)] text-white' : 'hover:bg-[var(--bg-hover)]'}
-                ${todayCell && !selected ? 'font-bold ring-2 ring-[var(--brand-primary)]/40' : ''}
-                transition-colors
-              `}
-            >
-              <span className="text-sm">{cell.date.getDate()}</span>
-              <div className="flex gap-0.5 flex-wrap justify-center">
-                {dayTasks.slice(0, 3).map((task, idx) => (
-                  <span
-                    key={idx}
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: priorityColor(task.priority) }}
-                  />
-                ))}
-                {dayTasks.length > 3 && (
-                  <span className="text-[10px] text-[var(--text-secondary)]">+</span>
-                )}
-              </div>
-            </button>
+              cell={cell}
+              isSelected={cellISO === selectedISO}
+              isTodayCell={cellISO === todayISO}
+              tasksForDay={tasksByDate[cellISO] || []}
+              onSelect={onSelectDate}
+            />
           );
         })}
       </div>
     </>
+  );
+}
+
+function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, onSelect }) {
+  const dropId = `day:${toLocalISODate(cell.date)}`;
+  const { isOver, setNodeRef } = useDroppable({ id: dropId });
+
+  return (
+    <button
+      ref={setNodeRef}
+      onClick={() => onSelect(cell.date)}
+      className={`
+        aspect-square p-1 rounded flex flex-col items-center justify-start gap-1
+        transition-colors
+        ${cell.inCurrentMonth ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}
+        ${isSelected ? 'bg-[var(--brand-primary)] text-white' : ''}
+        ${!isSelected && isTodayCell ? 'font-bold ring-2 ring-[var(--brand-primary)]/40' : ''}
+        ${isOver ? 'bg-[var(--brand-primary)]/20' : ''}
+        ${!isSelected && !isOver ? 'hover:bg-[var(--bg-hover)]' : ''}
+      `}
+    >
+      <span className="text-sm">{cell.date.getDate()}</span>
+      <div className="flex gap-0.5 flex-wrap justify-center">
+        {tasksForDay.slice(0, 3).map((task, idx) => (
+          <span
+            key={idx}
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ backgroundColor: priorityColor(task.priority) }}
+          />
+        ))}
+        {tasksForDay.length > 3 && (
+          <span className="text-[10px] text-[var(--text-secondary)]">+</span>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -431,13 +568,13 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
             </div>
             {weekDays.map((day) => {
               const dayKey = toLocalISODate(day);
-              const allDayTasks = allDayTasksByDate[dayKey] || [];
               return (
-                <div key={dayKey} className="min-w-0 min-h-[40px] p-1 flex flex-col gap-1">
-                  {allDayTasks.map((task) => (
-                    <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
-                  ))}
-                </div>
+                <WeeklyAllDayCell
+                  key={dayKey}
+                  day={day}
+                  tasks={allDayTasksByDate[dayKey] || []}
+                  onTaskClick={onTaskClick}
+                />
               );
             })}
           </div>
@@ -451,19 +588,15 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
                 {weekDays.map((day) => {
                   const dayISO = toLocalISODate(day);
                   const cellKey = `${dayISO}-${hour}`;
-                  const cellTasks = tasksByCell[cellKey] || [];
-                  const cellIsToday = dayISO === todayISO;
                   return (
-                    <div
+                    <WeeklyHourCell
                       key={cellKey}
-                      className={`min-w-0 min-h-[48px] p-0.5 flex flex-col gap-0.5 ${
-                        cellIsToday ? 'bg-[var(--brand-primary)]/5' : ''
-                      }`}
-                    >
-                      {cellTasks.map((task) => (
-                        <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
-                      ))}
-                    </div>
+                      day={day}
+                      hour={hour}
+                      tasks={tasksByCell[cellKey] || []}
+                      isTodayCol={dayISO === todayISO}
+                      onTaskClick={onTaskClick}
+                    />
                   );
                 })}
               </div>
@@ -482,17 +615,88 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
   );
 }
 
-function TaskChip({ task, onClick }) {
+function WeeklyHourCell({ day, hour, tasks, isTodayCol, onTaskClick }) {
+  const dropId = `cell:${toLocalISODate(day)}:${hour}`;
+  const { isOver, setNodeRef } = useDroppable({ id: dropId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`
+        min-w-0 min-h-[48px] p-0.5 flex flex-col gap-0.5 transition-colors
+        ${isTodayCol ? 'bg-[var(--brand-primary)]/5' : ''}
+        ${isOver ? 'bg-[var(--brand-primary)]/15' : ''}
+      `}
+    >
+      {tasks.map((task) => (
+        <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
+      ))}
+    </div>
+  );
+}
+
+function WeeklyAllDayCell({ day, tasks, onTaskClick }) {
+  const dropId = `allday:${toLocalISODate(day)}`;
+  const { isOver, setNodeRef } = useDroppable({ id: dropId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`min-w-0 min-h-[40px] p-1 flex flex-col gap-1 transition-colors ${
+        isOver ? 'bg-[var(--brand-primary)]/15' : ''
+      }`}
+    >
+      {tasks.map((task) => (
+        <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
+      ))}
+    </div>
+  );
+}
+
+function TaskChip({ task, onClick, isOverlay = false }) {
+  const draggable = isTaskDraggable(task);
+
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: task.record_id,
+    disabled: !draggable || isOverlay,
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0 : 1,
+  };
+
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); onClick(task); }}
-      className="w-full max-w-full text-left px-1.5 py-1 rounded text-xs bg-[var(--bg-card)] border-l-2 hover:brightness-95 transition-all overflow-hidden"
-      style={{ borderLeftColor: priorityColor(task.priority) }}
+      ref={isOverlay ? undefined : setNodeRef}
+      style={{ ...style, borderLeftColor: priorityColor(task.priority) }}
+      {...(isOverlay ? {} : attributes)}
+      {...(isOverlay ? {} : listeners)}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!isDragging) onClick?.(task);
+      }}
+      className={`w-full max-w-full text-left px-1.5 py-1 rounded text-xs bg-[var(--bg-card)] border-l-2 transition-all overflow-hidden ${
+        draggable && !isOverlay ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-default'
+      } ${isOverlay ? 'shadow-lg scale-105' : 'hover:brightness-95'}`}
     >
       <div className={`truncate ${task.is_completed ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
         {task.task_name}
       </div>
     </button>
+  );
+}
+
+function GripIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="9" cy="6" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="9" cy="18" r="1.5" />
+      <circle cx="15" cy="6" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="15" cy="18" r="1.5" />
+    </svg>
   );
 }
 

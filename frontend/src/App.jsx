@@ -21,8 +21,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('inbox');
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState(null);
-  const [toastVariant, setToastVariant] = useState('success');
+  const [toast, setToast] = useState(null); // { message, variant, action?, duration? }
 
   useEffect(() => {
     async function loadTasks() {
@@ -43,15 +42,26 @@ function App() {
   function handleTasksAdded(newTasks) {
     setTasks((current) => [...newTasks, ...current]);
     const count = newTasks.length;
-    setToastMessage(
-      count === 1 ? t('toast.added_one') : t('toast.added_many', { count })
-    );
-    setToastVariant('success');
+    setToast({
+      message: count === 1 ? t('toast.added_one') : t('toast.added_many', { count }),
+      variant: 'success',
+    });
   }
 
-  function handleShowToast(messageKey, variant = 'success') {
-    setToastMessage(t(messageKey));
-    setToastVariant(variant);
+  // Legacy signature: handleShowToast(translationKey, variant) — used throughout
+  // TaskCard/views. New signature: handleShowToast({ message, variant, action, duration })
+  // — message is already-translated, used by CalendarView for the reschedule/undo toast.
+  function handleShowToast(messageOrConfig, variant = 'success') {
+    if (typeof messageOrConfig === 'object' && messageOrConfig !== null) {
+      setToast({
+        message: messageOrConfig.message,
+        variant: messageOrConfig.variant || 'success',
+        action: messageOrConfig.action,
+        duration: messageOrConfig.duration,
+      });
+      return;
+    }
+    setToast({ message: t(messageOrConfig), variant });
   }
 
   async function handleUpdateTask(recordId, updates) {
@@ -135,8 +145,14 @@ function App() {
         />
       )}
 
-      {toastMessage && (
-        <Toast message={toastMessage} variant={toastVariant} onDismiss={() => setToastMessage(null)} />
+      {toast && (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          action={toast.action}
+          duration={toast.duration || 3000}
+          onDismiss={() => setToast(null)}
+        />
       )}
     </div>
   );

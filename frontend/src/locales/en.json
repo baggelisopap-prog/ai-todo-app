@@ -13,7 +13,10 @@
     "weekly": "Weekly",
     "prev_week": "Previous week",
     "next_week": "Next week",
-    "all_day": "All day"
+    "all_day": "All day",
+    "rescheduled": "Rescheduled",
+    "undo": "Undo",
+    "drag_hint": "Long-press to drag"
   },
   "app": {
     "title": "AI To-Do",
