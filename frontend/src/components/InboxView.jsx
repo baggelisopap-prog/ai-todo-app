@@ -1,13 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
 
-function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted }) {
+function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
 
   const inboxTasks = tasks.filter((task) =>
-    !task.is_rejected && !task.is_completed && (
-      !task.approval_status || !task.due_date
-    )
+    !task.is_rejected && !task.is_completed && !task.approval_status
   );
 
   return (
@@ -17,6 +15,11 @@ function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
           {t('nav.inbox')}
           <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">({inboxTasks.length})</span>
         </h1>
+        {inboxTasks.length > 0 && (
+          <p className="text-sm text-[var(--text-muted)] mt-1">
+            {t('inbox.hint')}
+          </p>
+        )}
       </div>
 
       {inboxTasks.length === 0 ? (
@@ -25,10 +28,12 @@ function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
         <TaskList
           tasks={inboxTasks}
           sortBy="newest"
+          variant="inbox"
           expandedTaskId={expandedTaskId}
           onToggleExpand={onToggleExpand}
           onUpdateTask={onTaskUpdate}
           onTaskDeleted={onTaskDeleted}
+          onShowToast={onShowToast}
         />
       )}
     </div>

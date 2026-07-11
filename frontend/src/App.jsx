@@ -21,6 +21,7 @@ function App() {
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [toastVariant, setToastVariant] = useState('success');
 
   useEffect(() => {
     async function loadTasks() {
@@ -44,6 +45,12 @@ function App() {
     setToastMessage(
       count === 1 ? t('toast.added_one') : t('toast.added_many', { count })
     );
+    setToastVariant('success');
+  }
+
+  function handleShowToast(messageKey, variant = 'success') {
+    setToastMessage(t(messageKey));
+    setToastVariant(variant);
   }
 
   async function handleUpdateTask(recordId, updates) {
@@ -77,6 +84,7 @@ function App() {
     onToggleExpand: handleToggleExpand,
     onTaskUpdate: handleUpdateTask,
     onTaskDeleted: handleTaskDeleted,
+    onShowToast: handleShowToast,
   };
 
   return (
@@ -125,7 +133,7 @@ function App() {
       )}
 
       {toastMessage && (
-        <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+        <Toast message={toastMessage} variant={toastVariant} onDismiss={() => setToastMessage(null)} />
       )}
     </div>
   );

@@ -28,7 +28,14 @@ function categoryColor(category) {
   }
 }
 
-function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted }) {
+const ACTION_TOAST_KEYS = {
+  approve: 'toast.approved',
+  uncomplete: 'toast.uncompleted',
+  reject: 'toast.rejected',
+  unreject: 'toast.unrejected',
+};
+
+function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
 
   const [pendingAction, setPendingAction] = useState(null);
@@ -157,6 +164,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
     setActionError(null);
     try {
       await onUpdate(task.record_id, updates);
+      onShowToast(ACTION_TOAST_KEYS[actionName], 'success');
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -164,8 +172,18 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
     }
   }
 
-  async function handleToggleCompleted(e) {
+  async function handleCircleClick(e) {
     e.stopPropagation();
+    if (variant === 'inbox') {
+      setActionError(null);
+      try {
+        await onUpdate(task.record_id, { approval_status: true });
+        onShowToast('toast.approved', 'success');
+      } catch (err) {
+        setActionError(err.message);
+      }
+      return;
+    }
     const newValue = !task.is_completed;
     setOptimisticCompleted(newValue);
     setActionError(null);
@@ -175,6 +193,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
         ...(newValue && isPending ? { approval_status: true } : {}),
       });
       setOptimisticCompleted(null);
+      onShowToast(newValue ? 'toast.completed' : 'toast.uncompleted', 'success');
     } catch (err) {
       setOptimisticCompleted(null);
       setActionError(err.message);
@@ -209,6 +228,7 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
     try {
       await deleteTask(task.record_id);
       onTaskDeleted(task.record_id);
+      onShowToast('toast.deleted', 'success');
     } catch (err) {
       setDeleteError(err.message);
       setIsDeleting(false);
@@ -263,12 +283,16 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
           <div className="flex items-start gap-3">
             <button
               type="button"
-              onClick={handleToggleCompleted}
+              onClick={handleCircleClick}
               className={`w-5 h-5 mt-0.5 rounded-full flex-shrink-0 flex items-center justify-center transition-all
                 ${isCompleted
                   ? 'bg-[var(--success)] border-2 border-[var(--success)]'
                   : 'border-2 border-[var(--border-medium)] hover:border-[var(--text-secondary)]'}`}
-              aria-label={isCompleted ? t('task.mark_incomplete') : t('task.mark_complete')}
+              aria-label={
+                variant === 'inbox'
+                  ? t('actions.approve')
+                  : (isCompleted ? t('task.mark_incomplete') : t('task.mark_complete'))
+              }
             >
               {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
             </button>
@@ -382,12 +406,16 @@ function TaskCard({ task, isExpanded, onToggleExpand, onUpdate, onTaskDeleted })
           <div className="flex items-start gap-3">
             <button
               type="button"
-              onClick={handleToggleCompleted}
+              onClick={handleCircleClick}
               className={`w-5 h-5 mt-2 rounded-full flex-shrink-0 flex items-center justify-center transition-all
                 ${isCompleted
                   ? 'bg-[var(--success)] border-2 border-[var(--success)]'
                   : 'border-2 border-[var(--border-medium)] hover:border-[var(--text-secondary)]'}`}
-              aria-label={isCompleted ? t('task.mark_incomplete') : t('task.mark_complete')}
+              aria-label={
+                variant === 'inbox'
+                  ? t('actions.approve')
+                  : (isCompleted ? t('task.mark_incomplete') : t('task.mark_complete'))
+              }
             >
               {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
             </button>

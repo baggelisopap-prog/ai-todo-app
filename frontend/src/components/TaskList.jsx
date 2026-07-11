@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import TaskCard from './TaskCard';
 
-function TaskList({ tasks, sortBy = 'newest', expandedTaskId, onToggleExpand, onUpdateTask, onTaskDeleted }) {
+function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskId, onToggleExpand, onUpdateTask, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
 
   if (tasks.length === 0) {
@@ -20,10 +20,12 @@ function TaskList({ tasks, sortBy = 'newest', expandedTaskId, onToggleExpand, on
         <li key={task.record_id}>
           <TaskCard
             task={task}
+            variant={variant}
             isExpanded={expandedTaskId === task.record_id}
             onToggleExpand={onToggleExpand}
             onUpdate={onUpdateTask}
             onTaskDeleted={onTaskDeleted}
+            onShowToast={onShowToast}
           />
         </li>
       ))}

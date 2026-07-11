@@ -103,6 +103,15 @@
   },
   "toast": {
     "added_one": "Added 1 task",
-    "added_many": "Added {{count}} tasks"
+    "added_many": "Added {{count}} tasks",
+    "approved": "Approved",
+    "completed": "Completed",
+    "uncompleted": "Marked incomplete",
+    "rejected": "Rejected",
+    "unrejected": "Restored",
+    "deleted": "Deleted"
+  },
+  "inbox": {
+    "hint": "Tap ○ to approve"
   }
 }

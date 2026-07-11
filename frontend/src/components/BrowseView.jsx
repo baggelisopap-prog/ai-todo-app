@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
 
-function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted }) {
+function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
@@ -140,6 +140,7 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
           onToggleExpand={onToggleExpand}
           onUpdateTask={onTaskUpdate}
           onTaskDeleted={onTaskDeleted}
+          onShowToast={onShowToast}
         />
       )}
     </div>

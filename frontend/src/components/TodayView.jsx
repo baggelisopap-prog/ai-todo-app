@@ -1,10 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
+import { toLocalISODate } from '../utils/formatDate';
 
-function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted }) {
+function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISODate(new Date());
 
   const todayTasks = tasks.filter((task) =>
     task.approval_status &&
@@ -45,6 +46,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
                 onToggleExpand={onToggleExpand}
                 onUpdateTask={onTaskUpdate}
                 onTaskDeleted={onTaskDeleted}
+                onShowToast={onShowToast}
               />
             </div>
           )}
@@ -63,6 +65,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
                 onToggleExpand={onToggleExpand}
                 onUpdateTask={onTaskUpdate}
                 onTaskDeleted={onTaskDeleted}
+                onShowToast={onShowToast}
               />
             )}
           </div>

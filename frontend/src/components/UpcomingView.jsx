@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
+import { toLocalISODate } from '../utils/formatDate';
 
 function getSectionLabel(t, daysFromNow, date) {
   if (daysFromNow === 1) {
@@ -21,16 +22,16 @@ function computeSections(tasks, t) {
     if (!task.due_date) return false;
     const target = new Date(today);
     target.setDate(target.getDate() + daysFromNow);
-    const targetISO = target.toISOString().split('T')[0];
+    const targetISO = toLocalISODate(target);
     return task.due_date === targetISO;
   };
 
-  const sections = [];
+  const daySections = [];
   for (let i = 1; i <= 7; i++) {
     const dayTasks = tasks.filter((task) => baseFilter(task) && isDueOnDay(task, i));
     const targetDate = new Date(today);
     targetDate.setDate(targetDate.getDate() + i);
-    sections.push({
+    daySections.push({
       label: getSectionLabel(t, i, targetDate),
       tasks: dayTasks,
       key: `day-${i}`,
@@ -38,20 +39,35 @@ function computeSections(tasks, t) {
   }
 
   const noDateTasks = tasks.filter((task) => baseFilter(task) && !task.due_date);
-  sections.push({
+  const noDateSection = {
     label: t('sections.no_date'),
     tasks: noDateTasks,
     key: 'no-date',
-  });
+  };
 
-  return sections;
+  const totalCount =
+    daySections.reduce((sum, s) => sum + s.tasks.length, 0) + noDateSection.tasks.length;
+
+  return { daySections, noDateSection, totalCount };
 }
 
-function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted }) {
+function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
 
-  const sections = computeSections(tasks, t);
-  const totalCount = sections.reduce((sum, s) => sum + s.tasks.length, 0);
+  const { daySections, noDateSection, totalCount } = computeSections(tasks, t);
+
+  let lastPopulatedIndex = -1;
+  for (let i = daySections.length - 1; i >= 0; i--) {
+    if (daySections[i].tasks.length > 0) {
+      lastPopulatedIndex = i;
+      break;
+    }
+  }
+  const visibleDaySections = daySections.filter(
+    (section, idx) => section.tasks.length > 0 || idx < lastPopulatedIndex
+  );
+
+  const sections = [...visibleDaySections, noDateSection];
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6">
@@ -77,6 +93,7 @@ function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onT
               onToggleExpand={onToggleExpand}
               onUpdateTask={onTaskUpdate}
               onTaskDeleted={onTaskDeleted}
+              onShowToast={onShowToast}
             />
           )}
         </div>
