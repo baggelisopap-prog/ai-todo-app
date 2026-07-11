@@ -3,7 +3,12 @@
     "inbox": "Inbox",
     "today": "Today",
     "upcoming": "Upcoming",
+    "calendar": "Calendar",
     "browse": "All"
+  },
+  "calendar": {
+    "prev_month": "Previous month",
+    "next_month": "Next month"
   },
   "app": {
     "title": "AI To-Do",
@@ -26,6 +31,7 @@
   },
   "actions": {
     "add": "Add",
+    "add_label": "Text",
     "adding": "Adding...",
     "cancel": "Cancel",
     "save": "Save",

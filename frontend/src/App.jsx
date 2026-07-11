@@ -5,6 +5,7 @@ import BottomNav from './components/BottomNav';
 import InboxView from './components/InboxView';
 import TodayView from './components/TodayView';
 import UpcomingView from './components/UpcomingView';
+import CalendarView from './components/CalendarView';
 import BrowseView from './components/BrowseView';
 import FloatingActionButtons from './components/FloatingActionButtons';
 import AddTaskModal from './components/AddTaskModal';
@@ -110,6 +111,7 @@ function App() {
             {activeTab === 'inbox' && <InboxView {...viewProps} />}
             {activeTab === 'today' && <TodayView {...viewProps} />}
             {activeTab === 'upcoming' && <UpcomingView {...viewProps} />}
+            {activeTab === 'calendar' && <CalendarView {...viewProps} />}
             {activeTab === 'browse' && <BrowseView {...viewProps} />}
           </>
         )}

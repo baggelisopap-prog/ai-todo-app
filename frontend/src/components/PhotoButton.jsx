@@ -80,14 +80,19 @@ function PhotoButton({ onComplete }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={handleButtonClick}
-        aria-label={t('photo.label')}
-        className="w-12 h-12 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-colors"
-      >
-        <CameraIcon className="w-5 h-5" />
-      </button>
+      <div className="relative flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={handleButtonClick}
+          aria-label={t('photo.label')}
+          className="w-12 h-12 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-colors"
+        >
+          <CameraIcon className="w-5 h-5" />
+        </button>
+        <span className="text-xs text-[var(--text-secondary)] text-center min-w-[56px]">
+          {t('photo.label')}
+        </span>
+      </div>
       <input
         ref={fileInputRef}
         type="file"

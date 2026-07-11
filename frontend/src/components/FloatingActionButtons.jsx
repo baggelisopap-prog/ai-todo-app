@@ -17,14 +17,19 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
   return (
     <div className="fixed bottom-24 right-4 z-30 flex flex-col gap-3 items-end">
       <VoiceButton onComplete={onVoiceComplete} />
-      <button
-        type="button"
-        onClick={onAddClick}
-        aria-label={t('actions.add')}
-        className="w-12 h-12 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-colors"
-      >
-        <PlusIcon />
-      </button>
+      <div className="relative flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={onAddClick}
+          aria-label={t('actions.add')}
+          className="w-12 h-12 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-colors"
+        >
+          <PlusIcon />
+        </button>
+        <span className="text-xs text-[var(--text-secondary)] text-center min-w-[56px]">
+          {t('actions.add_label')}
+        </span>
+      </div>
       <PhotoButton onComplete={onPhotoComplete} />
     </div>
   );

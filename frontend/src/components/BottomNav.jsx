@@ -34,6 +34,22 @@ function UpcomingIcon() {
   );
 }
 
+function CalendarIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <line x1="7.5" y1="14" x2="7.5" y2="14" />
+      <line x1="12" y1="14" x2="12" y2="14" />
+      <line x1="16.5" y1="14" x2="16.5" y2="14" />
+      <line x1="7.5" y1="17.5" x2="7.5" y2="17.5" />
+      <line x1="12" y1="17.5" x2="12" y2="17.5" />
+    </svg>
+  );
+}
+
 function BrowseIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -51,6 +67,7 @@ const TABS = [
   { id: 'inbox', labelKey: 'nav.inbox', Icon: InboxIcon },
   { id: 'today', labelKey: 'nav.today', Icon: TodayIcon },
   { id: 'upcoming', labelKey: 'nav.upcoming', Icon: UpcomingIcon },
+  { id: 'calendar', labelKey: 'nav.calendar', Icon: CalendarIcon },
   { id: 'browse', labelKey: 'nav.browse', Icon: BrowseIcon },
 ];
 
@@ -73,7 +90,7 @@ function BottomNav({ activeTab, onTabChange }) {
               aria-pressed={isActive}
             >
               <Icon />
-              <span className="text-xs mt-1">{t(labelKey)}</span>
+              <span className="text-xs mt-1 truncate max-w-full px-0.5">{t(labelKey)}</span>
             </button>
           );
         })}

@@ -2,20 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { deleteTask } from '../api';
 import { formatDate } from '../utils/formatDate';
+import { priorityColor } from '../utils/priorityColor';
 import CustomSelect from './CustomSelect';
-
-function priorityColor(priority) {
-  switch (priority) {
-    case 'P1':
-      return 'var(--priority-p1)';
-    case 'P2':
-      return 'var(--priority-p2)';
-    case 'P3':
-      return 'var(--priority-p3)';
-    default:
-      return 'var(--text-muted)';
-  }
-}
 
 function categoryColor(category) {
   switch (category) {
