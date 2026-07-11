@@ -8,7 +8,12 @@
   },
   "calendar": {
     "prev_month": "Previous month",
-    "next_month": "Next month"
+    "next_month": "Next month",
+    "monthly": "Monthly",
+    "weekly": "Weekly",
+    "prev_week": "Previous week",
+    "next_week": "Next week",
+    "all_day": "All day"
   },
   "app": {
     "title": "AI To-Do",
