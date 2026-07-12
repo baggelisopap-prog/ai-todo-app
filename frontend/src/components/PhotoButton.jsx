@@ -1,26 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { forwardRef, useState, useRef, useEffect, useImperativeHandle } from 'react';
 import { useTranslation } from 'react-i18next';
 import { extractTasksFromImage } from '../api';
+import { CameraIcon, SpinnerIcon } from './icons';
 
-function CameraIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-      <circle cx="12" cy="13" r="4" />
-    </svg>
-  );
-}
-
-function SpinnerIcon() {
-  return (
-    <svg className="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
-  );
-}
-
-function PhotoButton({ onComplete }) {
+const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButton = true }, ref) {
   const { t } = useTranslation();
   const [state, setState] = useState('idle'); // idle | preview | processing
   const [imageFile, setImageFile] = useState(null);
@@ -39,6 +22,10 @@ function PhotoButton({ onComplete }) {
   function handleButtonClick() {
     fileInputRef.current?.click();
   }
+
+  useImperativeHandle(ref, () => ({
+    trigger: () => fileInputRef.current?.click(),
+  }));
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
@@ -80,19 +67,21 @@ function PhotoButton({ onComplete }) {
 
   return (
     <>
-      <div className="relative flex flex-col items-center gap-1">
-        <button
-          type="button"
-          onClick={handleButtonClick}
-          aria-label={t('photo.label')}
-          className="w-12 h-12 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-colors"
-        >
-          <CameraIcon className="w-5 h-5" />
-        </button>
-        <span className="text-xs text-[var(--text-secondary)] text-center min-w-[56px]">
-          {t('photo.label')}
-        </span>
-      </div>
+      {renderIdleButton && (
+        <div className="relative flex flex-col items-center gap-1">
+          <button
+            type="button"
+            onClick={handleButtonClick}
+            aria-label={t('photo.label')}
+            className="w-12 h-12 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-colors"
+          >
+            <CameraIcon className="w-5 h-5" />
+          </button>
+          <span className="text-xs text-[var(--text-secondary)] text-center min-w-[56px]">
+            {t('photo.label')}
+          </span>
+        </div>
+      )}
       <input
         ref={fileInputRef}
         type="file"
@@ -136,7 +125,7 @@ function PhotoButton({ onComplete }) {
                 disabled={isProcessing}
                 className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
-                {isProcessing && <SpinnerIcon />}
+                {isProcessing && <SpinnerIcon className="w-4 h-4 animate-spin" />}
                 {isProcessing ? t('photo.processing') : t('photo.extract')}
               </button>
             </div>
@@ -145,6 +134,6 @@ function PhotoButton({ onComplete }) {
       )}
     </>
   );
-}
+});
 
 export default PhotoButton;

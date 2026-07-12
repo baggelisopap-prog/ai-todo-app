@@ -51,14 +51,6 @@ function getCalendarCells(currentMonth) {
   return cells;
 }
 
-function chunkIntoWeeks(cells) {
-  const weeks = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    weeks.push(cells.slice(i, i + 7));
-  }
-  return weeks;
-}
-
 function getWeekDays(weekStart) {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
@@ -140,11 +132,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     d.setHours(0, 0, 0, 0);
     return d;
   });
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  });
+  const [selectedDate, setSelectedDate] = useState(null);
 
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const d = new Date();
@@ -205,6 +193,14 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
       d.setDate(d.getDate() + 7);
       return d;
     });
+  }
+
+  function handleSelectDate(date) {
+    if (date === null) {
+      setSelectedDate(null);
+      return;
+    }
+    setSelectedDate((prev) => (prev && toLocalISODate(prev) === toLocalISODate(date) ? null : date));
   }
 
   function handleTaskClick(task) {
@@ -281,10 +277,10 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     return acc;
   }, {});
 
-  const selectedISO = toLocalISODate(selectedDate);
-  const selectedDayTasks = (tasksByDate[selectedISO] || [])
-    .slice()
-    .sort((a, b) => statusRank(a) - statusRank(b));
+  const selectedISO = selectedDate ? toLocalISODate(selectedDate) : null;
+  const selectedDayTasks = selectedISO
+    ? (tasksByDate[selectedISO] || []).slice().sort((a, b) => statusRank(a) - statusRank(b))
+    : [];
 
   const selectedTask = selectedTaskId ? tasks.find((tk) => tk.record_id === selectedTaskId) : null;
 
@@ -322,7 +318,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
             onPrevMonth={handlePrevMonth}
             onNextMonth={handleNextMonth}
             selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
+            onSelectDate={handleSelectDate}
             tasksByDate={tasksByDate}
             selectedDayTasks={selectedDayTasks}
             todayISO={todayISO}
@@ -417,8 +413,7 @@ function MonthlyGrid({
   t,
 }) {
   const cells = getCalendarCells(currentMonth);
-  const selectedISO = toLocalISODate(selectedDate);
-  const weeks = chunkIntoWeeks(cells);
+  const selectedISO = selectedDate ? toLocalISODate(selectedDate) : null;
 
   return (
     <>
@@ -450,83 +445,93 @@ function MonthlyGrid({
         ))}
       </div>
 
-      <div className="space-y-1">
-        {weeks.map((week, weekIdx) => {
-          const selectedInThisWeek = week.some((cell) => toLocalISODate(cell.date) === selectedISO);
-
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((cell) => {
+          const cellISO = toLocalISODate(cell.date);
           return (
-            <div key={weekIdx}>
-              <div className="grid grid-cols-7 gap-1">
-                {week.map((cell) => {
-                  const cellISO = toLocalISODate(cell.date);
-                  return (
-                    <MonthlyDayCell
-                      key={cellISO}
-                      cell={cell}
-                      isSelected={cellISO === selectedISO}
-                      isTodayCell={cellISO === todayISO}
-                      tasksForDay={tasksByDate[cellISO] || []}
-                      onSelect={onSelectDate}
-                    />
-                  );
-                })}
-              </div>
-
-              {selectedInThisWeek && (
-                <ExpansionPanel
-                  date={selectedDate}
-                  tasks={selectedDayTasks}
-                  expandedTaskId={expandedTaskId}
-                  onToggleExpand={onToggleExpand}
-                  onTaskUpdate={onTaskUpdate}
-                  onTaskDeleted={onTaskDeleted}
-                  onShowToast={onShowToast}
-                  t={t}
-                />
-              )}
-            </div>
+            <MonthlyDayCell
+              key={cellISO}
+              cell={cell}
+              isSelected={cellISO === selectedISO}
+              isTodayCell={cellISO === todayISO}
+              tasksForDay={tasksByDate[cellISO] || []}
+              onSelect={onSelectDate}
+            />
           );
         })}
       </div>
+
+      {selectedDate && (
+        <DayDetailModal
+          date={selectedDate}
+          tasks={selectedDayTasks}
+          expandedTaskId={expandedTaskId}
+          onToggleExpand={onToggleExpand}
+          onTaskUpdate={onTaskUpdate}
+          onTaskDeleted={onTaskDeleted}
+          onShowToast={onShowToast}
+          onClose={() => onSelectDate(null)}
+          t={t}
+        />
+      )}
     </>
   );
 }
 
-function ExpansionPanel({ date, tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, t }) {
+function DayDetailModal({ date, tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onClose, t }) {
   const dayLabel = formatSelectedDayLabel(date);
 
   return (
-    <div className="mt-1 mb-1 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg p-4 shadow-[var(--shadow-card)]">
-      <h3 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
-        {dayLabel}
-        <span className="ml-1 text-[var(--text-muted)] font-normal">
-          ({tasks.length})
-        </span>
-      </h3>
-
-      {tasks.length > 0 ? (
-        <div className="space-y-2">
-          {tasks.map((task) => (
-            <div key={task.record_id} className="flex items-start gap-1">
-              <DragHandle task={task} t={t} />
-              <div className="flex-1 min-w-0">
-                <TaskCard
-                  task={task}
-                  isExpanded={expandedTaskId === task.record_id}
-                  onToggleExpand={onToggleExpand}
-                  onUpdate={onTaskUpdate}
-                  onTaskDeleted={onTaskDeleted}
-                  onShowToast={onShowToast}
-                />
-              </div>
-            </div>
-          ))}
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full md:max-w-2xl bg-[var(--bg-card)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] flex flex-col max-h-[85vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            {dayLabel}
+            <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">
+              ({tasks.length})
+            </span>
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded"
+            aria-label={t('calendar.close_day')}
+          >
+            ✕
+          </button>
         </div>
-      ) : (
-        <p className="text-sm text-[var(--text-muted)] italic">
-          {t('empty.no_tasks')}
-        </p>
-      )}
+
+        <div className="overflow-y-auto p-4">
+          {tasks.length > 0 ? (
+            <div className="space-y-2">
+              {tasks.map((task) => (
+                <div key={task.record_id} className="flex items-start gap-1">
+                  <DragHandle task={task} t={t} />
+                  <div className="flex-1 min-w-0">
+                    <TaskCard
+                      task={task}
+                      isExpanded={expandedTaskId === task.record_id}
+                      onToggleExpand={onToggleExpand}
+                      onUpdate={onTaskUpdate}
+                      onTaskDeleted={onTaskDeleted}
+                      onShowToast={onShowToast}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)] italic">
+              {t('empty.no_tasks')}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -615,71 +620,75 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
 
       <div className="overflow-x-auto">
         <div className="min-w-[600px]">
-          <div className={`${GRID_TEMPLATE} mb-1`}>
-            <div className="w-14" />
-            {weekDays.map((day) => {
-              const dayISO = toLocalISODate(day);
-              const todayCol = dayISO === todayISO;
-              return (
-                <div
-                  key={dayISO}
-                  className={`min-w-0 text-center text-xs font-medium ${
-                    todayCol ? 'text-[var(--brand-primary)] font-bold' : 'text-[var(--text-secondary)]'
-                  }`}
-                >
-                  <div className="uppercase">{weekdayShort(day)}</div>
-                  <div className="text-sm mt-0.5">{day.getDate()}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className={`${GRID_TEMPLATE} mb-1 border-b border-[var(--border-subtle)] pb-2`}>
-            <div className="text-xs text-[var(--text-muted)] pt-2 pr-2 text-right w-14">
-              {t('calendar.all_day')}
-            </div>
-            {weekDays.map((day) => {
-              const dayKey = toLocalISODate(day);
-              return (
-                <WeeklyAllDayCell
-                  key={dayKey}
-                  day={day}
-                  tasks={allDayTasksByDate[dayKey] || []}
-                  onTaskClick={onTaskClick}
-                />
-              );
-            })}
-          </div>
-
-          <div className="relative">
-            {HOURS.map((hour) => (
-              <div key={hour} className={`${GRID_TEMPLATE} border-t border-[var(--border-subtle)]`}>
-                <div className="text-xs text-[var(--text-muted)] pt-1 pr-2 text-right w-14">
-                  {formatHour(hour)}
-                </div>
+          <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
+            <div className="sticky top-0 z-10 bg-[var(--bg-app)] pb-1">
+              <div className={GRID_TEMPLATE}>
+                <div className="w-14" />
                 {weekDays.map((day) => {
                   const dayISO = toLocalISODate(day);
-                  const cellKey = `${dayISO}-${hour}`;
+                  const todayCol = dayISO === todayISO;
                   return (
-                    <WeeklyHourCell
-                      key={cellKey}
-                      day={day}
-                      hour={hour}
-                      tasks={tasksByCell[cellKey] || []}
-                      isTodayCol={dayISO === todayISO}
-                      onTaskClick={onTaskClick}
-                    />
+                    <div
+                      key={dayISO}
+                      className={`min-w-0 text-center text-xs font-medium ${
+                        todayCol ? 'text-[var(--brand-primary)] font-bold' : 'text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      <div className="uppercase">{weekdayShort(day)}</div>
+                      <div className="text-sm mt-0.5">{day.getDate()}</div>
+                    </div>
                   );
                 })}
               </div>
-            ))}
+            </div>
 
-            {nowIndicator.show && (
-              <div
-                className="absolute left-14 right-0 h-0.5 bg-[var(--brand-primary)]"
-                style={{ top: `${nowIndicator.topPercent}%` }}
-              />
-            )}
+            <div className={`${GRID_TEMPLATE} mb-1 border-b border-[var(--border-subtle)] pb-2`}>
+              <div className="text-xs text-[var(--text-muted)] pt-2 pr-2 text-right w-14">
+                {t('calendar.all_day')}
+              </div>
+              {weekDays.map((day) => {
+                const dayKey = toLocalISODate(day);
+                return (
+                  <WeeklyAllDayCell
+                    key={dayKey}
+                    day={day}
+                    tasks={allDayTasksByDate[dayKey] || []}
+                    onTaskClick={onTaskClick}
+                  />
+                );
+              })}
+            </div>
+
+            <div className="relative">
+              {HOURS.map((hour) => (
+                <div key={hour} className={`${GRID_TEMPLATE} border-t border-[var(--border-subtle)]`}>
+                  <div className="text-xs text-[var(--text-muted)] pt-1 pr-2 text-right w-14">
+                    {formatHour(hour)}
+                  </div>
+                  {weekDays.map((day) => {
+                    const dayISO = toLocalISODate(day);
+                    const cellKey = `${dayISO}-${hour}`;
+                    return (
+                      <WeeklyHourCell
+                        key={cellKey}
+                        day={day}
+                        hour={hour}
+                        tasks={tasksByCell[cellKey] || []}
+                        isTodayCol={dayISO === todayISO}
+                        onTaskClick={onTaskClick}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+
+              {nowIndicator.show && (
+                <div
+                  className="absolute left-14 right-0 h-0.5 bg-[var(--brand-primary)]"
+                  style={{ top: `${nowIndicator.topPercent}%` }}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

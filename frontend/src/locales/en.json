@@ -16,7 +16,8 @@
     "all_day": "All day",
     "rescheduled": "Rescheduled",
     "undo": "Undo",
-    "drag_hint": "Long-press to drag"
+    "drag_hint": "Long-press to drag",
+    "close_day": "Close"
   },
   "app": {
     "title": "AI To-Do",
@@ -134,5 +135,9 @@
     "extract": "Extract",
     "retake": "Cancel",
     "processing": "Extracting..."
+  },
+  "fab": {
+    "open": "Open actions",
+    "close": "Close actions"
   }
 }
