@@ -63,7 +63,11 @@
     "add_task_title": "New Task",
     "placeholder": "Type a task in any language...",
     "submit_hint": "Ctrl+Enter to submit",
-    "submitting": "Extracting tasks..."
+    "submitting": "Extracting tasks...",
+    "new_task": "New Task",
+    "all_day": "All day",
+    "description_placeholder": "Description (optional)",
+    "add_checklist_item": "Add checklist item"
   },
   "voice": {
     "label": "Voice",

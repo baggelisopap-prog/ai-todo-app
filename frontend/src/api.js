@@ -133,6 +133,17 @@ export async function extractTasksFromImage(imageBlob) {
 }
 
 /**
+ * POST /tasks — manually creates a task without AI extraction.
+ * Returns the created task object.
+ */
+export async function createTaskManual(payload) {
+  return request('/tasks', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
  * PATCH /tasks/{record_id} — updates specific fields of a task.
  * Returns the updated task object.
  */

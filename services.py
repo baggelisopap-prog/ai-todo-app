@@ -136,6 +136,32 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from image to database.")
         return saved_tasks
 
+    def create_task_manual(self, fields: dict) -> TaskRecord:
+        """
+        Manually create a task. Fills in AI-suggested fields as duplicates
+        of user's choices (since there's no AI here) and sets defaults for
+        approval flags.
+        """
+        checklist = fields.get("checklist") or []
+
+        task = TaskRecord(
+            task_name=fields["task_name"].strip(),
+            description=fields.get("description", "").strip(),
+            category=fields.get("category", "Unknown"),
+            priority=fields.get("priority", "P3"),
+            due_date=fields.get("due_date"),
+            due_time=fields.get("due_time"),
+            checklist=checklist,
+            approval_status=True,  # Manual = pre-approved
+            is_completed=False,
+            is_rejected=False,
+            ai_suggested_category=fields.get("category", "Unknown"),
+            ai_suggested_priority=fields.get("priority", "P3"),
+            record_id=None,
+            created_time=None,
+        )
+        return self.repository.save_task(task)
+
     def get_all_tasks(self) -> list[TaskRecord]:
         """
         Retrieves all tasks from the database.

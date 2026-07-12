@@ -53,6 +53,16 @@ class UpdateTaskRequest(BaseModel):
     due_time: Optional[str] = None
     checklist: Optional[list[ChecklistItem]] = None
 
+class CreateTaskRequest(BaseModel):
+    """Request body for manual task creation via POST /tasks"""
+    task_name: str
+    description: str = ""
+    category: str = "Unknown"
+    priority: str = "P3"
+    due_date: Optional[str] = None
+    due_time: Optional[str] = None
+    checklist: Optional[list[ChecklistItem]] = None
+
 class HealthResponse(BaseModel):
     status: str
     service: str
@@ -233,6 +243,28 @@ async def list_tasks():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Failed to retrieve tasks: {str(e)}"
+        )
+
+@app.post("/tasks", response_model=TaskRecord, status_code=status.HTTP_201_CREATED)
+async def create_task_manual(request: CreateTaskRequest):
+    """
+    Create a task manually without AI extraction. Used when the user
+    knows exactly what they want (e.g., clicking a specific time slot).
+    """
+    if not request.task_name or not request.task_name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="task_name cannot be empty"
+        )
+
+    try:
+        saved = service.create_task_manual(request.model_dump())
+        return saved
+    except Exception as e:
+        logger.exception("Failed to create task manually")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create task: {str(e)}"
         )
 
 @app.patch("/tasks/{record_id}", response_model=TaskRecord, status_code=status.HTTP_200_OK)

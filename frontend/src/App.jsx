@@ -76,6 +76,11 @@ function App() {
     setTasks((prev) => prev.filter((task) => task.record_id !== recordId));
   }
 
+  function handleTaskCreated(task) {
+    setTasks((prev) => [...prev, task]);
+    setToast({ message: t('toast.added_one'), variant: 'success' });
+  }
+
   function handleToggleExpand(recordId) {
     setExpandedTaskId((current) => {
       if (recordId === null) return null;
@@ -121,7 +126,7 @@ function App() {
             {activeTab === 'inbox' && <InboxView {...viewProps} />}
             {activeTab === 'today' && <TodayView {...viewProps} />}
             {activeTab === 'upcoming' && <UpcomingView {...viewProps} />}
-            {activeTab === 'calendar' && <CalendarView {...viewProps} />}
+            {activeTab === 'calendar' && <CalendarView {...viewProps} onTaskCreated={handleTaskCreated} />}
             {activeTab === 'browse' && <BrowseView {...viewProps} />}
           </>
         )}

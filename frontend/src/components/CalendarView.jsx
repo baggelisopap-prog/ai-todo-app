@@ -12,6 +12,8 @@ import {
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
+import CustomSelect from './CustomSelect';
+import { createTaskManual } from '../api';
 import { toLocalISODate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 
@@ -121,7 +123,7 @@ function isTaskDraggable(task) {
   return !task.is_completed && !task.is_rejected;
 }
 
-export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
+export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskCreated }) {
   const { t } = useTranslation();
 
   const [viewMode, setViewMode] = useState('monthly'); // 'monthly' | 'weekly'
@@ -143,6 +145,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   });
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [activeDragTask, setActiveDragTask] = useState(null);
+  const [manualCreateSlot, setManualCreateSlot] = useState(null); // { date, time }
   const taskDetailRef = useRef(null);
 
   useEffect(() => {
@@ -205,6 +208,15 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
 
   function handleTaskClick(task) {
     setSelectedTaskId((prev) => (prev === task.record_id ? null : task.record_id));
+  }
+
+  function handleEmptyCellClick(date, time) {
+    setManualCreateSlot({ date, time });
+  }
+
+  async function handleManualCreate(payload) {
+    const created = await createTaskManual(payload);
+    onTaskCreated(created);
   }
 
   function handleWeeklyTaskDeleted(recordId) {
@@ -271,6 +283,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const tasksByDate = tasks.reduce((acc, task) => {
     if (!task.due_date) return acc;
     if (task.is_rejected) return acc;
+    if (task.is_completed) return acc;
     const key = task.due_date;
     if (!acc[key]) acc[key] = [];
     acc[key].push(task);
@@ -320,13 +333,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
             selectedDate={selectedDate}
             onSelectDate={handleSelectDate}
             tasksByDate={tasksByDate}
-            selectedDayTasks={selectedDayTasks}
             todayISO={todayISO}
-            expandedTaskId={expandedTaskId}
-            onToggleExpand={onToggleExpand}
-            onTaskUpdate={onTaskUpdate}
-            onTaskDeleted={onTaskDeleted}
-            onShowToast={onShowToast}
             t={t}
           />
         ) : (
@@ -338,6 +345,8 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
               tasks={tasks}
               todayISO={todayISO}
               onTaskClick={handleTaskClick}
+              onSelectDate={handleSelectDate}
+              onEmptyClick={handleEmptyCellClick}
               t={t}
             />
 
@@ -354,6 +363,30 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
               </div>
             )}
           </>
+        )}
+
+        {selectedDate && (
+          <DayDetailModal
+            date={selectedDate}
+            tasks={selectedDayTasks}
+            expandedTaskId={expandedTaskId}
+            onToggleExpand={onToggleExpand}
+            onTaskUpdate={onTaskUpdate}
+            onTaskDeleted={onTaskDeleted}
+            onShowToast={onShowToast}
+            onClose={() => handleSelectDate(null)}
+            t={t}
+          />
+        )}
+
+        {manualCreateSlot && (
+          <ManualCreateModal
+            date={manualCreateSlot.date}
+            time={manualCreateSlot.time}
+            onClose={() => setManualCreateSlot(null)}
+            onCreate={handleManualCreate}
+            t={t}
+          />
         )}
       </div>
 
@@ -403,13 +436,7 @@ function MonthlyGrid({
   selectedDate,
   onSelectDate,
   tasksByDate,
-  selectedDayTasks,
   todayISO,
-  expandedTaskId,
-  onToggleExpand,
-  onTaskUpdate,
-  onTaskDeleted,
-  onShowToast,
   t,
 }) {
   const cells = getCalendarCells(currentMonth);
@@ -460,20 +487,6 @@ function MonthlyGrid({
           );
         })}
       </div>
-
-      {selectedDate && (
-        <DayDetailModal
-          date={selectedDate}
-          tasks={selectedDayTasks}
-          expandedTaskId={expandedTaskId}
-          onToggleExpand={onToggleExpand}
-          onTaskUpdate={onTaskUpdate}
-          onTaskDeleted={onTaskDeleted}
-          onShowToast={onShowToast}
-          onClose={() => onSelectDate(null)}
-          t={t}
-        />
-      )}
     </>
   );
 }
@@ -571,7 +584,7 @@ function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, onSelect }
   );
 }
 
-function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO, onTaskClick, t }) {
+function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO, onTaskClick, onSelectDate, onEmptyClick, t }) {
   const weekDays = getWeekDays(currentWeekStart);
 
   const tasksByCell = {};
@@ -579,6 +592,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
   for (const task of tasks) {
     if (!task.due_date) continue;
     if (task.is_rejected) continue;
+    if (task.is_completed) continue;
 
     const dateKey = task.due_date;
 
@@ -628,15 +642,16 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
                   const dayISO = toLocalISODate(day);
                   const todayCol = dayISO === todayISO;
                   return (
-                    <div
+                    <button
                       key={dayISO}
-                      className={`min-w-0 text-center text-xs font-medium ${
+                      onClick={() => onSelectDate(day)}
+                      className={`min-w-0 text-center text-xs font-medium hover:bg-[var(--bg-hover)] rounded p-1 transition-colors ${
                         todayCol ? 'text-[var(--brand-primary)] font-bold' : 'text-[var(--text-secondary)]'
                       }`}
                     >
                       <div className="uppercase">{weekdayShort(day)}</div>
                       <div className="text-sm mt-0.5">{day.getDate()}</div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -654,6 +669,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
                     day={day}
                     tasks={allDayTasksByDate[dayKey] || []}
                     onTaskClick={onTaskClick}
+                    onEmptyClick={onEmptyClick}
                   />
                 );
               })}
@@ -676,6 +692,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
                         tasks={tasksByCell[cellKey] || []}
                         isTodayCol={dayISO === todayISO}
                         onTaskClick={onTaskClick}
+                        onEmptyClick={onEmptyClick}
                       />
                     );
                   })}
@@ -696,15 +713,22 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
   );
 }
 
-function WeeklyHourCell({ day, hour, tasks, isTodayCol, onTaskClick }) {
+function WeeklyHourCell({ day, hour, tasks, isTodayCol, onTaskClick, onEmptyClick }) {
   const dropId = `cell:${toLocalISODate(day)}:${hour}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
+
+  function handleCellClick(e) {
+    if (e.target === e.currentTarget) {
+      onEmptyClick(toLocalISODate(day), `${String(hour).padStart(2, '0')}:00`);
+    }
+  }
 
   return (
     <div
       ref={setNodeRef}
+      onClick={handleCellClick}
       className={`
-        min-w-0 min-h-[48px] p-0.5 flex flex-col gap-0.5 transition-colors
+        min-w-0 min-h-[48px] p-0.5 flex flex-col gap-0.5 transition-colors cursor-pointer
         ${isTodayCol ? 'bg-[var(--brand-primary)]/5' : ''}
         ${isOver ? 'bg-[var(--brand-primary)]/15' : ''}
       `}
@@ -716,14 +740,21 @@ function WeeklyHourCell({ day, hour, tasks, isTodayCol, onTaskClick }) {
   );
 }
 
-function WeeklyAllDayCell({ day, tasks, onTaskClick }) {
+function WeeklyAllDayCell({ day, tasks, onTaskClick, onEmptyClick }) {
   const dropId = `allday:${toLocalISODate(day)}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
+
+  function handleCellClick(e) {
+    if (e.target === e.currentTarget) {
+      onEmptyClick(toLocalISODate(day), null);
+    }
+  }
 
   return (
     <div
       ref={setNodeRef}
-      className={`min-w-0 min-h-[40px] p-1 flex flex-col gap-1 transition-colors ${
+      onClick={handleCellClick}
+      className={`min-w-0 min-h-[40px] p-1 flex flex-col gap-1 transition-colors cursor-pointer ${
         isOver ? 'bg-[var(--brand-primary)]/15' : ''
       }`}
     >
@@ -761,10 +792,194 @@ function TaskChip({ task, onClick, isOverlay = false }) {
         draggable && !isOverlay ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-default'
       } ${isOverlay ? 'shadow-lg scale-105' : 'hover:brightness-95'}`}
     >
-      <div className={`truncate ${task.is_completed ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+      <div className={`line-clamp-3 leading-tight ${task.is_completed ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
         {task.task_name}
       </div>
     </button>
+  );
+}
+
+function ManualCreateModal({ date, time, onClose, onCreate, t }) {
+  const [taskName, setTaskName] = useState('');
+  const [priority, setPriority] = useState('P3');
+  const [category, setCategory] = useState('Unknown');
+  const [description, setDescription] = useState('');
+  const [checklist, setChecklist] = useState([]);
+  const [newChecklistItem, setNewChecklistItem] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const displayDate = new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const displayTime = time || t('modal.all_day');
+
+  const priorityOptions = [
+    { value: 'P1', label: 'P1' },
+    { value: 'P2', label: 'P2' },
+    { value: 'P3', label: 'P3' },
+  ];
+
+  const categoryOptions = [
+    { value: 'Business', label: t('browse.filter_business') },
+    { value: 'Personal', label: t('browse.filter_personal') },
+    { value: 'Unknown', label: t('browse.filter_unknown') },
+  ];
+
+  async function handleSave() {
+    if (!taskName.trim()) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await onCreate({
+        task_name: taskName.trim(),
+        description: description.trim(),
+        category,
+        priority,
+        due_date: date,
+        due_time: time,
+        checklist: checklist.map((text) => ({ text, done: false })),
+      });
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function addChecklistItem() {
+    if (newChecklistItem.trim()) {
+      setChecklist((prev) => [...prev, newChecklistItem.trim()]);
+      setNewChecklistItem('');
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full md:max-w-md bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] p-4 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            {t('modal.new_task')}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 rounded"
+            aria-label={t('actions.cancel')}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="text-sm text-[var(--text-secondary)] mb-3">
+          {displayDate} • {displayTime}
+        </div>
+
+        <input
+          autoFocus
+          type="text"
+          value={taskName}
+          onChange={(e) => setTaskName(e.target.value)}
+          placeholder={t('task.name_placeholder')}
+          className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
+        />
+
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <CustomSelect
+            value={priority}
+            options={priorityOptions}
+            onChange={setPriority}
+            ariaLabel={t('task.priority_label')}
+          />
+          <CustomSelect
+            value={category}
+            options={categoryOptions}
+            onChange={setCategory}
+            ariaLabel={t('task.category_label')}
+          />
+        </div>
+
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder={t('modal.description_placeholder')}
+          rows={2}
+          className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 resize-none transition-colors mt-3"
+        />
+
+        <div className="mt-3">
+          <div className="text-xs font-medium text-[var(--text-secondary)] mb-1">
+            {t('task.checklist_label')}
+          </div>
+          {checklist.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-2 text-sm py-1">
+              <span className="flex-1 text-[var(--text-primary)]">{item}</span>
+              <button
+                type="button"
+                onClick={() => setChecklist((prev) => prev.filter((_, i) => i !== idx))}
+                className="text-[var(--text-muted)] hover:text-[var(--danger)]"
+                title={t('task.remove_item')}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-2 mt-1">
+            <input
+              type="text"
+              value={newChecklistItem}
+              onChange={(e) => setNewChecklistItem(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addChecklistItem();
+                }
+              }}
+              placeholder={t('modal.add_checklist_item')}
+              className="flex-1 px-3 py-1.5 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
+            />
+            <button
+              type="button"
+              onClick={addChecklistItem}
+              className="px-3 py-2 rounded-md bg-[var(--bg-hover)] text-[var(--text-primary)] text-sm"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        {error && (
+          <p className="text-sm text-[var(--danger)] mt-2">{error}</p>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)]"
+          >
+            {t('actions.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!taskName.trim() || isSaving}
+            className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSaving ? t('actions.saving') : t('actions.save')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
