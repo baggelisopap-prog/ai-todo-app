@@ -16,10 +16,11 @@ import CustomSelect from './CustomSelect';
 import { createTaskManual } from '../api';
 import { toLocalISODate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
+import { getEventLabel } from '../utils/eventType';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7); // 07:00-22:00
-const GRID_TEMPLATE = 'grid grid-cols-[auto_repeat(7,minmax(0,1fr))] gap-1';
+const GRID_TEMPLATE = 'grid grid-cols-[36px_repeat(7,minmax(0,1fr))] gap-1';
 
 function getCalendarCells(currentMonth) {
   const year = currentMonth.getFullYear();
@@ -85,7 +86,7 @@ function weekdayShort(date) {
 }
 
 function formatHour(hour) {
-  return `${String(hour).padStart(2, '0')}:00`;
+  return String(hour).padStart(2, '0');
 }
 
 function computeNowIndicator(currentWeekStart) {
@@ -632,80 +633,80 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
         </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <div className="min-w-[600px]">
-          <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
-            <div className="sticky top-0 z-10 bg-[var(--bg-app)] pb-1">
-              <div className={GRID_TEMPLATE}>
-                <div className="w-14" />
-                {weekDays.map((day) => {
-                  const dayISO = toLocalISODate(day);
-                  const todayCol = dayISO === todayISO;
-                  return (
-                    <button
-                      key={dayISO}
-                      onClick={() => onSelectDate(day)}
-                      className={`min-w-0 text-center text-xs font-medium hover:bg-[var(--bg-hover)] rounded p-1 transition-colors ${
-                        todayCol ? 'text-[var(--brand-primary)] font-bold' : 'text-[var(--text-secondary)]'
-                      }`}
-                    >
-                      <div className="uppercase">{weekdayShort(day)}</div>
-                      <div className="text-sm mt-0.5">{day.getDate()}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className={`${GRID_TEMPLATE} mb-1 border-b border-[var(--border-subtle)] pb-2`}>
-              <div className="text-xs text-[var(--text-muted)] pt-2 pr-2 text-right w-14">
-                {t('calendar.all_day')}
-              </div>
+      <div className="w-full">
+        <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
+          <div className="sticky top-0 z-10 bg-[var(--bg-app)] pb-1">
+            <div className={GRID_TEMPLATE}>
+              <div className="w-9" />
               {weekDays.map((day) => {
-                const dayKey = toLocalISODate(day);
+                const dayISO = toLocalISODate(day);
+                const todayCol = dayISO === todayISO;
                 return (
-                  <WeeklyAllDayCell
-                    key={dayKey}
-                    day={day}
-                    tasks={allDayTasksByDate[dayKey] || []}
-                    onTaskClick={onTaskClick}
-                    onEmptyClick={onEmptyClick}
-                  />
+                  <button
+                    key={dayISO}
+                    onClick={() => onSelectDate(day)}
+                    className={`min-w-0 text-center text-xs font-medium hover:bg-[var(--bg-hover)] rounded p-1 transition-colors ${
+                      todayCol ? 'text-[var(--brand-primary)] font-bold' : 'text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    <div className="uppercase">{weekdayShort(day)}</div>
+                    <div className="text-sm mt-0.5">{day.getDate()}</div>
+                  </button>
                 );
               })}
             </div>
+          </div>
 
-            <div className="relative">
-              {HOURS.map((hour) => (
-                <div key={hour} className={`${GRID_TEMPLATE} border-t border-[var(--border-subtle)]`}>
-                  <div className="text-xs text-[var(--text-muted)] pt-1 pr-2 text-right w-14">
-                    {formatHour(hour)}
-                  </div>
-                  {weekDays.map((day) => {
-                    const dayISO = toLocalISODate(day);
-                    const cellKey = `${dayISO}-${hour}`;
-                    return (
-                      <WeeklyHourCell
-                        key={cellKey}
-                        day={day}
-                        hour={hour}
-                        tasks={tasksByCell[cellKey] || []}
-                        isTodayCol={dayISO === todayISO}
-                        onTaskClick={onTaskClick}
-                        onEmptyClick={onEmptyClick}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-
-              {nowIndicator.show && (
-                <div
-                  className="absolute left-14 right-0 h-0.5 bg-[var(--brand-primary)]"
-                  style={{ top: `${nowIndicator.topPercent}%` }}
-                />
-              )}
+          <div className={`${GRID_TEMPLATE} mb-1 border-b border-[var(--border-subtle)] pb-2`}>
+            <div className="text-xs text-[var(--text-muted)] pt-2 pr-1 text-right w-9">
+              {t('calendar.all_day')}
             </div>
+            {weekDays.map((day, dayIndex) => {
+              const dayKey = toLocalISODate(day);
+              return (
+                <WeeklyAllDayCell
+                  key={dayKey}
+                  day={day}
+                  dayIndex={dayIndex}
+                  tasks={allDayTasksByDate[dayKey] || []}
+                  onTaskClick={onTaskClick}
+                  onEmptyClick={onEmptyClick}
+                />
+              );
+            })}
+          </div>
+
+          <div className="relative">
+            {HOURS.map((hour) => (
+              <div key={hour} className={`${GRID_TEMPLATE} border-t border-[var(--border-subtle)]`}>
+                <div className="text-xs text-[var(--text-muted)] pt-1 pr-1 text-right w-9">
+                  {formatHour(hour)}
+                </div>
+                {weekDays.map((day, dayIndex) => {
+                  const dayISO = toLocalISODate(day);
+                  const cellKey = `${dayISO}-${hour}`;
+                  return (
+                    <WeeklyHourCell
+                      key={cellKey}
+                      day={day}
+                      dayIndex={dayIndex}
+                      hour={hour}
+                      tasks={tasksByCell[cellKey] || []}
+                      isTodayCol={dayISO === todayISO}
+                      onTaskClick={onTaskClick}
+                      onEmptyClick={onEmptyClick}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+
+            {nowIndicator.show && (
+              <div
+                className="absolute left-9 right-0 h-0.5 bg-[var(--brand-primary)]"
+                style={{ top: `${nowIndicator.topPercent}%` }}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -713,7 +714,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
   );
 }
 
-function WeeklyHourCell({ day, hour, tasks, isTodayCol, onTaskClick, onEmptyClick }) {
+function WeeklyHourCell({ day, dayIndex, hour, tasks, isTodayCol, onTaskClick, onEmptyClick }) {
   const dropId = `cell:${toLocalISODate(day)}:${hour}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
@@ -723,13 +724,16 @@ function WeeklyHourCell({ day, hour, tasks, isTodayCol, onTaskClick, onEmptyClic
     }
   }
 
+  const alternating = dayIndex % 2 === 1 ? 'bg-[var(--bg-day-alt)]' : 'bg-[var(--bg-card)]';
+  const bgClass = isTodayCol ? 'bg-[var(--brand-primary)]/5' : alternating;
+
   return (
     <div
       ref={setNodeRef}
       onClick={handleCellClick}
       className={`
         min-w-0 min-h-[48px] p-0.5 flex flex-col gap-0.5 transition-colors cursor-pointer
-        ${isTodayCol ? 'bg-[var(--brand-primary)]/5' : ''}
+        ${bgClass}
         ${isOver ? 'bg-[var(--brand-primary)]/15' : ''}
       `}
     >
@@ -740,7 +744,7 @@ function WeeklyHourCell({ day, hour, tasks, isTodayCol, onTaskClick, onEmptyClic
   );
 }
 
-function WeeklyAllDayCell({ day, tasks, onTaskClick, onEmptyClick }) {
+function WeeklyAllDayCell({ day, dayIndex, tasks, onTaskClick, onEmptyClick }) {
   const dropId = `allday:${toLocalISODate(day)}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
@@ -750,11 +754,13 @@ function WeeklyAllDayCell({ day, tasks, onTaskClick, onEmptyClick }) {
     }
   }
 
+  const alternating = dayIndex % 2 === 1 ? 'bg-[var(--bg-day-alt)]' : 'bg-[var(--bg-card)]';
+
   return (
     <div
       ref={setNodeRef}
       onClick={handleCellClick}
-      className={`min-w-0 min-h-[40px] p-1 flex flex-col gap-1 transition-colors cursor-pointer ${
+      className={`min-w-0 min-h-[40px] p-1 flex flex-col gap-1 transition-colors cursor-pointer ${alternating} ${
         isOver ? 'bg-[var(--brand-primary)]/15' : ''
       }`}
     >
@@ -767,6 +773,7 @@ function WeeklyAllDayCell({ day, tasks, onTaskClick, onEmptyClick }) {
 
 function TaskChip({ task, onClick, isOverlay = false }) {
   const draggable = isTaskDraggable(task);
+  const label = getEventLabel(task.task_name);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.record_id,
@@ -792,8 +799,8 @@ function TaskChip({ task, onClick, isOverlay = false }) {
         draggable && !isOverlay ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-default'
       } ${isOverlay ? 'shadow-lg scale-105' : 'hover:brightness-95'}`}
     >
-      <div className={`line-clamp-3 leading-tight ${task.is_completed ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
-        {task.task_name}
+      <div className={`truncate leading-tight text-xs ${task.is_completed ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+        {label}
       </div>
     </button>
   );
