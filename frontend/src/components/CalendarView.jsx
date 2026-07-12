@@ -732,7 +732,7 @@ function WeeklyHourCell({ day, dayIndex, hour, tasks, isTodayCol, onTaskClick, o
       ref={setNodeRef}
       onClick={handleCellClick}
       className={`
-        min-w-0 min-h-[48px] p-0.5 flex flex-col gap-0.5 transition-colors cursor-pointer
+        min-w-0 min-h-[48px] p-0 flex flex-col gap-0.5 transition-colors cursor-pointer
         ${bgClass}
         ${isOver ? 'bg-[var(--brand-primary)]/15' : ''}
       `}
@@ -760,7 +760,7 @@ function WeeklyAllDayCell({ day, dayIndex, tasks, onTaskClick, onEmptyClick }) {
     <div
       ref={setNodeRef}
       onClick={handleCellClick}
-      className={`min-w-0 min-h-[40px] p-1 flex flex-col gap-1 transition-colors cursor-pointer ${alternating} ${
+      className={`min-w-0 min-h-[40px] p-0 flex flex-col gap-0.5 transition-colors cursor-pointer ${alternating} ${
         isOver ? 'bg-[var(--brand-primary)]/15' : ''
       }`}
     >
@@ -771,9 +771,23 @@ function WeeklyAllDayCell({ day, dayIndex, tasks, onTaskClick, onEmptyClick }) {
   );
 }
 
+function chipColors(priority) {
+  switch (priority) {
+    case 'P1':
+      return { bg: 'var(--priority-p1-bg)', text: 'var(--priority-p1-text)' };
+    case 'P2':
+      return { bg: 'var(--priority-p2-bg)', text: 'var(--priority-p2-text)' };
+    case 'P3':
+      return { bg: 'var(--priority-p3-bg)', text: 'var(--priority-p3-text)' };
+    default:
+      return { bg: 'var(--priority-p3-bg)', text: 'var(--priority-p3-text)' };
+  }
+}
+
 function TaskChip({ task, onClick, isOverlay = false }) {
   const draggable = isTaskDraggable(task);
   const label = getEventLabel(task.task_name);
+  const { bg, text } = chipColors(task.priority);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.record_id,
@@ -788,18 +802,18 @@ function TaskChip({ task, onClick, isOverlay = false }) {
   return (
     <button
       ref={isOverlay ? undefined : setNodeRef}
-      style={{ ...style, borderLeftColor: priorityColor(task.priority) }}
+      style={{ ...style, backgroundColor: bg, color: text }}
       {...(isOverlay ? {} : attributes)}
       {...(isOverlay ? {} : listeners)}
       onClick={(e) => {
         e.stopPropagation();
         if (!isDragging) onClick?.(task);
       }}
-      className={`w-full max-w-full text-left px-1.5 py-1 rounded text-xs bg-[var(--bg-card)] border-l-2 transition-all overflow-hidden ${
+      className={`w-full text-left px-2 py-1 rounded text-xs transition-all overflow-hidden ${
         draggable && !isOverlay ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-default'
       } ${isOverlay ? 'shadow-lg scale-105' : 'hover:brightness-95'}`}
     >
-      <div className={`truncate leading-tight text-xs ${task.is_completed ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+      <div className={`truncate leading-tight font-medium ${task.is_completed ? 'line-through opacity-60' : ''}`}>
         {label}
       </div>
     </button>

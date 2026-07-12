@@ -25,6 +25,14 @@
   --priority-p2: #f59e0b;      /* Amber, moderate */
   --priority-p3: #3b82f6;      /* Blue, low */
 
+  /* Priority soft backgrounds for filled weekly chips */
+  --priority-p1-bg: #fee2e2;   /* soft red */
+  --priority-p1-text: #991b1b; /* dark red */
+  --priority-p2-bg: #fef3c7;   /* soft amber */
+  --priority-p2-text: #92400e; /* dark amber */
+  --priority-p3-bg: #dbeafe;   /* soft blue */
+  --priority-p3-text: #1e40af; /* dark blue */
+
   /* Category */
   --category-business: #8b5cf6;  /* Purple */
   --category-personal: #10b981;  /* Green */
