@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -49,6 +49,14 @@ function getCalendarCells(currentMonth) {
   }
 
   return cells;
+}
+
+function chunkIntoWeeks(cells) {
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
+  return weeks;
 }
 
 function getWeekDays(weekStart) {
@@ -147,6 +155,20 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   });
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [activeDragTask, setActiveDragTask] = useState(null);
+  const taskDetailRef = useRef(null);
+
+  useEffect(() => {
+    if (selectedTaskId && taskDetailRef.current) {
+      // Slight delay to let the render commit before scrolling
+      const timer = setTimeout(() => {
+        taskDetailRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedTaskId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -295,50 +317,22 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
         </div>
 
         {viewMode === 'monthly' ? (
-          <>
-            <MonthlyGrid
-              currentMonth={currentMonth}
-              onPrevMonth={handlePrevMonth}
-              onNextMonth={handleNextMonth}
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-              tasksByDate={tasksByDate}
-              todayISO={todayISO}
-              t={t}
-            />
-
-            <div className="mt-6">
-              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
-                {formatSelectedDayLabel(selectedDate)}
-                <span className="ml-1 text-[var(--text-muted)]">
-                  ({selectedDayTasks.length})
-                </span>
-              </h2>
-              {selectedDayTasks.length > 0 ? (
-                <div className="space-y-2">
-                  {selectedDayTasks.map((task) => (
-                    <div key={task.record_id} className="flex items-start gap-1">
-                      <DragHandle task={task} t={t} />
-                      <div className="flex-1 min-w-0">
-                        <TaskCard
-                          task={task}
-                          isExpanded={expandedTaskId === task.record_id}
-                          onToggleExpand={onToggleExpand}
-                          onUpdate={onTaskUpdate}
-                          onTaskDeleted={onTaskDeleted}
-                          onShowToast={onShowToast}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-[var(--text-muted)] italic ml-1">
-                  {t('empty.no_tasks')}
-                </p>
-              )}
-            </div>
-          </>
+          <MonthlyGrid
+            currentMonth={currentMonth}
+            onPrevMonth={handlePrevMonth}
+            onNextMonth={handleNextMonth}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            tasksByDate={tasksByDate}
+            selectedDayTasks={selectedDayTasks}
+            todayISO={todayISO}
+            expandedTaskId={expandedTaskId}
+            onToggleExpand={onToggleExpand}
+            onTaskUpdate={onTaskUpdate}
+            onTaskDeleted={onTaskDeleted}
+            onShowToast={onShowToast}
+            t={t}
+          />
         ) : (
           <>
             <WeeklyGrid
@@ -352,7 +346,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
             />
 
             {selectedTask && (
-              <div className="mt-6">
+              <div ref={taskDetailRef} className="mt-6 scroll-mt-4">
                 <TaskCard
                   task={selectedTask}
                   isExpanded={expandedTaskId === selectedTask.record_id}
@@ -406,9 +400,25 @@ function DragHandle({ task, t }) {
   );
 }
 
-function MonthlyGrid({ currentMonth, onPrevMonth, onNextMonth, selectedDate, onSelectDate, tasksByDate, todayISO, t }) {
+function MonthlyGrid({
+  currentMonth,
+  onPrevMonth,
+  onNextMonth,
+  selectedDate,
+  onSelectDate,
+  tasksByDate,
+  selectedDayTasks,
+  todayISO,
+  expandedTaskId,
+  onToggleExpand,
+  onTaskUpdate,
+  onTaskDeleted,
+  onShowToast,
+  t,
+}) {
   const cells = getCalendarCells(currentMonth);
   const selectedISO = toLocalISODate(selectedDate);
+  const weeks = chunkIntoWeeks(cells);
 
   return (
     <>
@@ -440,22 +450,84 @@ function MonthlyGrid({ currentMonth, onPrevMonth, onNextMonth, selectedDate, onS
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((cell) => {
-          const cellISO = toLocalISODate(cell.date);
+      <div className="space-y-1">
+        {weeks.map((week, weekIdx) => {
+          const selectedInThisWeek = week.some((cell) => toLocalISODate(cell.date) === selectedISO);
+
           return (
-            <MonthlyDayCell
-              key={cellISO}
-              cell={cell}
-              isSelected={cellISO === selectedISO}
-              isTodayCell={cellISO === todayISO}
-              tasksForDay={tasksByDate[cellISO] || []}
-              onSelect={onSelectDate}
-            />
+            <div key={weekIdx}>
+              <div className="grid grid-cols-7 gap-1">
+                {week.map((cell) => {
+                  const cellISO = toLocalISODate(cell.date);
+                  return (
+                    <MonthlyDayCell
+                      key={cellISO}
+                      cell={cell}
+                      isSelected={cellISO === selectedISO}
+                      isTodayCell={cellISO === todayISO}
+                      tasksForDay={tasksByDate[cellISO] || []}
+                      onSelect={onSelectDate}
+                    />
+                  );
+                })}
+              </div>
+
+              {selectedInThisWeek && (
+                <ExpansionPanel
+                  date={selectedDate}
+                  tasks={selectedDayTasks}
+                  expandedTaskId={expandedTaskId}
+                  onToggleExpand={onToggleExpand}
+                  onTaskUpdate={onTaskUpdate}
+                  onTaskDeleted={onTaskDeleted}
+                  onShowToast={onShowToast}
+                  t={t}
+                />
+              )}
+            </div>
           );
         })}
       </div>
     </>
+  );
+}
+
+function ExpansionPanel({ date, tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, t }) {
+  const dayLabel = formatSelectedDayLabel(date);
+
+  return (
+    <div className="mt-1 mb-1 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg p-4 shadow-[var(--shadow-card)]">
+      <h3 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+        {dayLabel}
+        <span className="ml-1 text-[var(--text-muted)] font-normal">
+          ({tasks.length})
+        </span>
+      </h3>
+
+      {tasks.length > 0 ? (
+        <div className="space-y-2">
+          {tasks.map((task) => (
+            <div key={task.record_id} className="flex items-start gap-1">
+              <DragHandle task={task} t={t} />
+              <div className="flex-1 min-w-0">
+                <TaskCard
+                  task={task}
+                  isExpanded={expandedTaskId === task.record_id}
+                  onToggleExpand={onToggleExpand}
+                  onUpdate={onTaskUpdate}
+                  onTaskDeleted={onTaskDeleted}
+                  onShowToast={onShowToast}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-[var(--text-muted)] italic">
+          {t('empty.no_tasks')}
+        </p>
+      )}
+    </div>
   );
 }
 
