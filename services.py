@@ -1,10 +1,41 @@
+import json
 import logging
+import os
+import tempfile
 from typing import Optional
+from pywebpush import webpush, WebPushException
 from models import SingleTask, TaskList, TaskRecord
 from ai_engine import extract_tasks, extract_tasks_from_audio, extract_tasks_from_image
 from repository import AirtableTaskRepository
+import repository
 
 logger = logging.getLogger(__name__)
+
+VAPID_CONTACT_EMAIL = os.getenv("VAPID_CONTACT_EMAIL", "baggelisopap@gmail.com")
+
+# pywebpush's webpush() only accepts a Vapid instance or a private-key file
+# path for vapid_private_key — passing the raw multi-line PEM string directly
+# fails, since it's not routed through Vapid.from_file()'s PEM parsing. So we
+# write the PEM (read from the env var) to a temp file once per process and
+# reuse that path.
+_vapid_key_file_path = None
+
+
+def _get_vapid_key_file() -> str:
+    global _vapid_key_file_path
+    if _vapid_key_file_path and os.path.isfile(_vapid_key_file_path):
+        return _vapid_key_file_path
+
+    private_key_pem = os.getenv("VAPID_PRIVATE_KEY")
+    if not private_key_pem:
+        raise RuntimeError("VAPID_PRIVATE_KEY is not set")
+
+    fd, path = tempfile.mkstemp(suffix=".pem")
+    with os.fdopen(fd, "w") as f:
+        f.write(private_key_pem)
+    _vapid_key_file_path = path
+    return path
+
 
 class TaskService:
     """
@@ -182,3 +213,47 @@ class TaskService:
         if not success:
             raise RuntimeError(f"Failed to delete task {record_id}")
         logger.info(f"Deleted task {record_id}.")
+
+    def send_push_to_all(self, title: str, body: str) -> dict:
+        """
+        Sends a push notification to every stored subscription.
+        Cleans up subscriptions that the push service reports as gone
+        (404/410 — meaning the browser unsubscribed or the installation
+        was removed).
+        """
+        subscriptions = repository.list_push_subscriptions()
+        sent = 0
+        failed = 0
+
+        vapid_key_file = _get_vapid_key_file()
+
+        for sub in subscriptions:
+            try:
+                webpush(
+                    subscription_info={
+                        "endpoint": sub.endpoint,
+                        "keys": {
+                            "p256dh": sub.p256dh,
+                            "auth": sub.auth,
+                        },
+                    },
+                    data=json.dumps({"title": title, "body": body}),
+                    vapid_private_key=vapid_key_file,
+                    vapid_claims={"sub": f"mailto:{VAPID_CONTACT_EMAIL}"},
+                )
+                sent += 1
+            except WebPushException as e:
+                failed += 1
+                status_code = getattr(e.response, "status_code", None)
+                if status_code in (404, 410):
+                    repository.delete_push_subscription(sub.endpoint)
+                logger.error(f"Push failed for {sub.endpoint[:50]}...: {e}")
+            except Exception as e:
+                # Covers errors raised before a request is even made (e.g.
+                # py_vapid.VapidException for a malformed/blank endpoint),
+                # which aren't WebPushException subclasses. One bad
+                # subscription must not abort the rest of the batch.
+                failed += 1
+                logger.error(f"Push failed for {sub.endpoint[:50]}...: {e}")
+
+        return {"sent": sent, "failed": failed, "total": len(subscriptions)}

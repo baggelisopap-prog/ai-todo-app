@@ -19,8 +19,9 @@ from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-from models import ChecklistItem, TaskRecord
+from models import ChecklistItem, TaskRecord, PushSubscriptionRequest
 from services import TaskService
+from repository import save_push_subscription
 import os
 from dotenv import load_dotenv
 
@@ -309,3 +310,33 @@ async def delete_task(record_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete task: {str(e)}"
         )
+
+
+@app.post("/push/subscribe", status_code=status.HTTP_201_CREATED)
+async def subscribe_push(subscription: PushSubscriptionRequest):
+    """
+    Registers (or updates) a browser's push subscription so the backend
+    can send it Web Push notifications even when the app is closed.
+    """
+    try:
+        record = save_push_subscription(subscription)
+        return {"status": "subscribed", "record_id": record.record_id}
+    except Exception as e:
+        logger.exception("Failed to save push subscription")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/push/send-test")
+async def send_test_push():
+    """
+    Sends a real Web Push notification to every stored subscription.
+    Proves the backend can push on demand — actual scheduling (e.g. a
+    daily summary) is handled by a future session.
+    """
+    result = service.send_push_to_all(
+        title="Δοκιμαστική ειδοποίηση",
+        body="Αυτό είναι ένα πραγματικό push notification από το backend.",
+    )
+    if result["total"] == 0:
+        raise HTTPException(status_code=404, detail="No push subscriptions found. Enable notifications in Settings first.")
+    return result

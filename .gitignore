@@ -30,3 +30,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# VAPID keys (secrets — stored in .env instead)
+private_key.pem
+public_key.pem
+*.pem

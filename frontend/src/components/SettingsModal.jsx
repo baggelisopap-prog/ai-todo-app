@@ -1,19 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   isNotificationSupported,
   getNotificationPermission,
   requestNotificationPermission,
-  showNotification,
+  subscribeToPush,
 } from '../utils/notifications';
+import { registerPushSubscription, sendTestPush } from '../api';
 
 export function SettingsModal({ onClose }) {
   const { t } = useTranslation();
   const [permission, setPermission] = useState(getNotificationPermission());
   const [isRequesting, setIsRequesting] = useState(false);
   const [testSent, setTestSent] = useState(false);
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testError, setTestError] = useState(null);
 
   const supported = isNotificationSupported();
+
+  useEffect(() => {
+    if (permission === 'granted') {
+      subscribeToPush()
+        .then(sub => sub && registerPushSubscription(sub))
+        .catch(err => console.error('Push subscription failed:', err));
+    }
+  }, [permission]);
 
   async function handleRequestPermission() {
     setIsRequesting(true);
@@ -22,13 +33,17 @@ export function SettingsModal({ onClose }) {
     setIsRequesting(false);
   }
 
-  function handleTestNotification() {
-    const sent = showNotification(t('settings.test_notification_title'), {
-      body: t('settings.test_notification_body'),
-    });
-    if (sent) {
+  async function handleTestNotification() {
+    setIsSendingTest(true);
+    setTestError(null);
+    try {
+      await sendTestPush();
       setTestSent(true);
       setTimeout(() => setTestSent(false), 3000);
+    } catch (err) {
+      setTestError(err.message);
+    } finally {
+      setIsSendingTest(false);
     }
   }
 
@@ -93,10 +108,14 @@ export function SettingsModal({ onClose }) {
               </p>
               <button
                 onClick={handleTestNotification}
-                className="px-4 py-2 rounded-md border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] font-medium"
+                disabled={isSendingTest}
+                className="px-4 py-2 rounded-md border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] font-medium disabled:opacity-50"
               >
-                {testSent ? t('settings.test_sent') : t('settings.send_test')}
+                {isSendingTest ? t('settings.sending_test') : (testSent ? t('settings.test_sent') : t('settings.send_test'))}
               </button>
+              {testError && (
+                <p className="text-sm text-[var(--danger)] mt-2">{testError}</p>
+              )}
             </div>
           )}
         </div>

@@ -4,7 +4,8 @@ import logging
 from typing import Optional
 from dotenv import load_dotenv
 from pyairtable import Api
-from models import TaskRecord
+from pyairtable.formulas import match
+from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord
 
 # Set up module-level logging
 logger = logging.getLogger(__name__)
@@ -189,3 +190,89 @@ class AirtableTaskRepository:
         response = self.table.delete(record_id)
         logger.info(f"Successfully deleted task from Airtable. ID: {record_id}")
         return response.get("deleted", False)
+
+
+# --- Push subscriptions ---
+# Mirrors AirtableTaskRepository's connection pattern (same Base, different
+# Table), but as module-level functions since push subscriptions don't need
+# the heavier field-mapping logic tasks do.
+
+_push_subscriptions_table = None
+
+
+def _get_push_subscriptions_table():
+    """
+    Lazily initializes and caches the Airtable Table client for push
+    subscriptions. Fails fast with a RuntimeError if required env vars
+    are missing.
+    """
+    global _push_subscriptions_table
+    if _push_subscriptions_table is not None:
+        return _push_subscriptions_table
+
+    token = os.getenv("AIRTABLE_TOKEN")
+    base_id = os.getenv("AIRTABLE_BASE_ID")
+    table_id = os.getenv("PUSH_SUBSCRIPTIONS_TABLE_ID")
+
+    if not all([token, base_id, table_id]):
+        raise RuntimeError(
+            "Missing Airtable configuration for push subscriptions. Ensure "
+            "AIRTABLE_TOKEN, AIRTABLE_BASE_ID, and PUSH_SUBSCRIPTIONS_TABLE_ID "
+            "are set in your .env file."
+        )
+
+    api = Api(token)
+    _push_subscriptions_table = api.table(base_id, table_id)
+    logger.info(f"Push subscriptions table initialized (Base: {base_id}, Table: {table_id})")
+    return _push_subscriptions_table
+
+
+def _airtable_to_push_subscription(record: dict) -> PushSubscriptionRecord:
+    fields = record.get("fields", {})
+    return PushSubscriptionRecord(
+        record_id=record.get("id"),
+        endpoint=fields.get("endpoint", ""),
+        p256dh=fields.get("p256dh", ""),
+        auth=fields.get("auth", ""),
+    )
+
+
+def save_push_subscription(subscription: PushSubscriptionRequest) -> PushSubscriptionRecord:
+    """
+    Upserts a push subscription by endpoint (the endpoint URL is effectively
+    unique per browser installation). If a record with this endpoint already
+    exists, update its keys; otherwise create a new record.
+    """
+    table = _get_push_subscriptions_table()
+
+    fields = {
+        "endpoint": subscription.endpoint,
+        "p256dh": subscription.keys.p256dh,
+        "auth": subscription.keys.auth,
+    }
+
+    existing = table.first(formula=match({"endpoint": subscription.endpoint}))
+    if existing:
+        response = table.update(existing["id"], fields)
+        logger.info(f"Updated existing push subscription. ID: {response.get('id')}")
+    else:
+        response = table.create(fields)
+        logger.info(f"Created new push subscription. ID: {response.get('id')}")
+
+    return _airtable_to_push_subscription(response)
+
+
+def list_push_subscriptions() -> list[PushSubscriptionRecord]:
+    """Returns all stored push subscriptions."""
+    table = _get_push_subscriptions_table()
+    records = table.all()
+    return [_airtable_to_push_subscription(record) for record in records]
+
+
+def delete_push_subscription(endpoint: str) -> None:
+    """Removes a subscription by endpoint (used when a push fails permanently, e.g. 404/410)."""
+    table = _get_push_subscriptions_table()
+    existing = table.first(formula=match({"endpoint": endpoint}))
+    if existing:
+        table.delete(existing["id"])
+        logger.info(f"Deleted stale push subscription. ID: {existing['id']}")

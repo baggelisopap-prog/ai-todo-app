@@ -71,3 +71,20 @@ class TaskRecord(SingleTask):
     
     record_id: Optional[str] = None
     created_time: Optional[str] = None
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+
+
+class PushSubscriptionRecord(BaseModel):
+    record_id: Optional[str] = None
+    endpoint: str
+    p256dh: str
+    auth: str

@@ -173,3 +173,29 @@ export async function deleteTask(recordId) {
     throw new Error(`API error ${response.status}: ${detail}`);
   }
 }
+
+/**
+ * POST /push/subscribe — registers this browser's push subscription with the backend.
+ * Returns { status, record_id }.
+ */
+export async function registerPushSubscription(subscription) {
+  const subJson = subscription.toJSON();
+  return request('/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({
+      endpoint: subJson.endpoint,
+      keys: subJson.keys,
+    }),
+  });
+}
+
+/**
+ * POST /push/send-test — asks the backend to send a real Web Push
+ * notification to every registered subscription.
+ * Returns { sent, failed, total }.
+ */
+export async function sendTestPush() {
+  return request('/push/send-test', {
+    method: 'POST',
+  });
+}
