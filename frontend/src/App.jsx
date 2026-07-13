@@ -10,6 +10,8 @@ import BrowseView from './components/BrowseView';
 import FloatingActionButtons from './components/FloatingActionButtons';
 import AddTaskModal from './components/AddTaskModal';
 import Toast from './components/Toast';
+import SettingsModal from './components/SettingsModal';
+import { GearIcon } from './components/icons';
 
 function App() {
   const { t } = useTranslation();
@@ -21,6 +23,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('inbox');
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toast, setToast] = useState(null); // { message, variant, action?, duration? }
 
   useEffect(() => {
@@ -105,6 +108,14 @@ function App() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
+      <button
+        onClick={() => setIsSettingsOpen(true)}
+        className="fixed top-4 right-4 z-30 w-10 h-10 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
+        aria-label={t('settings.open')}
+      >
+        <GearIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+      </button>
+
       <main className="flex-1 pb-24">
         {isLoading && (
           <div className="max-w-3xl mx-auto p-4 text-[var(--text-muted)] text-sm italic">
@@ -132,11 +143,13 @@ function App() {
         )}
       </main>
 
-      <FloatingActionButtons
-        onAddClick={() => setIsAddModalOpen(true)}
-        onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
-        onPhotoComplete={(newTasks) => handleTasksAdded(newTasks)}
-      />
+      {expandedTaskId === null && (
+        <FloatingActionButtons
+          onAddClick={() => setIsAddModalOpen(true)}
+          onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
+          onPhotoComplete={(newTasks) => handleTasksAdded(newTasks)}
+        />
+      )}
 
       <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
 
@@ -158,6 +171,10 @@ function App() {
           duration={toast.duration || 3000}
           onDismiss={() => setToast(null)}
         />
+      )}
+
+      {isSettingsOpen && (
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
       )}
     </div>
   );

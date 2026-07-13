@@ -143,5 +143,20 @@
   "fab": {
     "open": "Open actions",
     "close": "Close actions"
+  },
+  "settings": {
+    "open": "Settings",
+    "title": "Settings",
+    "notifications_section": "Notifications",
+    "notifications_intro": "Get notified about your tasks. We'll ask your browser for permission first.",
+    "enable_notifications": "Enable Notifications",
+    "requesting": "Requesting...",
+    "notifications_enabled": "Notifications are enabled.",
+    "notifications_blocked": "Notifications are blocked. To enable them, check your browser's site settings for this page (usually via the padlock icon in the address bar).",
+    "notifications_unsupported": "Notifications aren't supported in this browser. On iPhone, try adding this app to your Home Screen from Safari's share menu, then enable notifications from there.",
+    "send_test": "Send Test Notification",
+    "test_sent": "Sent!",
+    "test_notification_title": "Test notification",
+    "test_notification_body": "This is what your task reminders will look like."
   }
 }
