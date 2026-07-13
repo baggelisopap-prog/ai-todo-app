@@ -809,11 +809,11 @@ function TaskChip({ task, onClick, isOverlay = false }) {
         e.stopPropagation();
         if (!isDragging) onClick?.(task);
       }}
-      className={`w-full text-left px-2 py-1 rounded text-xs transition-all overflow-hidden ${
+      className={`w-full flex-1 min-h-0 flex items-center text-left px-2 py-1 rounded text-xs transition-all overflow-hidden ${
         draggable && !isOverlay ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-default'
       } ${isOverlay ? 'shadow-lg scale-105' : 'hover:brightness-95'}`}
     >
-      <div className={`truncate leading-tight font-medium ${task.is_completed ? 'line-through opacity-60' : ''}`}>
+      <div className={`w-full min-w-0 truncate leading-tight font-medium ${task.is_completed ? 'line-through opacity-60' : ''}`}>
         {label}
       </div>
     </button>
