@@ -13,6 +13,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
 import CustomSelect from './CustomSelect';
+import FilterBar from './FilterBar';
 import { createTaskManual } from '../api';
 import { toLocalISODate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
@@ -147,6 +148,8 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [activeDragTask, setActiveDragTask] = useState(null);
   const [manualCreateSlot, setManualCreateSlot] = useState(null); // { date, time }
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedPriority, setSelectedPriority] = useState('All');
   const taskDetailRef = useRef(null);
 
   useEffect(() => {
@@ -281,7 +284,12 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     handleReschedule(task, over.id);
   }
 
-  const tasksByDate = tasks.reduce((acc, task) => {
+  const filteredTasks = tasks.filter((task) =>
+    (selectedCategory === 'All' || task.category === selectedCategory) &&
+    (selectedPriority === 'All' || task.priority === selectedPriority)
+  );
+
+  const tasksByDate = filteredTasks.reduce((acc, task) => {
     if (!task.due_date) return acc;
     if (task.is_rejected) return acc;
     if (task.is_completed) return acc;
@@ -326,6 +334,14 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
           </div>
         </div>
 
+        <FilterBar
+          category={selectedCategory}
+          onCategoryChange={setSelectedCategory}
+          priority={selectedPriority}
+          onPriorityChange={setSelectedPriority}
+          t={t}
+        />
+
         {viewMode === 'monthly' ? (
           <MonthlyGrid
             currentMonth={currentMonth}
@@ -343,7 +359,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
               currentWeekStart={currentWeekStart}
               onPrevWeek={handlePrevWeek}
               onNextWeek={handleNextWeek}
-              tasks={tasks}
+              tasks={filteredTasks}
               todayISO={todayISO}
               onTaskClick={handleTaskClick}
               onSelectDate={handleSelectDate}
@@ -809,11 +825,11 @@ function TaskChip({ task, onClick, isOverlay = false }) {
         e.stopPropagation();
         if (!isDragging) onClick?.(task);
       }}
-      className={`w-full flex-1 min-h-0 flex items-center text-left px-2 py-1 rounded text-xs transition-all overflow-hidden ${
+      className={`w-full flex-1 min-h-0 flex items-start md:items-center text-left px-2 py-1 rounded text-[10px] md:text-xs transition-all overflow-hidden ${
         draggable && !isOverlay ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-default'
       } ${isOverlay ? 'shadow-lg scale-105' : 'hover:brightness-95'}`}
     >
-      <div className={`w-full min-w-0 truncate leading-tight font-medium ${task.is_completed ? 'line-through opacity-60' : ''}`}>
+      <div className={`w-full min-w-0 break-words md:truncate leading-tight font-medium ${task.is_completed ? 'line-through opacity-60' : ''}`}>
         {label}
       </div>
     </button>

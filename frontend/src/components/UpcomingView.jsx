@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
+import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
 
 function getSectionLabel(t, daysFromNow, date) {
@@ -53,8 +55,15 @@ function computeSections(tasks, t) {
 
 function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedPriority, setSelectedPriority] = useState('All');
 
-  const { daySections, noDateSection, totalCount } = computeSections(tasks, t);
+  const filteredTasks = tasks.filter((task) =>
+    (selectedCategory === 'All' || task.category === selectedCategory) &&
+    (selectedPriority === 'All' || task.priority === selectedPriority)
+  );
+
+  const { daySections, noDateSection, totalCount } = computeSections(filteredTasks, t);
 
   let lastPopulatedIndex = -1;
   for (let i = daySections.length - 1; i >= 0; i--) {
@@ -77,6 +86,14 @@ function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onT
           <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">({totalCount})</span>
         </h1>
       </div>
+
+      <FilterBar
+        category={selectedCategory}
+        onCategoryChange={setSelectedCategory}
+        priority={selectedPriority}
+        onPriorityChange={setSelectedPriority}
+        t={t}
+      />
 
       {sections.map((section) => (
         <div key={section.key} className="mb-6">

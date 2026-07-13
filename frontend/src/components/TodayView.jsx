@@ -1,20 +1,29 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
+import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
 
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedPriority, setSelectedPriority] = useState('All');
 
   const today = toLocalISODate(new Date());
 
-  const todayTasks = tasks.filter((task) =>
+  const filteredTasks = tasks.filter((task) =>
+    (selectedCategory === 'All' || task.category === selectedCategory) &&
+    (selectedPriority === 'All' || task.priority === selectedPriority)
+  );
+
+  const todayTasks = filteredTasks.filter((task) =>
     task.approval_status &&
     !task.is_completed &&
     !task.is_rejected &&
     task.due_date === today
   );
 
-  const overdueTasks = tasks.filter((task) =>
+  const overdueTasks = filteredTasks.filter((task) =>
     task.approval_status &&
     !task.is_completed &&
     !task.is_rejected &&
@@ -29,6 +38,14 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t('nav.today')}</h1>
       </div>
+
+      <FilterBar
+        category={selectedCategory}
+        onCategoryChange={setSelectedCategory}
+        priority={selectedPriority}
+        onPriorityChange={setSelectedPriority}
+        t={t}
+      />
 
       {isEmpty ? (
         <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>

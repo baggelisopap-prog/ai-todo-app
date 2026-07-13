@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 
-export function CustomSelect({ value, options, onChange, placeholder, ariaLabel }) {
+export function CustomSelect({ value, options, onChange, placeholder, ariaLabel, compact = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 
@@ -22,20 +22,20 @@ export function CustomSelect({ value, options, onChange, placeholder, ariaLabel 
         type="button"
         onClick={() => setIsOpen((v) => !v)}
         aria-label={ariaLabel}
-        className="
+        className={`
           w-full flex items-center justify-between
-          px-3 py-2
+          ${compact ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'}
           bg-[var(--bg-input)]
           border border-[var(--border-medium)]
           rounded-md
-          text-sm text-[var(--text-primary)]
+          text-[var(--text-primary)]
           hover:border-[var(--text-secondary)]
           focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100
           transition-colors
-        "
+        `}
       >
-        <span>{selectedLabel}</span>
-        <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <span className="truncate">{selectedLabel}</span>
+        <svg className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} flex-shrink-0 text-[var(--text-muted)]`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
