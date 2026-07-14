@@ -239,18 +239,26 @@ class TaskService:
             raise RuntimeError(f"Failed to delete task {record_id}")
         logger.info(f"Deleted task {record_id}.")
 
-    def send_push_to_all(self, title: str, body: str) -> dict:
+    def send_push_to_all(self, title: str, body: str, view: Optional[str] = None) -> dict:
         """
         Sends a push notification to every stored subscription.
         Cleans up subscriptions that the push service reports as gone
         (404/410 — meaning the browser unsubscribed or the installation
         was removed).
+
+        `view` is an optional tab id (e.g. "today") tagged onto the push
+        payload so the service worker's notificationclick handler knows
+        which in-app view to open/switch to.
         """
         subscriptions = repository.list_push_subscriptions()
         sent = 0
         failed = 0
 
         vapid_key_file = _get_vapid_key_file()
+
+        payload = {"title": title, "body": body}
+        if view:
+            payload["view"] = view
 
         for sub in subscriptions:
             try:
@@ -262,7 +270,7 @@ class TaskService:
                             "auth": sub.auth,
                         },
                     },
-                    data=json.dumps({"title": title, "body": body}),
+                    data=json.dumps(payload),
                     vapid_private_key=vapid_key_file,
                     vapid_claims={"sub": f"mailto:{VAPID_CONTACT_EMAIL}"},
                 )
@@ -316,6 +324,7 @@ class TaskService:
             result = self.send_push_to_all(
                 title=task.task_name,
                 body=f"Σε 15 λεπτά: {task.task_name}" if not task.description else task.description,
+                view="today",
             )
             if result.get("sent", 0) > 0:
                 repository.mark_notification_sent(task.record_id)
@@ -366,7 +375,7 @@ class TaskService:
 
         todays_tasks = repository.get_tasks_for_date(today_str, tasks=all_tasks)
         summary_body = _format_daily_summary(todays_tasks)
-        result = self.send_push_to_all(title="Το πρόγραμμα της ημέρας", body=summary_body)
+        result = self.send_push_to_all(title="Το πρόγραμμα της ημέρας", body=summary_body, view="today")
         if result.get("sent", 0) > 0:
             repository.update_daily_summary_last_sent_date(today_str)
             return True

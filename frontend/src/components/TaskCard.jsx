@@ -148,6 +148,10 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
 
   async function handleToggleNotify(e) {
     e.stopPropagation();
+    if (!task.due_time) {
+      onShowToast('task.no_time_for_reminder', 'neutral');
+      return;
+    }
     try {
       await onUpdate(task.record_id, { notify_enabled: !task.notify_enabled });
     } catch (err) {
@@ -329,20 +333,30 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                 {isPending && (
                   <span className="text-[var(--priority-p2)] font-medium">{t('task.pending')}</span>
                 )}
-                {task.due_time && (
-                  <button
-                    type="button"
-                    onClick={handleToggleNotify}
-                    className={`p-1 -m-1 rounded transition-colors ${
-                      task.notify_enabled
+                <button
+                  type="button"
+                  onClick={handleToggleNotify}
+                  className={`p-1 -m-1 rounded transition-colors ${
+                    !task.due_time
+                      ? 'text-[var(--text-muted)] opacity-40'
+                      : task.notify_enabled
                         ? 'text-[var(--brand-primary)]'
                         : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-                    }`}
-                    aria-label={task.notify_enabled ? t('task.notification_on') : t('task.notification_off')}
-                  >
-                    {task.notify_enabled ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
-                  </button>
-                )}
+                  }`}
+                  aria-label={
+                    !task.due_time
+                      ? t('task.no_time_for_reminder')
+                      : task.notify_enabled
+                        ? t('task.notification_on')
+                        : t('task.notification_off')
+                  }
+                >
+                  {task.notify_enabled && task.due_time ? (
+                    <BellFilledIcon className="w-4 h-4" />
+                  ) : (
+                    <BellOutlineIcon className="w-4 h-4" />
+                  )}
+                </button>
               </div>
 
               {displayChecklist && displayChecklist.length > 0 && (

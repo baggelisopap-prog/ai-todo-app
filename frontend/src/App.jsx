@@ -42,6 +42,27 @@ function App() {
     loadTasks();
   }, []);
 
+  // Notification-tap navigation: the app opened fresh via a deep link
+  // (?view=...) from the service worker's notificationclick handler, or
+  // the app was already open and the service worker posts a message to
+  // switch tabs instead of forcing a reload.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    if (viewParam) {
+      setActiveTab(viewParam);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    function handleServiceWorkerMessage(event) {
+      if (event.data?.type === 'NAVIGATE' && event.data.view) {
+        setActiveTab(event.data.view);
+      }
+    }
+    navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', handleServiceWorkerMessage);
+  }, []);
+
   function handleTasksAdded(newTasks) {
     setTasks((current) => [...newTasks, ...current]);
     const count = newTasks.length;

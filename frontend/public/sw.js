@@ -26,7 +26,28 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body || '',
     icon: '/favicon.svg',
+    data: { view: data.view || 'today' },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetView = event.notification.data?.view || 'today';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if ('focus' in client) {
+          client.focus();
+          client.postMessage({ type: 'NAVIGATE', view: targetView });
+          return;
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(`/?view=${targetView}`);
+      }
+    })
+  );
 });

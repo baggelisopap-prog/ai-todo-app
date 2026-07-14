@@ -93,7 +93,8 @@
     "checklist_item_placeholder": "Item {{n}}",
     "remove_item": "Remove item",
     "notification_on": "Reminder on",
-    "notification_off": "Set reminder"
+    "notification_off": "Set reminder",
+    "no_time_for_reminder": "Add a time to this task to set a reminder"
   },
   "menu": {
     "open_menu": "Open menu"
