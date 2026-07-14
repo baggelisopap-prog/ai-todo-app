@@ -95,4 +95,7 @@ class PushSubscriptionRecord(BaseModel):
 class AppSettings(BaseModel):
     notifications_enabled: bool = True
     send_all_enabled: bool = True
-    last_summary_sent_date: Optional[str] = None
+    daily_summary_enabled: bool = False
+    daily_summary_mode: str = "fixed_time"
+    daily_summary_time: str = "08:00"
+    daily_summary_last_sent_date: str = ""

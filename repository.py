@@ -335,23 +335,45 @@ def get_app_settings() -> AppSettings:
     return AppSettings(
         notifications_enabled=fields.get("notifications_enabled", True),
         send_all_enabled=fields.get("send_all_enabled", True),
-        last_summary_sent_date=fields.get("last_summary_sent_date"),
+        daily_summary_enabled=fields.get("daily_summary_enabled", False),
+        daily_summary_mode=fields.get("daily_summary_mode", "fixed_time"),
+        daily_summary_time=fields.get("daily_summary_time", "08:00"),
+        daily_summary_last_sent_date=fields.get("daily_summary_last_sent_date", ""),
     )
 
 
-def update_app_settings(notifications_enabled: bool, send_all_enabled: bool) -> AppSettings:
-    """Upserts the single app_settings record's two user-facing toggles."""
+def update_app_settings(
+    notifications_enabled: bool,
+    send_all_enabled: bool,
+    daily_summary_enabled: bool,
+    daily_summary_mode: str,
+    daily_summary_time: str,
+) -> AppSettings:
+    """
+    Upserts the single app_settings record's user-facing settings. Does
+    NOT touch daily_summary_last_sent_date — that's scheduler-internal
+    bookkeeping written separately by update_daily_summary_last_sent_date.
+    """
     table = _get_app_settings_table()
     records = table.all(max_records=1)
     fields = {
         "notifications_enabled": notifications_enabled,
         "send_all_enabled": send_all_enabled,
+        "daily_summary_enabled": daily_summary_enabled,
+        "daily_summary_mode": daily_summary_mode,
+        "daily_summary_time": daily_summary_time,
     }
     if records:
         table.update(records[0]["id"], fields)
     else:
         table.create(fields)
-    return AppSettings(notifications_enabled=notifications_enabled, send_all_enabled=send_all_enabled)
+    return AppSettings(
+        notifications_enabled=notifications_enabled,
+        send_all_enabled=send_all_enabled,
+        daily_summary_enabled=daily_summary_enabled,
+        daily_summary_mode=daily_summary_mode,
+        daily_summary_time=daily_summary_time,
+    )
 
 
 # --- Notification scheduler queries ---
@@ -430,32 +452,46 @@ def mark_notification_sent(record_id: str) -> None:
     repo.table.update(record_id, {"notification_sent": True})
 
 
-def get_tasks_for_daily_summary(
-    today_str: str, tasks: Optional[list[TaskRecord]] = None
+def get_tasks_for_date(
+    date_str: str, tasks: Optional[list[TaskRecord]] = None
 ) -> list[TaskRecord]:
     """
-    Returns active tasks (approved/not completed/not rejected) due today
-    or overdue (due_date <= today_str). YYYY-MM-DD string comparison sorts
-    identically to chronological order given the validated date format.
-    Pass a pre-fetched `tasks` list to avoid a second Airtable scan.
+    Returns all eligible tasks (approval_status=True, is_completed=False,
+    is_rejected=False) with due_date == date_str, regardless of whether
+    they have a due_time — used for the daily summary listing, which
+    includes all-day tasks too. Pass a pre-fetched `tasks` list to avoid
+    a second Airtable scan.
     """
     all_tasks = tasks if tasks is not None else get_all_tasks_for_scheduler()
-
-    result = []
-    for task in all_tasks:
-        if not (task.approval_status and not task.is_completed and not task.is_rejected):
-            continue
-        if not task.due_date or task.due_date > today_str:
-            continue
-        result.append(task)
-    return result
+    return [
+        t for t in all_tasks
+        if t.approval_status and not t.is_completed and not t.is_rejected and t.due_date == date_str
+    ]
 
 
-def mark_daily_summary_sent(date_str: str) -> None:
-    """Upserts last_summary_sent_date on the single app_settings record."""
+def get_first_task_datetime_today(
+    date_str: str, tasks: Optional[list[TaskRecord]] = None
+) -> Optional[datetime]:
+    """
+    Returns the (naive) datetime of the earliest due_time among today's
+    eligible tasks, or None if no eligible task has a due_time on
+    date_str. Returned naively (no tzinfo) since this is a data-layer
+    query with no timezone context of its own — callers must attach the
+    appropriate tzinfo before comparing against a timezone-aware `now`.
+    """
+    todays_tasks = get_tasks_for_date(date_str, tasks=tasks)
+    timed = [t for t in todays_tasks if t.due_time]
+    if not timed:
+        return None
+    earliest_time = min(datetime.strptime(t.due_time, "%H:%M").time() for t in timed)
+    return datetime.strptime(f"{date_str} {earliest_time.strftime('%H:%M')}", "%Y-%m-%d %H:%M")
+
+
+def update_daily_summary_last_sent_date(date_str: str) -> None:
+    """Upserts daily_summary_last_sent_date on the single app_settings record."""
     table = _get_app_settings_table()
     records = table.all(max_records=1)
-    fields = {"last_summary_sent_date": date_str}
+    fields = {"daily_summary_last_sent_date": date_str}
     if records:
         table.update(records[0]["id"], fields)
     else:

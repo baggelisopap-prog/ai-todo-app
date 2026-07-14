@@ -18,7 +18,13 @@ export function SettingsModal({ onClose }) {
 
   const [permission, setPermission] = useState(getNotificationPermission());
   const [isRequesting, setIsRequesting] = useState(false);
-  const [settings, setSettings] = useState({ notifications_enabled: true, send_all_enabled: true });
+  const [settings, setSettings] = useState({
+    notifications_enabled: true,
+    send_all_enabled: true,
+    daily_summary_enabled: false,
+    daily_summary_mode: 'fixed_time',
+    daily_summary_time: '08:00',
+  });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const supported = isNotificationSupported();
@@ -53,6 +59,30 @@ export function SettingsModal({ onClose }) {
       await updateAppSettings(updated);
     } catch (err) {
       setSettings(previous); // revert on failure
+      console.error('Failed to update settings:', err);
+    }
+  }
+
+  async function handleModeChange(mode) {
+    const previous = settings;
+    const updated = { ...settings, daily_summary_mode: mode };
+    setSettings(updated);
+    try {
+      await updateAppSettings(updated);
+    } catch (err) {
+      setSettings(previous);
+      console.error('Failed to update settings:', err);
+    }
+  }
+
+  async function handleTimeChange(time) {
+    const previous = settings;
+    const updated = { ...settings, daily_summary_time: time };
+    setSettings(updated);
+    try {
+      await updateAppSettings(updated);
+    } catch (err) {
+      setSettings(previous);
       console.error('Failed to update settings:', err);
     }
   }
@@ -192,6 +222,72 @@ export function SettingsModal({ onClose }) {
                   <p className="text-xs text-[var(--text-muted)] mt-1">
                     {t('settings.send_all_description')}
                   </p>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-[var(--text-primary)]">
+                      {t('settings.daily_summary_label')}
+                    </span>
+                    <button
+                      onClick={() => handleToggle('daily_summary_enabled')}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${
+                        settings.daily_summary_enabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
+                      }`}
+                      aria-label={t('settings.daily_summary_label')}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                          settings.daily_summary_enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                    {t('settings.daily_summary_description')}
+                  </p>
+
+                  {settings.daily_summary_enabled && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleModeChange('fixed_time')}
+                          className={`flex-1 px-3 py-2 rounded-md text-sm border transition-colors ${
+                            settings.daily_summary_mode === 'fixed_time'
+                              ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+                              : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                          }`}
+                        >
+                          {t('settings.mode_fixed_time')}
+                        </button>
+                        <button
+                          onClick={() => handleModeChange('before_first_task')}
+                          className={`flex-1 px-3 py-2 rounded-md text-sm border transition-colors ${
+                            settings.daily_summary_mode === 'before_first_task'
+                              ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+                              : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                          }`}
+                        >
+                          {t('settings.mode_before_first_task')}
+                        </button>
+                      </div>
+
+                      {settings.daily_summary_mode === 'fixed_time' && (
+                        <input
+                          type="time"
+                          value={settings.daily_summary_time}
+                          onChange={(e) => handleTimeChange(e.target.value)}
+                          className="w-full px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] bg-[var(--bg-card)]"
+                        />
+                      )}
+
+                      {settings.daily_summary_mode === 'before_first_task' && (
+                        <p className="text-xs text-[var(--text-muted)]">
+                          {t('settings.before_first_task_description')}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

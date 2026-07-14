@@ -160,6 +160,11 @@
     "notifications_toggle_label": "Notifications",
     "notifications_toggle_description": "Master switch. When off, no task reminders are sent at all, regardless of other settings.",
     "send_all_label": "Send All Task Notifications",
-    "send_all_description": "When on, you'll be reminded about every task that has a time set. When off, only tasks where you've tapped the bell icon will send reminders. Only applies when Notifications (above) is on."
+    "send_all_description": "When on, you'll be reminded about every task that has a time set. When off, only tasks where you've tapped the bell icon will send reminders. Only applies when Notifications (above) is on.",
+    "daily_summary_label": "Daily Summary",
+    "daily_summary_description": "One notification per day listing today's tasks.",
+    "mode_fixed_time": "Fixed time",
+    "mode_before_first_task": "Before first task",
+    "before_first_task_description": "Sent 30 minutes before your earliest task of the day."
   }
 }

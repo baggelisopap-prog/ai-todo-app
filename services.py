@@ -19,10 +19,8 @@ VAPID_CONTACT_EMAIL = os.getenv("VAPID_CONTACT_EMAIL", "baggelisopap@gmail.com")
 # How far ahead of a task's due time to send the advance reminder.
 REMINDER_OFFSET_MINUTES = 15
 
-# How far ahead of the day's first timed task to send the daily summary,
-# and the fixed fallback send time when no timed tasks exist that day.
-DAILY_SUMMARY_LEAD_MINUTES = 15
-DAILY_SUMMARY_FALLBACK_TIME = "08:00"
+# Fixed lead time for "before_first_task" daily summary mode (not user-configurable).
+DAILY_SUMMARY_BEFORE_FIRST_TASK_OFFSET_MINUTES = 30
 
 # pywebpush's webpush() only accepts a Vapid instance or a private-key file
 # path for vapid_private_key — passing the raw multi-line PEM string directly
@@ -323,59 +321,74 @@ class TaskService:
                 repository.mark_notification_sent(task.record_id)
                 sent += 1
 
-        daily_summary_result = self._maybe_send_daily_summary(now, settings, all_tasks)
+        daily_summary_sent = self._maybe_send_daily_summary(now, settings, all_tasks)
 
         return {
             "status": "ok",
             "checked": len(due_tasks),
             "sent": sent,
-            "daily_summary": daily_summary_result,
+            "daily_summary_sent": daily_summary_sent,
         }
 
-    def _maybe_send_daily_summary(self, now: datetime, settings, all_tasks: list[TaskRecord]) -> dict:
+    def _maybe_send_daily_summary(self, now: datetime, settings, all_tasks: list[TaskRecord]) -> bool:
         """
-        Sends the once-a-day task summary if it hasn't already gone out
-        today. Fires DAILY_SUMMARY_LEAD_MINUTES before the earliest timed
-        task due today, or at DAILY_SUMMARY_FALLBACK_TIME if no timed
-        tasks exist today.
+        Sends the once-a-day task summary if enabled and not already sent
+        today. The ONLY guard against repeat-firing is the date comparison
+        against daily_summary_last_sent_date — there is deliberately no
+        upper-bound time window (unlike the per-task reminder's window):
+        whichever cron tick first satisfies "now >= target time" fires it,
+        and every later tick that same day sees the date already recorded
+        and skips. The guard resets naturally at midnight.
         """
         today_str = now.strftime("%Y-%m-%d")
-        if settings.last_summary_sent_date == today_str:
-            return {"status": "already_sent"}
+        if not settings.daily_summary_enabled or settings.daily_summary_last_sent_date == today_str:
+            return False
 
-        tasks = repository.get_tasks_for_daily_summary(today_str, tasks=all_tasks)
+        should_send_now = False
 
-        todays_timed = [t for t in tasks if t.due_date == today_str and t.due_time]
-        if todays_timed:
-            earliest = min(datetime.strptime(t.due_time, "%H:%M").time() for t in todays_timed)
-            target = now.replace(hour=earliest.hour, minute=earliest.minute, second=0, microsecond=0)
-            target -= timedelta(minutes=DAILY_SUMMARY_LEAD_MINUTES)
-        else:
-            fallback = datetime.strptime(DAILY_SUMMARY_FALLBACK_TIME, "%H:%M").time()
-            target = now.replace(hour=fallback.hour, minute=fallback.minute, second=0, microsecond=0)
+        if settings.daily_summary_mode == "fixed_time":
+            time_str = settings.daily_summary_time or "08:00"
+            target_hour, target_minute = map(int, time_str.split(":"))
+            target_datetime = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+            if now >= target_datetime:
+                should_send_now = True
 
-        if now < target:
-            return {"status": "not_yet"}
+        elif settings.daily_summary_mode == "before_first_task":
+            first_task_time = repository.get_first_task_datetime_today(today_str, tasks=all_tasks)
+            if first_task_time is not None:
+                first_task_time = first_task_time.replace(tzinfo=now.tzinfo)
+                target_datetime = first_task_time - timedelta(minutes=DAILY_SUMMARY_BEFORE_FIRST_TASK_OFFSET_MINUTES)
+                if now >= target_datetime:
+                    should_send_now = True
 
-        title, body = _format_daily_summary(tasks, today_str)
-        result = self.send_push_to_all(title=title, body=body)
+        if not should_send_now:
+            return False
+
+        todays_tasks = repository.get_tasks_for_date(today_str, tasks=all_tasks)
+        summary_body = _format_daily_summary(todays_tasks)
+        result = self.send_push_to_all(title="Το πρόγραμμα της ημέρας", body=summary_body)
         if result.get("sent", 0) > 0:
-            repository.mark_daily_summary_sent(today_str)
-            return {"status": "sent", "task_count": len(tasks)}
-        return {"status": "send_failed", "task_count": len(tasks)}
+            repository.update_daily_summary_last_sent_date(today_str)
+            return True
+        return False
 
 
-def _format_daily_summary(tasks: list[TaskRecord], today_str: str) -> tuple[str, str]:
-    """Builds the (title, body) for the daily summary push from today's + overdue tasks."""
+def _format_daily_summary(tasks: list[TaskRecord]) -> str:
+    """
+    Builds a plain-text summary of today's tasks for the push notification
+    body. Push notifications can only show plain text, not interactive
+    checkboxes — this is a hard platform limitation, not a design choice.
+    """
     if not tasks:
-        return "Καθημερινή σύνοψη", "Δεν έχεις εργασίες σήμερα 🎉"
+        return "Δεν έχεις καμία εργασία σήμερα."
 
     lines = []
-    for t in tasks:
-        prefix = "⚠️ " if t.due_date < today_str else ""
-        time_suffix = f" ({t.due_time})" if t.due_time else ""
-        lines.append(f"• {prefix}{t.task_name}{time_suffix}")
+    for t in sorted(tasks, key=lambda x: x.due_time or "99:99"):
+        if t.due_time:
+            lines.append(f"{t.due_time} — {t.task_name}")
+        else:
+            lines.append(t.task_name)
 
-    title = f"Οι εργασίες σου σήμερα ({len(tasks)})"
-    body = "\n".join(lines)
-    return title, body
+    count = len(tasks)
+    header = f"Έχεις {count} {'εργασία' if count == 1 else 'εργασίες'} σήμερα:"
+    return header + "\n" + "\n".join(lines)

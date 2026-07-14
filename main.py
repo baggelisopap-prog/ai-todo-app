@@ -364,7 +364,7 @@ async def run_scheduler(secret: str):
 
 @app.get("/settings", response_model=AppSettings)
 async def get_settings():
-    """Returns the current app-wide settings (notifications master toggle + send-all scope)."""
+    """Returns the current app-wide settings (notifications, send-all scope, daily summary)."""
     try:
         return get_app_settings()
     except Exception as e:
@@ -374,11 +374,14 @@ async def get_settings():
 
 @app.patch("/settings", response_model=AppSettings)
 async def update_settings(payload: AppSettings):
-    """Updates the notifications master toggle and send-all scope toggle."""
+    """Updates the notifications master toggle, send-all scope, and daily summary settings."""
     try:
         return update_app_settings(
             notifications_enabled=payload.notifications_enabled,
             send_all_enabled=payload.send_all_enabled,
+            daily_summary_enabled=payload.daily_summary_enabled,
+            daily_summary_mode=payload.daily_summary_mode,
+            daily_summary_time=payload.daily_summary_time,
         )
     except Exception as e:
         logger.exception("Failed to update app settings")
