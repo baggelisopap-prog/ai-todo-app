@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import os
@@ -21,14 +22,30 @@ VAPID_CONTACT_EMAIL = os.getenv("VAPID_CONTACT_EMAIL", "baggelisopap@gmail.com")
 _vapid_key_file_path = None
 
 
+def _load_vapid_private_key_pem() -> str:
+    """
+    Reads the base64-encoded VAPID private key from the environment and
+    decodes it back to its original PEM text. Base64 (rather than the raw
+    multi-line PEM) avoids corruption from web dashboard text fields
+    (Render, Vercel, etc.) mangling newlines/whitespace — a single unbroken
+    base64 line has no such risk.
+    """
+    b64_value = os.getenv("VAPID_PRIVATE_KEY_B64")
+    if not b64_value:
+        raise RuntimeError("VAPID_PRIVATE_KEY_B64 is not set")
+    try:
+        pem_bytes = base64.b64decode(b64_value)
+        return pem_bytes.decode("utf-8")
+    except Exception as e:
+        raise RuntimeError(f"VAPID_PRIVATE_KEY_B64 is set but could not be decoded: {e}")
+
+
 def _get_vapid_key_file() -> str:
     global _vapid_key_file_path
     if _vapid_key_file_path and os.path.isfile(_vapid_key_file_path):
         return _vapid_key_file_path
 
-    private_key_pem = os.getenv("VAPID_PRIVATE_KEY")
-    if not private_key_pem:
-        raise RuntimeError("VAPID_PRIVATE_KEY is not set")
+    private_key_pem = _load_vapid_private_key_pem()
 
     fd, path = tempfile.mkstemp(suffix=".pem")
     with os.fdopen(fd, "w") as f:
