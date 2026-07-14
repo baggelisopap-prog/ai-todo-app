@@ -334,20 +334,24 @@ def get_app_settings() -> AppSettings:
     fields = records[0].get("fields", {})
     return AppSettings(
         notifications_enabled=fields.get("notifications_enabled", True),
+        send_all_enabled=fields.get("send_all_enabled", True),
         last_summary_sent_date=fields.get("last_summary_sent_date"),
     )
 
 
-def update_app_settings(notifications_enabled: bool) -> AppSettings:
-    """Upserts the single app_settings record."""
+def update_app_settings(notifications_enabled: bool, send_all_enabled: bool) -> AppSettings:
+    """Upserts the single app_settings record's two user-facing toggles."""
     table = _get_app_settings_table()
     records = table.all(max_records=1)
-    fields = {"notifications_enabled": notifications_enabled}
+    fields = {
+        "notifications_enabled": notifications_enabled,
+        "send_all_enabled": send_all_enabled,
+    }
     if records:
         table.update(records[0]["id"], fields)
     else:
         table.create(fields)
-    return AppSettings(notifications_enabled=notifications_enabled)
+    return AppSettings(notifications_enabled=notifications_enabled, send_all_enabled=send_all_enabled)
 
 
 # --- Notification scheduler queries ---
@@ -376,12 +380,20 @@ def get_all_tasks_for_scheduler() -> list[TaskRecord]:
 
 
 def get_tasks_due_for_notification(
-    window_start: datetime, window_end: datetime, tasks: Optional[list[TaskRecord]] = None
+    window_start: datetime,
+    window_end: datetime,
+    tasks: Optional[list[TaskRecord]] = None,
+    require_bell_enabled: bool = True,
 ) -> list[TaskRecord]:
     """
-    Returns tasks eligible for an advance-reminder push: notify_enabled,
-    not already sent, active (approved/not completed/not rejected), and
-    with a due_date+due_time falling within [window_start, window_end].
+    Returns tasks eligible for an advance-reminder push: not already sent,
+    active (approved/not completed/not rejected), and with a
+    due_date+due_time falling within [window_start, window_end].
+
+    If require_bell_enabled is True (default), also requires
+    notify_enabled=True (the per-task bell). If False, that filter is
+    skipped — used when the "send all" scope setting is on, so every
+    eligible timed task gets reminded regardless of its bell state.
 
     Filtered in Python rather than via an Airtable formula — due_date and
     due_time are separate text fields, and at this app's scale a full
@@ -394,7 +406,9 @@ def get_tasks_due_for_notification(
 
     due = []
     for task in all_tasks:
-        if not task.notify_enabled or task.notification_sent:
+        if require_bell_enabled and not task.notify_enabled:
+            continue
+        if task.notification_sent:
             continue
         if not (task.approval_status and not task.is_completed and not task.is_rejected):
             continue

@@ -149,13 +149,17 @@
   "settings": {
     "open": "Settings",
     "title": "Settings",
-    "notifications_section": "Notifications",
+    "back": "Back",
+    "category_notifications": "Notifications",
     "notifications_intro": "Get notified about your tasks. We'll ask your browser for permission first.",
     "enable_notifications": "Enable Notifications",
     "requesting": "Requesting...",
     "notifications_enabled": "Notifications are enabled.",
     "notifications_blocked": "Notifications are blocked. To enable them, check your browser's site settings for this page (usually via the padlock icon in the address bar).",
     "notifications_unsupported": "Notifications aren't supported in this browser. On iPhone, try adding this app to your Home Screen from Safari's share menu, then enable notifications from there.",
-    "master_toggle_label": "Send task reminders"
+    "notifications_toggle_label": "Notifications",
+    "notifications_toggle_description": "Master switch. When off, no task reminders are sent at all, regardless of other settings.",
+    "send_all_label": "Send All Task Notifications",
+    "send_all_description": "When on, you'll be reminded about every task that has a time set. When off, only tasks where you've tapped the bell icon will send reminders. Only applies when Notifications (above) is on."
   }
 }

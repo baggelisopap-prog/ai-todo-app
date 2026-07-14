@@ -287,15 +287,21 @@ class TaskService:
 
     def run_notification_scheduler(self) -> dict:
         """
-        Checks the master notifications toggle, then finds and sends advance
-        reminders for tasks due within REMINDER_OFFSET_MINUTES. Meant to be
-        triggered every ~5 minutes by an external cron service — because of
-        that polling interval, a reminder may fire anywhere from ~10 to ~15
-        minutes before the task is actually due, which is expected slack.
+        Checks the master notifications toggle (skip everything if off),
+        then finds and sends advance reminders for tasks due within
+        REMINDER_OFFSET_MINUTES. The send_all_enabled setting only matters
+        when the master toggle is on: True reminds about every eligible
+        timed task regardless of its bell state, False restricts reminders
+        to tasks with notify_enabled=True. Meant to be triggered every ~5
+        minutes by an external cron service — because of that polling
+        interval, a reminder may fire anywhere from ~10 to ~15 minutes
+        before the task is actually due, which is expected slack.
         """
         settings = repository.get_app_settings()
         if not settings.notifications_enabled:
             return {"status": "skipped", "reason": "notifications disabled"}
+
+        require_bell = not settings.send_all_enabled
 
         now = datetime.now(ZoneInfo("Europe/Athens"))
         all_tasks = repository.get_all_tasks_for_scheduler()
@@ -303,7 +309,9 @@ class TaskService:
         window_start = now
         window_end = now + timedelta(minutes=REMINDER_OFFSET_MINUTES)
 
-        due_tasks = repository.get_tasks_due_for_notification(window_start, window_end, tasks=all_tasks)
+        due_tasks = repository.get_tasks_due_for_notification(
+            window_start, window_end, tasks=all_tasks, require_bell_enabled=require_bell
+        )
 
         sent = 0
         for task in due_tasks:
