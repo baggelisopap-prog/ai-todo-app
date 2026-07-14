@@ -6,15 +6,14 @@ import {
   requestNotificationPermission,
   subscribeToPush,
 } from '../utils/notifications';
-import { registerPushSubscription, sendTestPush } from '../api';
+import { registerPushSubscription, getAppSettings, updateAppSettings } from '../api';
 
 export function SettingsModal({ onClose }) {
   const { t } = useTranslation();
   const [permission, setPermission] = useState(getNotificationPermission());
   const [isRequesting, setIsRequesting] = useState(false);
-  const [testSent, setTestSent] = useState(false);
-  const [isSendingTest, setIsSendingTest] = useState(false);
-  const [testError, setTestError] = useState(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const supported = isNotificationSupported();
 
@@ -26,6 +25,13 @@ export function SettingsModal({ onClose }) {
     }
   }, [permission]);
 
+  useEffect(() => {
+    getAppSettings()
+      .then(s => setNotificationsEnabled(s.notifications_enabled))
+      .catch(err => console.error('Failed to load settings:', err))
+      .finally(() => setSettingsLoaded(true));
+  }, []);
+
   async function handleRequestPermission() {
     setIsRequesting(true);
     const result = await requestNotificationPermission();
@@ -33,17 +39,14 @@ export function SettingsModal({ onClose }) {
     setIsRequesting(false);
   }
 
-  async function handleTestNotification() {
-    setIsSendingTest(true);
-    setTestError(null);
+  async function handleToggleNotifications() {
+    const newValue = !notificationsEnabled;
+    setNotificationsEnabled(newValue); // optimistic
     try {
-      await sendTestPush();
-      setTestSent(true);
-      setTimeout(() => setTestSent(false), 3000);
+      await updateAppSettings(newValue);
     } catch (err) {
-      setTestError(err.message);
-    } finally {
-      setIsSendingTest(false);
+      setNotificationsEnabled(!newValue); // revert on failure
+      console.error('Failed to update settings:', err);
     }
   }
 
@@ -106,15 +109,25 @@ export function SettingsModal({ onClose }) {
               <p className="text-sm text-[var(--text-secondary)] mb-3">
                 {t('settings.notifications_enabled')}
               </p>
-              <button
-                onClick={handleTestNotification}
-                disabled={isSendingTest}
-                className="px-4 py-2 rounded-md border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] font-medium disabled:opacity-50"
-              >
-                {isSendingTest ? t('settings.sending_test') : (testSent ? t('settings.test_sent') : t('settings.send_test'))}
-              </button>
-              {testError && (
-                <p className="text-sm text-[var(--danger)] mt-2">{testError}</p>
+              {settingsLoaded && (
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-sm text-[var(--text-primary)]">
+                    {t('settings.master_toggle_label')}
+                  </span>
+                  <button
+                    onClick={handleToggleNotifications}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                      notificationsEnabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
+                    }`}
+                    aria-label={t('settings.master_toggle_label')}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                        notificationsEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
               )}
             </div>
           )}

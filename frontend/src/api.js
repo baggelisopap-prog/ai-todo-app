@@ -199,3 +199,22 @@ export async function sendTestPush() {
     method: 'POST',
   });
 }
+
+/**
+ * GET /settings — retrieves app-wide settings (currently the notifications
+ * master toggle). Returns { notifications_enabled }.
+ */
+export async function getAppSettings() {
+  return request('/settings');
+}
+
+/**
+ * PATCH /settings — updates app-wide settings.
+ * Returns the updated settings object.
+ */
+export async function updateAppSettings(notificationsEnabled) {
+  return request('/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({ notifications_enabled: notificationsEnabled }),
+  });
+}

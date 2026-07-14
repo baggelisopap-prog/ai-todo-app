@@ -1,11 +1,12 @@
 import os
 import json
 import logging
+from datetime import datetime
 from typing import Optional
 from dotenv import load_dotenv
 from pyairtable import Api
 from pyairtable.formulas import match
-from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord
+from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings
 
 # Set up module-level logging
 logger = logging.getLogger(__name__)
@@ -111,6 +112,8 @@ class AirtableTaskRepository:
             approval_status=fields.get("approval_status", False),
             is_completed=fields.get("is_completed", False),
             is_rejected=fields.get("is_rejected", False),
+            notify_enabled=fields.get("notify_enabled", False),
+            notification_sent=fields.get("notification_sent", False),
             ai_suggested_category=fields["ai_suggested_category"],
             ai_suggested_priority=fields["ai_suggested_priority"],
             record_id=record_id,
@@ -163,6 +166,16 @@ class AirtableTaskRepository:
         """
         # Work on a copy so we don't mutate the caller's dict
         mapped_updates = updates.copy()
+
+        # Rescheduling (edit or drag-and-drop) invalidates any reminder
+        # already sent for the old time, so it can fire again at the new one.
+        if "due_date" in mapped_updates or "due_time" in mapped_updates:
+            current = self.get_task(record_id)
+            if current is not None:
+                new_due_date = mapped_updates.get("due_date", current.due_date)
+                new_due_time = mapped_updates.get("due_time", current.due_time)
+                if new_due_date != current.due_date or new_due_time != current.due_time:
+                    mapped_updates["notification_sent"] = False
 
         # Apply data mapping rules to the partial update dictionary
         if "checklist" in mapped_updates:
@@ -276,3 +289,112 @@ def delete_push_subscription(endpoint: str) -> None:
     if existing:
         table.delete(existing["id"])
         logger.info(f"Deleted stale push subscription. ID: {existing['id']}")
+
+
+# --- App settings ---
+# Single-record table holding app-wide toggles (currently just the
+# notifications master switch). Mirrors the push subscriptions connection
+# pattern above.
+
+_app_settings_table = None
+
+
+def _get_app_settings_table():
+    global _app_settings_table
+    if _app_settings_table is not None:
+        return _app_settings_table
+
+    token = os.getenv("AIRTABLE_TOKEN")
+    base_id = os.getenv("AIRTABLE_BASE_ID")
+    table_id = os.getenv("APP_SETTINGS_TABLE_ID")
+
+    if not all([token, base_id, table_id]):
+        raise RuntimeError(
+            "Missing Airtable configuration for app settings. Ensure "
+            "AIRTABLE_TOKEN, AIRTABLE_BASE_ID, and APP_SETTINGS_TABLE_ID "
+            "are set in your .env file."
+        )
+
+    api = Api(token)
+    _app_settings_table = api.table(base_id, table_id)
+    logger.info(f"App settings table initialized (Base: {base_id}, Table: {table_id})")
+    return _app_settings_table
+
+
+def get_app_settings() -> AppSettings:
+    """
+    Reads the single app_settings record. If no record exists yet (first
+    run), returns default settings without creating a row — the row gets
+    created on first write via update_app_settings.
+    """
+    table = _get_app_settings_table()
+    records = table.all(max_records=1)
+    if not records:
+        return AppSettings()
+    fields = records[0].get("fields", {})
+    return AppSettings(notifications_enabled=fields.get("notifications_enabled", True))
+
+
+def update_app_settings(notifications_enabled: bool) -> AppSettings:
+    """Upserts the single app_settings record."""
+    table = _get_app_settings_table()
+    records = table.all(max_records=1)
+    fields = {"notifications_enabled": notifications_enabled}
+    if records:
+        table.update(records[0]["id"], fields)
+    else:
+        table.create(fields)
+    return AppSettings(notifications_enabled=notifications_enabled)
+
+
+# --- Notification scheduler queries ---
+# Reuses AirtableTaskRepository (same Base/Table as the main task CRUD
+# path) via a lazily-cached instance, so field parsing stays identical to
+# the rest of the app instead of duplicating _airtable_to_task here.
+
+_tasks_repo_for_scheduler = None
+
+
+def _get_tasks_repo_for_scheduler() -> "AirtableTaskRepository":
+    global _tasks_repo_for_scheduler
+    if _tasks_repo_for_scheduler is None:
+        _tasks_repo_for_scheduler = AirtableTaskRepository()
+    return _tasks_repo_for_scheduler
+
+
+def get_tasks_due_for_notification(window_start: datetime, window_end: datetime) -> list[TaskRecord]:
+    """
+    Returns tasks eligible for an advance-reminder push: notify_enabled,
+    not already sent, active (approved/not completed/not rejected), and
+    with a due_date+due_time falling within [window_start, window_end].
+
+    Filtered in Python rather than via an Airtable formula — due_date and
+    due_time are separate text fields, and at this app's scale a full
+    table scan per scheduler run (every ~5 minutes) is simple and cheap
+    enough not to need formula-level filtering.
+    """
+    repo = _get_tasks_repo_for_scheduler()
+    all_tasks = repo.get_all_tasks()
+
+    due = []
+    for task in all_tasks:
+        if not task.notify_enabled or task.notification_sent:
+            continue
+        if not (task.approval_status and not task.is_completed and not task.is_rejected):
+            continue
+        if not task.due_date or not task.due_time:
+            continue
+        try:
+            due_dt = datetime.strptime(f"{task.due_date} {task.due_time}", "%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+        due_dt = due_dt.replace(tzinfo=window_start.tzinfo)
+        if window_start <= due_dt <= window_end:
+            due.append(task)
+    return due
+
+
+def mark_notification_sent(record_id: str) -> None:
+    """Sets notification_sent = True for a task."""
+    repo = _get_tasks_repo_for_scheduler()
+    repo.table.update(record_id, {"notification_sent": True})

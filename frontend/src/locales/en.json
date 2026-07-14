@@ -91,7 +91,9 @@
     "due_time_label": "Due time",
     "add_checklist_item": "+ Add checklist item",
     "checklist_item_placeholder": "Item {{n}}",
-    "remove_item": "Remove item"
+    "remove_item": "Remove item",
+    "notification_on": "Reminder on",
+    "notification_off": "Set reminder"
   },
   "menu": {
     "open_menu": "Open menu"
@@ -154,10 +156,6 @@
     "notifications_enabled": "Notifications are enabled.",
     "notifications_blocked": "Notifications are blocked. To enable them, check your browser's site settings for this page (usually via the padlock icon in the address bar).",
     "notifications_unsupported": "Notifications aren't supported in this browser. On iPhone, try adding this app to your Home Screen from Safari's share menu, then enable notifications from there.",
-    "send_test": "Send Test Notification",
-    "sending_test": "Sending...",
-    "test_sent": "Sent!",
-    "test_notification_title": "Test notification",
-    "test_notification_body": "This is what your task reminders will look like."
+    "master_toggle_label": "Send task reminders"
   }
 }

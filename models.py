@@ -63,6 +63,8 @@ class TaskRecord(SingleTask):
     approval_status: bool = False
     is_completed: bool = False
     is_rejected: bool = False
+    notify_enabled: bool = False
+    notification_sent: bool = False
 
     # Frozen snapshots of the original AI output, kept for the future learning loop.
     # These must never change after creation to preserve the original AI intent.
@@ -88,3 +90,7 @@ class PushSubscriptionRecord(BaseModel):
     endpoint: str
     p256dh: str
     auth: str
+
+
+class AppSettings(BaseModel):
+    notifications_enabled: bool = True

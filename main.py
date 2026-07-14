@@ -19,9 +19,9 @@ from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-from models import ChecklistItem, TaskRecord, PushSubscriptionRequest
+from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings
 from services import TaskService
-from repository import save_push_subscription
+from repository import save_push_subscription, get_app_settings, update_app_settings
 import os
 from dotenv import load_dotenv
 
@@ -53,6 +53,7 @@ class UpdateTaskRequest(BaseModel):
     due_date: Optional[str] = None
     due_time: Optional[str] = None
     checklist: Optional[list[ChecklistItem]] = None
+    notify_enabled: Optional[bool] = None
 
 class CreateTaskRequest(BaseModel):
     """Request body for manual task creation via POST /tasks"""
@@ -93,6 +94,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Shared secret required by the external cron trigger for /notifications/run-scheduler
+SCHEDULER_SECRET = os.getenv("SCHEDULER_SECRET")
 
 # Audio upload constraints
 MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -340,3 +344,39 @@ async def send_test_push():
     if result["total"] == 0:
         raise HTTPException(status_code=404, detail="No push subscriptions found. Enable notifications in Settings first.")
     return result
+
+
+@app.get("/notifications/run-scheduler")
+async def run_scheduler(secret: str):
+    """
+    Triggered externally (e.g. a free cron service) every ~5 minutes.
+    Checks for tasks due soon and sends their advance reminder pushes.
+    Guarded by a shared secret query param since this app has no auth system.
+    """
+    if not SCHEDULER_SECRET or secret != SCHEDULER_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid secret")
+    try:
+        return service.run_notification_scheduler()
+    except Exception as e:
+        logger.exception("Notification scheduler run failed")
+        raise HTTPException(status_code=500, detail=f"Scheduler run failed: {str(e)}")
+
+
+@app.get("/settings", response_model=AppSettings)
+async def get_settings():
+    """Returns the current app-wide settings (currently just the notifications master toggle)."""
+    try:
+        return get_app_settings()
+    except Exception as e:
+        logger.exception("Failed to load app settings")
+        raise HTTPException(status_code=500, detail=f"Failed to load settings: {str(e)}")
+
+
+@app.patch("/settings", response_model=AppSettings)
+async def update_settings(payload: AppSettings):
+    """Updates app-wide settings. Currently only the notifications master toggle."""
+    try:
+        return update_app_settings(notifications_enabled=payload.notifications_enabled)
+    except Exception as e:
+        logger.exception("Failed to update app settings")
+        raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")

@@ -146,6 +146,15 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
     }
   }
 
+  async function handleToggleNotify(e) {
+    e.stopPropagation();
+    try {
+      await onUpdate(task.record_id, { notify_enabled: !task.notify_enabled });
+    } catch (err) {
+      setActionError(err.message);
+    }
+  }
+
   async function handleAction(actionName, updates) {
     setIsMenuOpen(false);
     setPendingAction(actionName);
@@ -319,6 +328,20 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                 )}
                 {isPending && (
                   <span className="text-[var(--priority-p2)] font-medium">{t('task.pending')}</span>
+                )}
+                {task.due_time && (
+                  <button
+                    type="button"
+                    onClick={handleToggleNotify}
+                    className={`p-1 -m-1 rounded transition-colors ${
+                      task.notify_enabled
+                        ? 'text-[var(--brand-primary)]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                    }`}
+                    aria-label={task.notify_enabled ? t('task.notification_on') : t('task.notification_off')}
+                  >
+                    {task.notify_enabled ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
+                  </button>
                 )}
               </div>
 
@@ -675,6 +698,23 @@ function CalendarIcon({ className }) {
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function BellOutlineIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function BellFilledIcon({ className }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className={className}>
+      <path fillRule="evenodd" d="M10 2a6 6 0 00-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 00.515 1.076 32.91 32.91 0 003.256.508 3.5 3.5 0 006.972 0 32.903 32.903 0 003.256-.508.75.75 0 00.515-1.076A11.448 11.448 0 0116 8a6 6 0 00-6-6zM8.05 14.943a33.54 33.54 0 003.9 0 2 2 0 01-3.9 0z" clipRule="evenodd" />
     </svg>
   );
 }

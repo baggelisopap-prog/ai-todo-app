@@ -3,7 +3,9 @@ import json
 import logging
 import os
 import tempfile
+from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 from pywebpush import webpush, WebPushException
 from models import SingleTask, TaskList, TaskRecord
 from ai_engine import extract_tasks, extract_tasks_from_audio, extract_tasks_from_image
@@ -13,6 +15,9 @@ import repository
 logger = logging.getLogger(__name__)
 
 VAPID_CONTACT_EMAIL = os.getenv("VAPID_CONTACT_EMAIL", "baggelisopap@gmail.com")
+
+# How far ahead of a task's due time to send the advance reminder.
+REMINDER_OFFSET_MINUTES = 15
 
 # pywebpush's webpush() only accepts a Vapid instance or a private-key file
 # path for vapid_private_key — passing the raw multi-line PEM string directly
@@ -274,3 +279,33 @@ class TaskService:
                 logger.error(f"Push failed for {sub.endpoint[:50]}...: {e}")
 
         return {"sent": sent, "failed": failed, "total": len(subscriptions)}
+
+    def run_notification_scheduler(self) -> dict:
+        """
+        Checks the master notifications toggle, then finds and sends advance
+        reminders for tasks due within REMINDER_OFFSET_MINUTES. Meant to be
+        triggered every ~5 minutes by an external cron service — because of
+        that polling interval, a reminder may fire anywhere from ~10 to ~15
+        minutes before the task is actually due, which is expected slack.
+        """
+        settings = repository.get_app_settings()
+        if not settings.notifications_enabled:
+            return {"status": "skipped", "reason": "notifications disabled"}
+
+        now = datetime.now(ZoneInfo("Europe/Athens"))
+        window_start = now
+        window_end = now + timedelta(minutes=REMINDER_OFFSET_MINUTES)
+
+        due_tasks = repository.get_tasks_due_for_notification(window_start, window_end)
+
+        sent = 0
+        for task in due_tasks:
+            result = self.send_push_to_all(
+                title=task.task_name,
+                body=f"Σε 15 λεπτά: {task.task_name}" if not task.description else task.description,
+            )
+            if result.get("sent", 0) > 0:
+                repository.mark_notification_sent(task.record_id)
+                sent += 1
+
+        return {"status": "ok", "checked": len(due_tasks), "sent": sent}
