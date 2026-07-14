@@ -94,3 +94,4 @@ class PushSubscriptionRecord(BaseModel):
 
 class AppSettings(BaseModel):
     notifications_enabled: bool = True
+    last_summary_sent_date: Optional[str] = None

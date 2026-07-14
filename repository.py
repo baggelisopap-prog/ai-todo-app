@@ -332,7 +332,10 @@ def get_app_settings() -> AppSettings:
     if not records:
         return AppSettings()
     fields = records[0].get("fields", {})
-    return AppSettings(notifications_enabled=fields.get("notifications_enabled", True))
+    return AppSettings(
+        notifications_enabled=fields.get("notifications_enabled", True),
+        last_summary_sent_date=fields.get("last_summary_sent_date"),
+    )
 
 
 def update_app_settings(notifications_enabled: bool) -> AppSettings:
@@ -362,7 +365,19 @@ def _get_tasks_repo_for_scheduler() -> "AirtableTaskRepository":
     return _tasks_repo_for_scheduler
 
 
-def get_tasks_due_for_notification(window_start: datetime, window_end: datetime) -> list[TaskRecord]:
+def get_all_tasks_for_scheduler() -> list[TaskRecord]:
+    """
+    Fetches the full task list once per scheduler tick, so both the
+    per-task reminder check and the daily summary check can filter the
+    same list in Python instead of each doing their own Airtable scan.
+    """
+    repo = _get_tasks_repo_for_scheduler()
+    return repo.get_all_tasks()
+
+
+def get_tasks_due_for_notification(
+    window_start: datetime, window_end: datetime, tasks: Optional[list[TaskRecord]] = None
+) -> list[TaskRecord]:
     """
     Returns tasks eligible for an advance-reminder push: notify_enabled,
     not already sent, active (approved/not completed/not rejected), and
@@ -371,10 +386,11 @@ def get_tasks_due_for_notification(window_start: datetime, window_end: datetime)
     Filtered in Python rather than via an Airtable formula — due_date and
     due_time are separate text fields, and at this app's scale a full
     table scan per scheduler run (every ~5 minutes) is simple and cheap
-    enough not to need formula-level filtering.
+    enough not to need formula-level filtering. Pass a pre-fetched `tasks`
+    list (e.g. from get_all_tasks_for_scheduler) to avoid a second scan;
+    omit it to fetch fresh.
     """
-    repo = _get_tasks_repo_for_scheduler()
-    all_tasks = repo.get_all_tasks()
+    all_tasks = tasks if tasks is not None else get_all_tasks_for_scheduler()
 
     due = []
     for task in all_tasks:
@@ -398,3 +414,35 @@ def mark_notification_sent(record_id: str) -> None:
     """Sets notification_sent = True for a task."""
     repo = _get_tasks_repo_for_scheduler()
     repo.table.update(record_id, {"notification_sent": True})
+
+
+def get_tasks_for_daily_summary(
+    today_str: str, tasks: Optional[list[TaskRecord]] = None
+) -> list[TaskRecord]:
+    """
+    Returns active tasks (approved/not completed/not rejected) due today
+    or overdue (due_date <= today_str). YYYY-MM-DD string comparison sorts
+    identically to chronological order given the validated date format.
+    Pass a pre-fetched `tasks` list to avoid a second Airtable scan.
+    """
+    all_tasks = tasks if tasks is not None else get_all_tasks_for_scheduler()
+
+    result = []
+    for task in all_tasks:
+        if not (task.approval_status and not task.is_completed and not task.is_rejected):
+            continue
+        if not task.due_date or task.due_date > today_str:
+            continue
+        result.append(task)
+    return result
+
+
+def mark_daily_summary_sent(date_str: str) -> None:
+    """Upserts last_summary_sent_date on the single app_settings record."""
+    table = _get_app_settings_table()
+    records = table.all(max_records=1)
+    fields = {"last_summary_sent_date": date_str}
+    if records:
+        table.update(records[0]["id"], fields)
+    else:
+        table.create(fields)
