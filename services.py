@@ -160,7 +160,7 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from audio to database.")
         return saved_tasks
 
-    def extract_and_save_from_image(self, image_bytes: bytes, mime_type: str) -> list[TaskRecord]:
+    def extract_and_save_from_image(self, image_bytes: bytes, mime_type: str, additional_context: str = None) -> list[TaskRecord]:
         """
         Extracts tasks from an image via AI and saves them to the database.
         Mirrors extract_and_save exactly — only the AI call differs.
@@ -168,7 +168,7 @@ class TaskService:
         logger.info("Processing image input for extraction and save...")
 
         # 1. AI Extraction
-        task_list = extract_tasks_from_image(image_bytes, mime_type)
+        task_list = extract_tasks_from_image(image_bytes, mime_type, additional_context=additional_context)
 
         if not task_list:
             raise RuntimeError("AI extraction failed to produce valid tasks from image.")

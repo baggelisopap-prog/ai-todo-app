@@ -15,7 +15,7 @@ Interactive docs: http://localhost:8000/docs
 """
 
 import logging
-from fastapi import FastAPI, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -192,7 +192,7 @@ async def extract_voice(audio: UploadFile = File(...)):
 
 
 @app.post("/extract-image", response_model=ExtractResponse, status_code=status.HTTP_201_CREATED)
-async def extract_image(image: UploadFile = File(...)):
+async def extract_image(image: UploadFile = File(...), context: str = Form(None)):
     """
     Extract tasks from an image and save them to the database.
     Accepts any image/* MIME type up to 10 MB. Image is processed in memory and never stored.
@@ -221,6 +221,7 @@ async def extract_image(image: UploadFile = File(...)):
         saved_tasks = service.extract_and_save_from_image(
             image_bytes=image_bytes,
             mime_type=image.content_type,
+            additional_context=context,
         )
         return ExtractResponse(saved_tasks=saved_tasks, count=len(saved_tasks))
     except RuntimeError as e:

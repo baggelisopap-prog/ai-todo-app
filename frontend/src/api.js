@@ -103,10 +103,13 @@ export async function extractTasksFromAudio(audioBlob) {
  * Uses FormData (multipart). Cannot go through request() which hardcodes JSON headers.
  * Returns { saved_tasks: [...], count: N }
  */
-export async function extractTasksFromImage(imageBlob) {
+export async function extractTasksFromImage(imageBlob, context = '') {
   const formData = new FormData();
   const extension = imageBlob.type.split('/')[1]?.split(';')[0] || 'jpg';
   formData.append('image', imageBlob, `photo.${extension}`);
+  if (context && context.trim()) {
+    formData.append('context', context.trim());
+  }
 
   let response;
   try {

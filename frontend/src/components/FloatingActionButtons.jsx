@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import VoiceButton from './VoiceButton';
 import PhotoButton from './PhotoButton';
-import { PlusIcon, MicIcon, CameraIcon } from './icons';
+import { PlusIcon, MicIcon, CameraIcon, GalleryIcon } from './icons';
 
 function SubButton({ label, icon, onClick }) {
   return (
@@ -26,7 +26,8 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const voiceRef = useRef(null);
-  const photoRef = useRef(null);
+  const cameraRef = useRef(null);
+  const galleryRef = useRef(null);
 
   function handleVoiceClick() {
     setIsOpen(false);
@@ -38,9 +39,14 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
     onAddClick();
   }
 
-  function handlePhotoClick() {
+  function handleCameraClick() {
     setIsOpen(false);
-    photoRef.current?.trigger();
+    cameraRef.current?.trigger();
+  }
+
+  function handleGalleryClick() {
+    setIsOpen(false);
+    galleryRef.current?.trigger();
   }
 
   return (
@@ -48,7 +54,8 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
       {/* These mount only their recording overlay / file-picker + preview UI; the
           idle FABs they used to render are replaced by the Speed Dial sub-buttons below. */}
       <VoiceButton ref={voiceRef} onComplete={onVoiceComplete} renderIdleButton={false} />
-      <PhotoButton ref={photoRef} onComplete={onPhotoComplete} renderIdleButton={false} />
+      <PhotoButton ref={cameraRef} onComplete={onPhotoComplete} renderIdleButton={false} mode="camera" />
+      <PhotoButton ref={galleryRef} onComplete={onPhotoComplete} renderIdleButton={false} mode="gallery" />
 
       {isOpen && (
         <div
@@ -67,7 +74,8 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
         >
           <SubButton label={t('voice.label')} icon={<MicIcon className="w-5 h-5" />} onClick={handleVoiceClick} />
           <SubButton label={t('actions.add_label')} icon={<PlusIcon className="w-5 h-5" />} onClick={handleTextClick} />
-          <SubButton label={t('photo.label')} icon={<CameraIcon className="w-5 h-5" />} onClick={handlePhotoClick} />
+          <SubButton label={t('fab.camera')} icon={<CameraIcon className="w-5 h-5" />} onClick={handleCameraClick} />
+          <SubButton label={t('fab.gallery')} icon={<GalleryIcon className="w-5 h-5" />} onClick={handleGalleryClick} />
         </div>
 
         <button

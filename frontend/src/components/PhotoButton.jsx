@@ -3,11 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { extractTasksFromImage } from '../api';
 import { CameraIcon, SpinnerIcon } from './icons';
 
-const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButton = true }, ref) {
+const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButton = true, mode = 'gallery' }, ref) {
   const { t } = useTranslation();
   const [state, setState] = useState('idle'); // idle | preview | processing
   const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
+  const [contextText, setContextText] = useState('');
   const [error, setError] = useState(null);
 
   const fileInputRef = useRef(null);
@@ -40,6 +41,7 @@ const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButt
   function cleanup() {
     setImageFile(null);
     setImageUrl(null);
+    setContextText('');
     setError(null);
     setState('idle');
   }
@@ -53,7 +55,7 @@ const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButt
     setState('processing');
     setError(null);
     try {
-      const result = await extractTasksFromImage(imageFile);
+      const result = await extractTasksFromImage(imageFile, contextText);
       onComplete(result.saved_tasks);
       cleanup();
     } catch (err) {
@@ -86,6 +88,7 @@ const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButt
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        capture={mode === 'camera' ? 'environment' : undefined}
         className="hidden"
         onChange={handleFileChange}
       />
@@ -103,6 +106,15 @@ const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButt
               {t('photo.preview_title')}
             </h2>
             <img src={imageUrl} alt="preview" className="w-full h-auto rounded max-h-96 object-contain" />
+
+            <textarea
+              value={contextText}
+              onChange={(e) => setContextText(e.target.value)}
+              placeholder={t('photo.context_placeholder')}
+              rows={2}
+              disabled={isProcessing}
+              className="w-full mt-3 px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] bg-[var(--bg-card)] resize-none disabled:opacity-60"
+            />
 
             {error && (
               <div className="mt-3 p-2 rounded-md border border-red-200 bg-red-50 text-red-800 text-xs">

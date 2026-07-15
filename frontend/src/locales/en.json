@@ -141,11 +141,14 @@
     "preview_title": "Extract tasks from image",
     "extract": "Extract",
     "retake": "Cancel",
-    "processing": "Extracting..."
+    "processing": "Extracting...",
+    "context_placeholder": "Add context (optional) — e.g. \"this is for tomorrow at 17:00\""
   },
   "fab": {
     "open": "Open actions",
-    "close": "Close actions"
+    "close": "Close actions",
+    "camera": "Camera",
+    "gallery": "Gallery"
   },
   "settings": {
     "open": "Settings",

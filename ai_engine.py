@@ -191,7 +191,7 @@ def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str) -> Optional[Tas
         return None
 
 
-def extract_tasks_from_image(image_bytes: bytes, mime_type: str) -> Optional[TaskList]:
+def extract_tasks_from_image(image_bytes: bytes, mime_type: str, additional_context: str = None) -> Optional[TaskList]:
     """
     Extracts structured task data from an image via Gemini multimodal input.
     Image is sent inline and never stored to disk.
@@ -199,6 +199,13 @@ def extract_tasks_from_image(image_bytes: bytes, mime_type: str) -> Optional[Tas
     logging.info(f"Processing image input: {len(image_bytes)} bytes, type={mime_type}")
 
     system_instruction = _build_system_instruction()
+
+    parts = [
+        {"inline_data": {"mime_type": mime_type, "data": image_bytes}},
+        {"text": "Look at this image and extract all tasks mentioned. Handwritten notes, receipts, screenshots, whiteboards, and typed text all qualify. If the image contains multiple distinct action items, return them as separate tasks."},
+    ]
+    if additional_context and additional_context.strip():
+        parts.append({"text": f"Additional context from the user (use this to help interpret the image, e.g. dates/times not visible in the image itself): {additional_context.strip()}"})
 
     max_retries = 3
     response_text = None
@@ -210,10 +217,7 @@ def extract_tasks_from_image(image_bytes: bytes, mime_type: str) -> Optional[Tas
                 model="gemini-3.5-flash",
                 contents=[{
                     "role": "user",
-                    "parts": [
-                        {"inline_data": {"mime_type": mime_type, "data": image_bytes}},
-                        {"text": "Look at this image and extract all tasks mentioned. Handwritten notes, receipts, screenshots, whiteboards, and typed text all qualify. If the image contains multiple distinct action items, return them as separate tasks."},
-                    ],
+                    "parts": parts,
                 }],
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
