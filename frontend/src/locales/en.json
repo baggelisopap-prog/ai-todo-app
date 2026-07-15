@@ -144,7 +144,9 @@
     "processing": "Extracting...",
     "context_placeholder": "Add context (optional) — e.g. \"this is for tomorrow at 17:00\"",
     "take_photo": "Take Photo",
-    "choose_from_gallery": "Choose from Gallery"
+    "choose_from_gallery": "Choose from Gallery",
+    "crop_title": "Crop the image",
+    "crop_done": "Done"
   },
   "fab": {
     "open": "Open actions",

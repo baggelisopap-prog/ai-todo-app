@@ -1,17 +1,24 @@
 import { forwardRef, useState, useRef, useEffect, useImperativeHandle } from 'react';
 import { useTranslation } from 'react-i18next';
+import ReactCrop, { cropToCanvas } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 import { extractTasksFromImage } from '../api';
 import { CameraIcon, SpinnerIcon } from './icons';
 
 const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButton = true, mode = 'gallery' }, ref) {
   const { t } = useTranslation();
-  const [state, setState] = useState('idle'); // idle | preview | processing
+  const [state, setState] = useState('idle'); // idle | cropping | preview | processing
+  const [originalImageFile, setOriginalImageFile] = useState(null);
+  const [originalImageUrl, setOriginalImageUrl] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
+  const [crop, setCrop] = useState();
+  const [completedCrop, setCompletedCrop] = useState();
   const [contextText, setContextText] = useState('');
   const [error, setError] = useState(null);
 
   const fileInputRef = useRef(null);
+  const imgRef = useRef(null);
 
   // Revoke the previous object URL whenever it changes, and on unmount.
   useEffect(() => {
@@ -33,9 +40,55 @@ const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButt
     e.target.value = ''; // reset so the same file can be selected again
     if (!file) return;
     setError(null);
-    setImageFile(file);
-    setImageUrl(URL.createObjectURL(file));
-    setState('preview');
+    setOriginalImageFile(file);
+    setOriginalImageUrl(URL.createObjectURL(file));
+    setCrop(undefined);
+    setCompletedCrop(undefined);
+    setState('cropping');
+  }
+
+  function handleCancelCrop() {
+    if (originalImageUrl) URL.revokeObjectURL(originalImageUrl);
+    setOriginalImageFile(null);
+    setOriginalImageUrl(null);
+    setCrop(undefined);
+    setCompletedCrop(undefined);
+    setState('idle');
+  }
+
+  async function handleConfirmCrop() {
+    // No selection drawn: fall back to the full original image, unmodified.
+    if (!completedCrop || !imgRef.current || completedCrop.width === 0 || completedCrop.height === 0) {
+      setImageFile(originalImageFile);
+      setImageUrl(originalImageUrl);
+      setOriginalImageFile(null);
+      setOriginalImageUrl(null);
+      setState('preview');
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    await cropToCanvas(imgRef.current, canvas, completedCrop);
+
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          URL.revokeObjectURL(originalImageUrl);
+          setImageFile(blob);
+          setImageUrl(URL.createObjectURL(blob));
+        } else {
+          // Canvas export failed unexpectedly; fall back to the original image
+          // rather than leaving the user stuck on the crop screen.
+          setImageFile(originalImageFile);
+          setImageUrl(originalImageUrl);
+        }
+        setOriginalImageFile(null);
+        setOriginalImageUrl(null);
+        setState('preview');
+      },
+      'image/jpeg',
+      0.9
+    );
   }
 
   function cleanup() {
@@ -92,6 +145,39 @@ const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButt
         className="hidden"
         onChange={handleFileChange}
       />
+
+      {state === 'cropping' && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+          <div className="flex items-center justify-between p-4">
+            <span className="text-white text-sm font-medium">{t('photo.crop_title')}</span>
+          </div>
+          <div className="flex-1 overflow-auto flex items-center justify-center p-4">
+            <ReactCrop
+              crop={crop}
+              onChange={(_, percentCrop) => setCrop(percentCrop)}
+              onComplete={(c) => setCompletedCrop(c)}
+            >
+              <img ref={imgRef} src={originalImageUrl} alt="Crop preview" className="max-w-full max-h-full" />
+            </ReactCrop>
+          </div>
+          <div className="flex justify-between items-center p-4 gap-3">
+            <button
+              type="button"
+              onClick={handleCancelCrop}
+              className="flex-1 px-4 py-3 rounded-md border border-white/30 text-white font-medium"
+            >
+              {t('actions.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmCrop}
+              className="flex-1 px-4 py-3 rounded-md bg-[var(--brand-primary)] text-white font-medium"
+            >
+              {t('photo.crop_done')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div
