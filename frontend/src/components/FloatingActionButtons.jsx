@@ -57,7 +57,7 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
         />
       )}
 
-      <div className="fixed bottom-24 right-4 z-30 flex flex-col items-end gap-3">
+      <div className="fixed bottom-24 right-4 z-30 flex flex-col items-end gap-3 pointer-events-none">
         <div
           className={`flex flex-col items-end gap-3 transition-all duration-200 ${
             isOpen
@@ -74,7 +74,7 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
           type="button"
           onClick={() => setIsOpen((open) => !open)}
           aria-label={isOpen ? t('fab.close') : t('fab.open')}
-          className="w-16 h-16 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-all duration-200"
+          className="w-16 h-16 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center transition-all duration-200 pointer-events-auto"
         >
           <PlusIcon className={`w-6 h-6 transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`} />
         </button>
