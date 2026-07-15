@@ -25,6 +25,7 @@ function SubButton({ label, icon, onClick }) {
 function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete }) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  const [showPhotoChoice, setShowPhotoChoice] = useState(false);
   const voiceRef = useRef(null);
   const cameraRef = useRef(null);
   const galleryRef = useRef(null);
@@ -39,13 +40,18 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
     onAddClick();
   }
 
-  function handleCameraClick() {
+  function handlePhotoClick() {
     setIsOpen(false);
+    setShowPhotoChoice(true);
+  }
+
+  function handleTakePhoto() {
+    setShowPhotoChoice(false);
     cameraRef.current?.trigger();
   }
 
-  function handleGalleryClick() {
-    setIsOpen(false);
+  function handleChooseFromGallery() {
+    setShowPhotoChoice(false);
     galleryRef.current?.trigger();
   }
 
@@ -74,8 +80,7 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
         >
           <SubButton label={t('voice.label')} icon={<MicIcon className="w-5 h-5" />} onClick={handleVoiceClick} />
           <SubButton label={t('actions.add_label')} icon={<PlusIcon className="w-5 h-5" />} onClick={handleTextClick} />
-          <SubButton label={t('fab.camera')} icon={<CameraIcon className="w-5 h-5" />} onClick={handleCameraClick} />
-          <SubButton label={t('fab.gallery')} icon={<GalleryIcon className="w-5 h-5" />} onClick={handleGalleryClick} />
+          <SubButton label={t('fab.photo')} icon={<CameraIcon className="w-5 h-5" />} onClick={handlePhotoClick} />
         </div>
 
         <button
@@ -87,6 +92,35 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
           <PlusIcon className={`w-6 h-6 transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`} />
         </button>
       </div>
+
+      {showPhotoChoice && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-4"
+          onClick={() => setShowPhotoChoice(false)}
+        >
+          <div
+            className="w-full md:max-w-xs bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={handleTakePhoto}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-left"
+            >
+              <CameraIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+              <span>{t('photo.take_photo')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleChooseFromGallery}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-left"
+            >
+              <GalleryIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+              <span>{t('photo.choose_from_gallery')}</span>
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

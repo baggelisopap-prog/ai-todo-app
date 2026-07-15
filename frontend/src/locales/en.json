@@ -142,13 +142,14 @@
     "extract": "Extract",
     "retake": "Cancel",
     "processing": "Extracting...",
-    "context_placeholder": "Add context (optional) — e.g. \"this is for tomorrow at 17:00\""
+    "context_placeholder": "Add context (optional) — e.g. \"this is for tomorrow at 17:00\"",
+    "take_photo": "Take Photo",
+    "choose_from_gallery": "Choose from Gallery"
   },
   "fab": {
     "open": "Open actions",
     "close": "Close actions",
-    "camera": "Camera",
-    "gallery": "Gallery"
+    "photo": "Photo"
   },
   "settings": {
     "open": "Settings",
