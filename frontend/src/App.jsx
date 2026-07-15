@@ -137,7 +137,7 @@ function App() {
         <GearIcon className="w-5 h-5 text-[var(--text-secondary)]" />
       </button>
 
-      <main className="flex-1 pb-24">
+      <main className="flex-1 pb-48">
         {isLoading && (
           <div className="max-w-3xl mx-auto p-4 text-[var(--text-muted)] text-sm italic">
             {t('app.loading_tasks')}

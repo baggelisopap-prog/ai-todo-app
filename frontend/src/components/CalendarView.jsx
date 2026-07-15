@@ -308,7 +308,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="max-w-3xl mx-auto p-4 md:p-6 pb-24">
+      <div className="max-w-3xl mx-auto p-4 md:p-6">
         <div className="flex justify-center mb-4">
           <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5">
             <button
