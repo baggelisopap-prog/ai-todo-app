@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import Markdown from 'react-markdown';
 import { askAgent } from '../api';
 
 export function AgentChatModal({ onClose }) {
@@ -61,13 +62,27 @@ export function AgentChatModal({ onClose }) {
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`max-w-[80%] px-3 py-2 rounded-lg text-sm whitespace-pre-wrap ${
+                className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${
                   msg.role === 'user'
-                    ? 'bg-[var(--brand-primary)] text-white'
+                    ? 'bg-[var(--brand-primary)] text-white whitespace-pre-wrap'
                     : 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
                 }`}
               >
-                {msg.text}
+                {msg.role === 'agent' ? (
+                  <Markdown
+                    components={{
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                      ul: ({ children }) => <ul className="list-disc list-inside space-y-1 mb-2 last:mb-0">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-2 last:mb-0">{children}</ol>,
+                      li: ({ children }) => <li>{children}</li>,
+                    }}
+                  >
+                    {msg.text}
+                  </Markdown>
+                ) : (
+                  msg.text
+                )}
               </div>
             </div>
           ))}
