@@ -221,3 +221,14 @@ export async function updateAppSettings(settings) {
     body: JSON.stringify(settings),
   });
 }
+
+/**
+ * POST /agent/query — asks the read-only task Q&A agent a natural-language
+ * question. Returns { answer }.
+ */
+export async function askAgent(question) {
+  return request('/agent/query', {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  });
+}

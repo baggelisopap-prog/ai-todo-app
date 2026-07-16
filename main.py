@@ -22,6 +22,7 @@ from typing import Optional
 from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings
 from services import TaskService
 from repository import save_push_subscription, get_app_settings, update_app_settings
+import agent_engine
 import os
 from dotenv import load_dotenv
 
@@ -68,6 +69,14 @@ class CreateTaskRequest(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     service: str
+
+class AgentQueryRequest(BaseModel):
+    """Request body for POST /agent/query"""
+    question: str
+
+class AgentQueryResponse(BaseModel):
+    """Response body for POST /agent/query"""
+    answer: str
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -387,3 +396,23 @@ async def update_settings(payload: AppSettings):
     except Exception as e:
         logger.exception("Failed to update app settings")
         raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")
+
+
+@app.post("/agent/query", response_model=AgentQueryResponse)
+async def agent_query(request: AgentQueryRequest):
+    """
+    Answers a natural-language question about the user's tasks via the
+    read-only AI agent in agent_engine.py. Isolated from the task
+    extraction/CRUD system — only reads task data, never writes it.
+    """
+    if not request.question or not request.question.strip():
+        raise HTTPException(status_code=422, detail="question cannot be empty")
+    try:
+        answer = agent_engine.ask_agent(request.question.strip())
+        return AgentQueryResponse(answer=answer)
+    except RuntimeError as e:
+        logger.error(f"Agent query failed: {e}")
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.exception("Unexpected error in /agent/query")
+        raise HTTPException(status_code=500, detail="Internal server error")

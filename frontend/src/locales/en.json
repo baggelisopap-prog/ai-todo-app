@@ -171,5 +171,14 @@
     "mode_fixed_time": "Fixed time",
     "mode_before_first_task": "Before first task",
     "before_first_task_description": "Sent 30 minutes before your earliest task of the day."
+  },
+  "agent": {
+    "open": "Ask about your tasks",
+    "title": "Ask",
+    "empty_hint": "Ask me anything about your tasks — e.g. \"what do I have today?\" or \"show my appointments this week\"",
+    "input_placeholder": "Type a question...",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "error": "Something went wrong. Please try again."
   }
 }

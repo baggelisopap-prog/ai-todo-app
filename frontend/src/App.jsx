@@ -11,7 +11,8 @@ import FloatingActionButtons from './components/FloatingActionButtons';
 import AddTaskModal from './components/AddTaskModal';
 import Toast from './components/Toast';
 import SettingsModal from './components/SettingsModal';
-import { GearIcon } from './components/icons';
+import { AgentChatModal } from './components/AgentChatModal';
+import { GearIcon, ChatIcon } from './components/icons';
 
 function App() {
   const { t } = useTranslation();
@@ -24,6 +25,7 @@ function App() {
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [toast, setToast] = useState(null); // { message, variant, action?, duration? }
 
   useEffect(() => {
@@ -130,6 +132,14 @@ function App() {
   return (
     <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       <button
+        onClick={() => setIsAgentOpen(true)}
+        className="fixed top-4 left-4 z-30 w-10 h-10 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
+        aria-label={t('agent.open')}
+      >
+        <ChatIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+      </button>
+
+      <button
         onClick={() => setIsSettingsOpen(true)}
         className="fixed top-4 right-4 z-30 w-10 h-10 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
         aria-label={t('settings.open')}
@@ -197,6 +207,8 @@ function App() {
       {isSettingsOpen && (
         <SettingsModal onClose={() => setIsSettingsOpen(false)} />
       )}
+
+      {isAgentOpen && <AgentChatModal onClose={() => setIsAgentOpen(false)} />}
     </div>
   );
 }
