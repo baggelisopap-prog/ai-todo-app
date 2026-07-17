@@ -496,3 +496,64 @@ def update_daily_summary_last_sent_date(date_str: str) -> None:
         table.update(records[0]["id"], fields)
     else:
         table.create(fields)
+
+
+# --- Token usage log ---
+# Tracks per-call Gemini token usage for the developer-only usage/cost
+# dashboard. Mirrors the push subscriptions/app settings connection pattern
+# (own Table ID env var, same Base).
+
+_token_usage_table = None
+
+
+def _get_token_usage_table():
+    global _token_usage_table
+    if _token_usage_table is not None:
+        return _token_usage_table
+
+    token = os.getenv("AIRTABLE_TOKEN")
+    base_id = os.getenv("AIRTABLE_BASE_ID")
+    table_id = os.getenv("TOKEN_USAGE_TABLE_ID")
+
+    if not all([token, base_id, table_id]):
+        raise RuntimeError(
+            "Missing Airtable configuration for token usage logging. Ensure "
+            "AIRTABLE_TOKEN, AIRTABLE_BASE_ID, and TOKEN_USAGE_TABLE_ID "
+            "are set in your .env file."
+        )
+
+    api = Api(token)
+    _token_usage_table = api.table(base_id, table_id)
+    logger.info(f"Token usage table initialized (Base: {base_id}, Table: {table_id})")
+    return _token_usage_table
+
+
+def save_token_usage_log(call_type: str, timestamp: str, prompt_tokens: int, output_tokens: int, thinking_tokens: int, total_tokens: int) -> None:
+    """Appends a row to the token_usage_log Airtable table."""
+    table = _get_token_usage_table()
+    table.create({
+        "call_type": call_type,
+        "timestamp": timestamp,
+        "prompt_tokens": prompt_tokens,
+        "output_tokens": output_tokens,
+        "thinking_tokens": thinking_tokens,
+        "total_tokens": total_tokens,
+    })
+
+
+def get_all_token_usage_logs() -> list[dict]:
+    """Returns all rows from token_usage_log as a list of dicts with keys:
+    call_type, timestamp, prompt_tokens, output_tokens, thinking_tokens, total_tokens."""
+    table = _get_token_usage_table()
+    records = table.all()
+    return [
+        {
+            "call_type": r["fields"].get("call_type", ""),
+            "timestamp": r["fields"].get("timestamp", ""),
+            "prompt_tokens": r["fields"].get("prompt_tokens", 0),
+            "output_tokens": r["fields"].get("output_tokens", 0),
+            "thinking_tokens": r["fields"].get("thinking_tokens", 0),
+            "total_tokens": r["fields"].get("total_tokens", 0),
+        }
+        for r in records
+    ]

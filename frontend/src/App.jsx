@@ -65,6 +65,17 @@ function App() {
     return () => navigator.serviceWorker?.removeEventListener('message', handleServiceWorkerMessage);
   }, []);
 
+  // Developer mode unlock: visiting once with ?dev=1 persists it in
+  // localStorage so the hidden Developer settings category stays available
+  // on future visits without the query param.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dev') === '1') {
+      localStorage.setItem('dev_mode', 'true');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   function handleTasksAdded(newTasks) {
     setTasks((current) => [...newTasks, ...current]);
     const count = newTasks.length;

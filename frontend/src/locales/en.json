@@ -170,7 +170,13 @@
     "daily_summary_description": "One notification per day listing today's tasks.",
     "mode_fixed_time": "Fixed time",
     "mode_before_first_task": "Before first task",
-    "before_first_task_description": "Sent 30 minutes before your earliest task of the day."
+    "before_first_task_description": "Sent 30 minutes before your earliest task of the day.",
+    "category_developer": "Developer",
+    "today": "Today",
+    "this_week": "This week",
+    "recent_calls": "Recent calls",
+    "loading": "Loading...",
+    "load_failed": "Failed to load usage data"
   },
   "agent": {
     "open": "Ask about your tasks",

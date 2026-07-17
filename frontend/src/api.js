@@ -232,3 +232,11 @@ export async function askAgent(question) {
     body: JSON.stringify({ question }),
   });
 }
+
+/**
+ * GET /dev/token-usage — developer-only Gemini token usage summary
+ * (recent calls plus today/this-week totals and estimated cost).
+ */
+export async function getTokenUsage() {
+  return request('/dev/token-usage');
+}

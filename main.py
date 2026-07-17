@@ -23,6 +23,7 @@ from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettin
 from services import TaskService
 from repository import save_push_subscription, get_app_settings, update_app_settings
 import agent_engine
+import token_tracker
 import os
 from dotenv import load_dotenv
 
@@ -416,3 +417,9 @@ async def agent_query(request: AgentQueryRequest):
     except Exception as e:
         logger.exception("Unexpected error in /agent/query")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/dev/token-usage")
+async def dev_token_usage():
+    """Developer-only: not linked from main navigation, no auth (personal app)."""
+    return token_tracker.get_usage_summary()

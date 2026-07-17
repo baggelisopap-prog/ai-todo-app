@@ -6,7 +6,7 @@ import {
   requestNotificationPermission,
   subscribeToPush,
 } from '../utils/notifications';
-import { registerPushSubscription, getAppSettings, updateAppSettings } from '../api';
+import { registerPushSubscription, getAppSettings, updateAppSettings, getTokenUsage } from '../api';
 
 const SETTINGS_CATEGORIES = [
   { id: 'notifications', labelKey: 'settings.category_notifications', icon: BellIcon },
@@ -14,7 +14,11 @@ const SETTINGS_CATEGORIES = [
 
 export function SettingsModal({ onClose }) {
   const { t } = useTranslation();
-  const [currentCategory, setCurrentCategory] = useState(null); // null = menu, 'notifications' = detail
+  const [currentCategory, setCurrentCategory] = useState(null); // null = menu, 'notifications'/'developer' = detail
+  const isDevMode = localStorage.getItem('dev_mode') === 'true';
+  const categories = isDevMode
+    ? [...SETTINGS_CATEGORIES, { id: 'developer', labelKey: 'settings.category_developer', icon: CodeIcon }]
+    : SETTINGS_CATEGORIES;
 
   const [permission, setPermission] = useState(getNotificationPermission());
   const [isRequesting, setIsRequesting] = useState(false);
@@ -107,7 +111,9 @@ export function SettingsModal({ onClose }) {
             </button>
           )}
           <h2 className="text-lg font-semibold text-[var(--text-primary)] flex-1">
-            {currentCategory === 'notifications' ? t('settings.category_notifications') : t('settings.title')}
+            {currentCategory === 'notifications' && t('settings.category_notifications')}
+            {currentCategory === 'developer' && t('settings.category_developer')}
+            {!currentCategory && t('settings.title')}
           </h2>
           <button
             onClick={onClose}
@@ -120,7 +126,7 @@ export function SettingsModal({ onClose }) {
 
         {!currentCategory && (
           <div className="space-y-1">
-            {SETTINGS_CATEGORIES.map(category => {
+            {categories.map(category => {
               const Icon = category.icon;
               return (
                 <button
@@ -293,6 +299,53 @@ export function SettingsModal({ onClose }) {
             )}
           </div>
         )}
+
+        {currentCategory === 'developer' && <DeveloperUsageView />}
+      </div>
+    </div>
+  );
+}
+
+function DeveloperUsageView() {
+  const { t } = useTranslation();
+  const [usage, setUsage] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getTokenUsage()
+      .then(setUsage)
+      .catch(err => console.error('Failed to load token usage:', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p className="text-sm text-[var(--text-muted)]">{t('settings.loading')}</p>;
+  if (!usage) return <p className="text-sm text-[var(--text-muted)]">{t('settings.load_failed')}</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-md p-3">
+          <div className="text-xs text-[var(--text-muted)] uppercase">{t('settings.today')}</div>
+          <div className="text-lg font-semibold text-[var(--text-primary)] mt-1">{usage.today.total_tokens.toLocaleString()} tok</div>
+          <div className="text-xs text-[var(--text-secondary)]">${usage.today.estimated_cost_usd.toFixed(4)} • {usage.today.call_count} calls</div>
+        </div>
+        <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-md p-3">
+          <div className="text-xs text-[var(--text-muted)] uppercase">{t('settings.this_week')}</div>
+          <div className="text-lg font-semibold text-[var(--text-primary)] mt-1">{usage.this_week.total_tokens.toLocaleString()} tok</div>
+          <div className="text-xs text-[var(--text-secondary)]">${usage.this_week.estimated_cost_usd.toFixed(4)} • {usage.this_week.call_count} calls</div>
+        </div>
+      </div>
+
+      <div>
+        <div className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-2">{t('settings.recent_calls')}</div>
+        <div className="space-y-1">
+          {usage.recent_calls.map((call, idx) => (
+            <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b border-[var(--border-subtle)] last:border-0">
+              <span className="text-[var(--text-primary)]">{call.call_type}</span>
+              <span className="text-[var(--text-muted)]">{call.total_tokens} tok • ${call.estimated_cost_usd.toFixed(4)}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -319,6 +372,15 @@ function ChevronRightIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function CodeIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
     </svg>
   );
 }
