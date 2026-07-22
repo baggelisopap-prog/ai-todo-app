@@ -9,19 +9,70 @@ loop) differing between the two agent_engine*.py files.
 """
 import logging
 from datetime import datetime
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 MAX_SEARCH_RESULTS = 30
 DESCRIPTION_TRUNCATE_LENGTH = 100
 
+# Simplified Greek-to-Latin phonetic mapping used as a keyword-matching
+# fallback (see transliterate_greek_to_latin below) — not a general-purpose
+# transliteration standard, just good enough to bridge script mismatches
+# for loanwords (e.g. a Greek-spelled loanword vs its Latin spelling).
+GREEK_TO_LATIN = {
+    'α': 'a', 'ά': 'a',
+    'β': 'v',
+    'γ': 'g',
+    'δ': 'd',
+    'ε': 'e', 'έ': 'e',
+    'ζ': 'z',
+    'η': 'i', 'ή': 'i',
+    'θ': 'th',
+    'ι': 'i', 'ί': 'i', 'ϊ': 'i', 'ΐ': 'i',
+    'κ': 'k',
+    'λ': 'l',
+    'μ': 'm',
+    'ν': 'n',
+    'ξ': 'x',
+    'ο': 'o', 'ό': 'o',
+    'π': 'p',
+    'ρ': 'r',
+    'σ': 's', 'ς': 's',
+    'τ': 't',
+    'υ': 'y', 'ύ': 'y', 'ϋ': 'y', 'ΰ': 'y',
+    'φ': 'f',
+    'χ': 'ch',
+    'ψ': 'ps',
+    'ω': 'o', 'ώ': 'o',
+}
+
+
+def transliterate_greek_to_latin(text: str) -> str:
+    """
+    Converts Greek characters in text to their Latin phonetic equivalents.
+    Non-Greek characters (already-Latin text, digits, punctuation) pass
+    through unchanged, so this is safe to apply to any string, including
+    already-Latin keywords, which become a no-op.
+
+    Example: a Greek-spelled loanword transliterates to its Latin form
+    (e.g. the Greek transliteration of "test" becomes "test"), while
+    already-Latin text like "test" stays "test" unchanged.
+    """
+    return ''.join(GREEK_TO_LATIN.get(ch, ch) for ch in text.lower())
+
 
 def build_system_instruction() -> str:
     """Builds the agent's system instruction with the current Athens date
-    injected, identical content regardless of which model provider is used."""
+    AND time injected, identical content regardless of which model
+    provider is used."""
     athens_now = datetime.now(ZoneInfo("Europe/Athens"))
     today_str = athens_now.strftime("%A, %Y-%m-%d")
+    current_time_str = athens_now.strftime("%H:%M")
     return f"""You are a helpful assistant that answers questions about the user's personal to-do list.
-Today is {today_str} (Europe/Athens timezone).
+Today is {today_str}, and the current time is {current_time_str} (Europe/Athens timezone).
+
+TIME AWARENESS:
+For tasks due TODAY specifically, compare their due_time against the current time ({current_time_str}) to determine if they've already happened or are still upcoming. A task due today at a time earlier than {current_time_str} has already passed; a time later than {current_time_str} is still ahead. This distinction does NOT apply to tasks due on other days (a task due tomorrow at 09:00 hasn't "passed" just because it's earlier than the current time — it's a different day entirely). Use this when the user asks things like "what do I still have today", "what's left today", or "has X already happened".
 
 DATE RESOLUTION RULES:
 - For a SINGLE specific day ("today", "tomorrow", a named weekday, a specific date), set BOTH date_from AND date_to to that SAME date. Leaving date_from empty when the user means one specific day is WRONG — it pulls in everything overdue from the past too.
@@ -30,6 +81,7 @@ DATE RESOLUTION RULES:
 
 CATEGORY MATCHING:
 - If the question mentions work, job, business, or professional matters (Greek: δουλειά, εργασία, επαγγελματικά) OR personal/home/family matters (Greek: προσωπικά, σπίτι, οικογένεια) — SET the category parameter accordingly, even if the wording is imperfect, informal, or slightly misspelled (e.g., "buisness" still means Business). Do not leave category empty out of caution when the concept is clearly present in the question. Only omit it when the question is genuinely category-agnostic.
+- "Hostaway" category is for tasks generated automatically from guest messages on the Hostaway vacation rental platform (property management, guest requests, maintenance issues at rental properties). If the user asks about guest messages, rental properties, or mentions "Hostaway" explicitly, set category to "Hostaway".
 
 KEYWORD SEARCHES ARE FUZZY, NOT LITERAL:
 The keyword parameter does simple substring matching, which can miss real matches due to Greek word inflection (e.g., "ψώνια" won't literally match a task named "να ψωνίσω") or language mismatches between your search term and the task's actual wording. If a keyword-based search_tasks call returns zero or very few results but you suspect relevant tasks exist, retry search_tasks with the SAME date/category/priority filters but WITHOUT the keyword parameter, then read through the returned task names yourself and use your own judgment to identify which ones genuinely match what the user is asking about.
@@ -67,7 +119,7 @@ def build_tool_functions(cached_tasks):
     def search_tasks(
         date_from: str = None,
         date_to: str = None,
-        category: str = None,
+        category: Literal["Business", "Personal", "Unknown", "Hostaway"] = None,
         priority: str = None,
         keyword: str = None,
         include_completed: bool = False,
@@ -89,7 +141,7 @@ def build_tool_functions(cached_tasks):
         """
         logging.info(f"[agent] search_tasks called: date_from={date_from}, date_to={date_to}, category={category}, priority={priority}, keyword={keyword}, include_completed={include_completed}")
 
-        valid_categories = ["Business", "Personal", "Unknown"]
+        valid_categories = ["Business", "Personal", "Unknown", "Hostaway"]
         if category and category not in valid_categories:
             raise ValueError(f"Invalid category '{category}'. Must be one of: {', '.join(valid_categories)}")
 
@@ -109,10 +161,20 @@ def build_tool_functions(cached_tasks):
             if not include_completed and task.is_completed:
                 continue
 
+            if keyword:
+                keyword_lower = keyword.lower()
+                task_haystack = f"{task.task_name} {task.description or ''}".lower()
+                keyword_matches = (
+                    keyword_lower in task_haystack
+                    or transliterate_greek_to_latin(keyword_lower) in transliterate_greek_to_latin(task_haystack)
+                )
+            else:
+                keyword_matches = True
+
             matches_non_date_criteria = (
                 (not category or task.category == category)
                 and (not priority or task.priority == priority)
-                and (not keyword or keyword.lower() in f"{task.task_name} {task.description or ''}".lower())
+                and keyword_matches
             )
 
             if has_date_filter and not task.due_date:
@@ -128,10 +190,8 @@ def build_tool_functions(cached_tasks):
                 continue
             if priority and task.priority != priority:
                 continue
-            if keyword:
-                haystack = f"{task.task_name} {task.description or ''}".lower()
-                if keyword.lower() not in haystack:
-                    continue
+            if keyword and not keyword_matches:
+                continue
 
             matching.append(task)
 
@@ -206,7 +266,7 @@ SEARCH_TASKS_SCHEMA = {
             "properties": {
                 "date_from": {"type": "string", "description": "Earliest due_date to include, in YYYY-MM-DD format. Omit entirely for no lower bound."},
                 "date_to": {"type": "string", "description": "Latest due_date to include, in YYYY-MM-DD format. Omit entirely for no upper bound."},
-                "category": {"type": "string", "enum": ["Business", "Personal", "Unknown"], "description": "Filter by category. Omit for all categories."},
+                "category": {"type": "string", "enum": ["Business", "Personal", "Unknown", "Hostaway"], "description": "Filter by category. Omit for all categories."},
                 "priority": {"type": "string", "enum": ["P1", "P2", "P3"], "description": "Filter by priority. Omit for all priorities."},
                 "keyword": {"type": "string", "description": "Free-text search matched (case-insensitive) against the task name and description. Omit for no keyword filter."},
                 "include_completed": {"type": "boolean", "description": "Whether to include tasks that are already marked completed. Defaults to False."},

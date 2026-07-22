@@ -14,8 +14,9 @@ Run with: uvicorn main:app --reload
 Interactive docs: http://localhost:8000/docs
 """
 
+import json
 import logging
-from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -417,6 +418,26 @@ async def agent_query(request: AgentQueryRequest):
     except Exception as e:
         logger.exception("Unexpected error in /agent/query")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/webhooks/hostaway")
+async def hostaway_webhook(request: Request):
+    """
+    DIAGNOSTIC VERSION (Phase 1a): logs the full raw payload Hostaway sends
+    so we can see its actual structure before building real parsing logic
+    in Phase 1b. Always returns 200 so Hostaway doesn't retry/disable the
+    webhook due to error responses during this diagnostic period.
+    """
+    try:
+        payload = await request.json()
+    except Exception as e:
+        body = await request.body()
+        logging.error(f"[hostaway webhook] Failed to parse JSON: {e}. Raw body: {body}")
+        return {"status": "received", "note": "could not parse as JSON, logged raw body"}
+
+    logging.info(f"[hostaway webhook] FULL PAYLOAD RECEIVED:\n{json.dumps(payload, indent=2, ensure_ascii=False)}")
+
+    return {"status": "received"}
 
 
 @app.get("/dev/token-usage")
