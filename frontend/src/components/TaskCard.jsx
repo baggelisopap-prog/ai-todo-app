@@ -139,6 +139,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
 
     try {
       await onUpdate(task.record_id, updates);
+      onToggleExpand(null);
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -208,9 +209,22 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
     setOptimisticChecklist(newChecklist);
     setPendingToggleIdx(idx);
     setToggleError(null);
+
+    // One-direction only: checking the last remaining item auto-completes the
+    // task, mirroring the main completion circle. Unchecking an item never
+    // auto-uncompletes it, since a user may have intentionally completed a
+    // task with some items left unchecked.
+    const shouldAutoComplete = newChecklist.every((it) => it.done) && !task.is_completed;
+
     try {
-      await onUpdate(task.record_id, { checklist: newChecklist });
+      await onUpdate(task.record_id, {
+        checklist: newChecklist,
+        ...(shouldAutoComplete ? { is_completed: true, ...(isPending ? { approval_status: true } : {}) } : {}),
+      });
       setOptimisticChecklist(null);
+      if (shouldAutoComplete) {
+        onShowToast('toast.completed', 'success');
+      }
     } catch (err) {
       setOptimisticChecklist(null);
       setToggleError(err.message);

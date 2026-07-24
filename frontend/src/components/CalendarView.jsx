@@ -170,7 +170,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
       activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 5 },
+      activationConstraint: { delay: 250, tolerance: 5 },
     })
   );
 

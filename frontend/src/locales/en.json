@@ -30,6 +30,9 @@
     "tomorrow": "TOMORROW",
     "no_date": "NO DATE"
   },
+  "today": {
+    "pending_approval_header": "Pending approval ({{count}})"
+  },
   "empty": {
     "inbox": "All clear! No new tasks waiting.",
     "today": "Nothing for today 🎉",
