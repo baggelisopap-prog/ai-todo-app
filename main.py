@@ -14,8 +14,9 @@ Run with: uvicorn main:app --reload
 Interactive docs: http://localhost:8000/docs
 """
 
-import json
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -24,6 +25,7 @@ from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettin
 from services import TaskService
 from repository import save_push_subscription, get_app_settings, update_app_settings
 import agent_engine
+import hostaway_integration
 import token_tracker
 import os
 from dotenv import load_dotenv
@@ -423,21 +425,79 @@ async def agent_query(request: AgentQueryRequest):
 @app.post("/webhooks/hostaway")
 async def hostaway_webhook(request: Request):
     """
-    DIAGNOSTIC VERSION (Phase 1a): logs the full raw payload Hostaway sends
-    so we can see its actual structure before building real parsing logic
-    in Phase 1b. Always returns 200 so Hostaway doesn't retry/disable the
-    webhook due to error responses during this diagnostic period.
+    Receives Hostaway's 'new message received' webhook, enriches it with
+    listing/reservation details, classifies priority via AI, and creates
+    a pre-approved task. Always returns 200 (even on internal errors) so
+    Hostaway doesn't disable the webhook after repeated failures — log
+    errors instead of surfacing them as failed deliveries.
     """
     try:
         payload = await request.json()
     except Exception as e:
-        body = await request.body()
-        logging.error(f"[hostaway webhook] Failed to parse JSON: {e}. Raw body: {body}")
-        return {"status": "received", "note": "could not parse as JSON, logged raw body"}
+        logging.error(f"[hostaway webhook] Failed to parse JSON: {e}")
+        return {"status": "error", "note": "invalid JSON"}
 
-    logging.info(f"[hostaway webhook] FULL PAYLOAD RECEIVED:\n{json.dumps(payload, indent=2, ensure_ascii=False)}")
+    if payload.get("event") != "message.received":
+        return {"status": "ignored", "reason": "not a message event"}
 
-    return {"status": "received"}
+    data = payload.get("data", {})
+
+    if data.get("isIncoming") != 1:
+        return {"status": "ignored", "reason": "not an incoming guest message"}
+
+    message_body = (data.get("body") or "").strip()
+    if not message_body:
+        return {"status": "ignored", "reason": "empty message body"}
+
+    listing_map_id = data.get("listingMapId")
+    reservation_id = data.get("reservationId")
+
+    try:
+        listing_name = hostaway_integration.get_listing_name(listing_map_id) if listing_map_id else "Άγνωστο property"
+        reservation_details = hostaway_integration.get_reservation_details(reservation_id) if reservation_id else {
+            "guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"
+        }
+    except Exception as e:
+        logging.error(f"[hostaway webhook] Enrichment failed: {e}")
+        listing_name = "Άγνωστο property"
+        reservation_details = {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"}
+
+    try:
+        classification = hostaway_integration.classify_message(message_body)
+    except Exception as e:
+        logging.error(f"[hostaway webhook] Classification failed unexpectedly: {e}")
+        classification = {"summary": message_body[:200], "priority": "P1"}
+
+    guest_name = reservation_details["guest_name"]
+    arrival = reservation_details["arrival_date"]
+    departure = reservation_details["departure_date"]
+
+    today_str = datetime.now(ZoneInfo("Europe/Athens")).strftime("%Y-%m-%d")
+
+    task_name = f"Hostaway: {guest_name} - {listing_name}"
+    description = (
+        f"{classification['summary']}\n\n"
+        f"Property: {listing_name}\n"
+        f"Dates: {arrival} → {departure}\n\n"
+        f"Original message: {message_body}"
+    )
+
+    try:
+        service.create_task_manual({
+            "task_name": task_name,
+            "description": description,
+            "category": "Hostaway",
+            "priority": classification["priority"],
+            "due_date": today_str,
+            "due_time": None,
+            "checklist": [],
+        })
+        logging.info(f"[hostaway webhook] Created task: {task_name} (priority={classification['priority']})")
+    except Exception as e:
+        logging.error(f"[hostaway webhook] Failed to create task: {e}")
+        return {"status": "error", "note": "task creation failed, see logs"}
+
+    return {"status": "ok", "task_created": True}
 
 
 @app.get("/dev/token-usage")

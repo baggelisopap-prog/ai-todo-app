@@ -15,7 +15,7 @@ class SingleTask(BaseModel):
     """
     task_name: str = Field(max_length=80)
     description: str
-    category: Literal["Business", "Personal", "Unknown"]
+    category: Literal["Business", "Personal", "Unknown", "Hostaway"]
     priority: Literal["P1", "P2", "P3"]
     due_date: Optional[str] = None
     due_time: Optional[str] = None
@@ -68,7 +68,7 @@ class TaskRecord(SingleTask):
 
     # Frozen snapshots of the original AI output, kept for the future learning loop.
     # These must never change after creation to preserve the original AI intent.
-    ai_suggested_category: Literal["Business", "Personal", "Unknown"] = Field(frozen=True)
+    ai_suggested_category: Literal["Business", "Personal", "Unknown", "Hostaway"] = Field(frozen=True)
     ai_suggested_priority: Literal["P1", "P2", "P3"] = Field(frozen=True)
     
     record_id: Optional[str] = None
