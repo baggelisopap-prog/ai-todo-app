@@ -9,22 +9,27 @@ from zoneinfo import ZoneInfo
 
 import repository
 
-# Gemini 3.5 Flash pricing (standard/global tier, verified mid-2026).
+# Per-model Gemini pricing (standard/global tier, verified mid-2026).
 # Re-check https://ai.google.dev/gemini-api/docs/pricing periodically —
-# Google can change these rates.
-GEMINI_INPUT_COST_PER_MILLION = 1.50   # USD per 1,000,000 input tokens
-GEMINI_OUTPUT_COST_PER_MILLION = 9.00  # USD per 1,000,000 output tokens
+# Google can change these rates. Keyed by the exact model string passed to
+# generate_content(), so each call is costed at the rate it actually billed.
+PRICING = {
+    "gemini-3.5-flash": {"input": 1.50, "output": 9.00},
+    "gemini-3.1-flash-lite-preview": {"input": 0.25, "output": 1.50},
+}
+DEFAULT_MODEL = "gemini-3.5-flash"
 
 
-def calculate_cost(prompt_tokens: int, output_tokens: int, thinking_tokens: int = 0) -> float:
+def calculate_cost(prompt_tokens: int, output_tokens: int, thinking_tokens: int = 0, model: str = DEFAULT_MODEL) -> float:
     # Thinking/reasoning tokens are billed by Google at the same rate as
     # output tokens, so they're folded into the output side of the cost here.
-    input_cost = (prompt_tokens / 1_000_000) * GEMINI_INPUT_COST_PER_MILLION
-    output_cost = ((output_tokens + thinking_tokens) / 1_000_000) * GEMINI_OUTPUT_COST_PER_MILLION
+    rates = PRICING.get(model, PRICING[DEFAULT_MODEL])
+    input_cost = (prompt_tokens / 1_000_000) * rates["input"]
+    output_cost = ((output_tokens + thinking_tokens) / 1_000_000) * rates["output"]
     return round(input_cost + output_cost, 6)
 
 
-def log_token_usage(call_type: str, usage_metadata) -> None:
+def log_token_usage(call_type: str, usage_metadata, model: str = DEFAULT_MODEL) -> None:
     """
     Logs token usage from a Gemini API response — a full per-field breakdown
     (prompt / output / thinking / total) to the application log on every
@@ -32,7 +37,8 @@ def log_token_usage(call_type: str, usage_metadata) -> None:
     raises — a logging failure must not break the actual AI call, whether
     that call already succeeded or is being logged as a failed/empty
     attempt. Call this after ANY generate_content() call, passing
-    response.usage_metadata.
+    response.usage_metadata and the exact model string that was used, so
+    cost is calculated at the rate that call actually billed.
     """
     if usage_metadata is None:
         logging.warning(f"[token_tracker] No usage_metadata available for call_type={call_type}")
@@ -44,7 +50,7 @@ def log_token_usage(call_type: str, usage_metadata) -> None:
     total_tokens = getattr(usage_metadata, 'total_token_count', 0) or (prompt_tokens + output_tokens + thinking_tokens)
 
     logging.info(
-        f"[token_tracker] {call_type} usage breakdown — prompt={prompt_tokens}, "
+        f"[token_tracker] {call_type} ({model}) usage breakdown — prompt={prompt_tokens}, "
         f"output={output_tokens}, thinking={thinking_tokens}, total={total_tokens}"
     )
 
@@ -56,6 +62,7 @@ def log_token_usage(call_type: str, usage_metadata) -> None:
             output_tokens=output_tokens,
             thinking_tokens=thinking_tokens,
             total_tokens=total_tokens,
+            model=model,
         )
     except Exception as e:
         logging.error(f"[token_tracker] Failed to log token usage for {call_type}: {e}")
@@ -63,7 +70,8 @@ def log_token_usage(call_type: str, usage_metadata) -> None:
 
 def get_usage_summary() -> dict:
     """
-    Returns recent calls plus today/this-week aggregate totals (tokens + cost).
+    Returns recent calls plus today/this-week aggregate totals (tokens + cost),
+    using each logged row's own model for accurate per-call cost calculation.
     """
     all_logs = repository.get_all_token_usage_logs()
 
@@ -80,7 +88,10 @@ def get_usage_summary() -> dict:
 
     def summarize(logs):
         total_tokens = sum(l["total_tokens"] for l in logs)
-        cost = sum(calculate_cost(l["prompt_tokens"], l["output_tokens"], l.get("thinking_tokens", 0)) for l in logs)
+        cost = sum(
+            calculate_cost(l["prompt_tokens"], l["output_tokens"], l.get("thinking_tokens", 0), l.get("model", DEFAULT_MODEL))
+            for l in logs
+        )
         return {
             "call_count": len(logs),
             "total_tokens": total_tokens,
@@ -92,7 +103,9 @@ def get_usage_summary() -> dict:
 
     recent_calls = sorted(all_logs, key=lambda l: l["timestamp"], reverse=True)[:20]
     for call in recent_calls:
-        call["estimated_cost_usd"] = calculate_cost(call["prompt_tokens"], call["output_tokens"], call.get("thinking_tokens", 0))
+        call["estimated_cost_usd"] = calculate_cost(
+            call["prompt_tokens"], call["output_tokens"], call.get("thinking_tokens", 0), call.get("model", DEFAULT_MODEL)
+        )
 
     return {
         "recent_calls": recent_calls,

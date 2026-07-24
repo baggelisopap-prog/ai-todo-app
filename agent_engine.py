@@ -127,10 +127,7 @@ def ask_agent(question: str) -> str:
             if response.text:
                 if token_tracker:
                     summed = _SummedUsage(total_prompt_tokens, total_output_tokens, total_tokens_sum)
-                    try:
-                        token_tracker.log_token_usage("agent_query", summed, model=GEMINI_AGENT_MODEL)
-                    except TypeError:
-                        token_tracker.log_token_usage("agent_query", summed)
+                    token_tracker.log_token_usage("agent_query", summed, model=GEMINI_AGENT_MODEL)
                 return response.text
             raise RuntimeError("Agent produced no answer")
 

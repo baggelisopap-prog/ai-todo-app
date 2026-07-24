@@ -533,8 +533,8 @@ def _get_token_usage_table():
     return _token_usage_table
 
 
-def save_token_usage_log(call_type: str, timestamp: str, prompt_tokens: int, output_tokens: int, thinking_tokens: int, total_tokens: int) -> None:
-    """Appends a row to the token_usage_log Airtable table."""
+def save_token_usage_log(call_type: str, timestamp: str, prompt_tokens: int, output_tokens: int, thinking_tokens: int, total_tokens: int, model: str = "gemini-3.5-flash") -> None:
+    """Appends a row to the token_usage_log Airtable table, including which model was used."""
     table = _get_token_usage_table()
     table.create({
         "call_type": call_type,
@@ -543,12 +543,15 @@ def save_token_usage_log(call_type: str, timestamp: str, prompt_tokens: int, out
         "output_tokens": output_tokens,
         "thinking_tokens": thinking_tokens,
         "total_tokens": total_tokens,
+        "model": model,
     })
 
 
 def get_all_token_usage_logs() -> list[dict]:
     """Returns all rows from token_usage_log as a list of dicts with keys:
-    call_type, timestamp, prompt_tokens, output_tokens, thinking_tokens, total_tokens."""
+    call_type, timestamp, prompt_tokens, output_tokens, thinking_tokens, total_tokens, model.
+    Rows logged before the model field existed default to 'gemini-3.5-flash' so
+    historical cost estimates don't break."""
     table = _get_token_usage_table()
     records = table.all()
     return [
@@ -559,6 +562,7 @@ def get_all_token_usage_logs() -> list[dict]:
             "output_tokens": r["fields"].get("output_tokens", 0),
             "thinking_tokens": r["fields"].get("thinking_tokens", 0),
             "total_tokens": r["fields"].get("total_tokens", 0),
+            "model": r["fields"].get("model", "gemini-3.5-flash"),
         }
         for r in records
     ]

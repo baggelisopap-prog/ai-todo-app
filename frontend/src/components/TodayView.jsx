@@ -8,6 +8,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
+  const [overdueExpanded, setOverdueExpanded] = useState(true);
 
   const today = toLocalISODate(new Date());
 
@@ -53,18 +54,33 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
         <>
           {overdueTasks.length > 0 && (
             <div className="mb-6">
-              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
-                {t('sections.overdue_header')} <span className="ml-1 text-[var(--priority-p1)]">({overdueTasks.length})</span>
-              </h2>
-              <TaskList
-                tasks={overdueTasks}
-                sortBy="due_date"
-                expandedTaskId={expandedTaskId}
-                onToggleExpand={onToggleExpand}
-                onUpdateTask={onTaskUpdate}
-                onTaskDeleted={onTaskDeleted}
-                onShowToast={onShowToast}
-              />
+              <button
+                onClick={() => setOverdueExpanded(!overdueExpanded)}
+                className="w-full flex items-center justify-between text-left mb-3"
+              >
+                <h2 className="text-sm font-semibold text-[var(--priority-p1-text)] uppercase tracking-wide">
+                  {t('sections.overdue_header')} <span className="ml-1">({overdueTasks.length})</span>
+                </h2>
+                <svg
+                  className={`w-4 h-4 text-[var(--text-muted)] transition-transform flex-shrink-0 ${overdueExpanded ? 'rotate-180' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {overdueExpanded && (
+                <TaskList
+                  tasks={overdueTasks}
+                  sortBy="due_date"
+                  expandedTaskId={expandedTaskId}
+                  onToggleExpand={onToggleExpand}
+                  onUpdateTask={onTaskUpdate}
+                  onTaskDeleted={onTaskDeleted}
+                  onShowToast={onShowToast}
+                />
+              )}
             </div>
           )}
 

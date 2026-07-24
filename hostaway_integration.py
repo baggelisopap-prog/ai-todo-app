@@ -8,6 +8,8 @@ from pydantic import ValidationError, BaseModel
 from typing import Literal
 from dotenv import load_dotenv
 
+import token_tracker
+
 load_dotenv()
 
 HOSTAWAY_CLIENT_ID = os.getenv("HOSTAWAY_CLIENT_ID")
@@ -148,6 +150,10 @@ def classify_message(message_text: str) -> dict:
             )
             if response and response.text:
                 parsed = _MessageClassification.model_validate_json(response.text)
+                try:
+                    token_tracker.log_token_usage("hostaway_classification", response.usage_metadata, model=HOSTAWAY_CLASSIFICATION_MODEL)
+                except Exception as e:
+                    logging.error(f"[hostaway] Failed to log token usage: {e}")
                 return {"summary": parsed.summary, "priority": parsed.priority}
         except (ValidationError, Exception) as e:
             logging.error(f"[hostaway] Classification attempt {attempt + 1} failed: {e}")
