@@ -52,6 +52,25 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
         <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>
       ) : (
         <>
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+              {t('sections.today_header')} <span className="ml-1 text-[var(--text-muted)]">({todayTasks.length})</span>
+            </h2>
+            {todayTasks.length === 0 ? (
+              <div className="py-4 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>
+            ) : (
+              <TaskList
+                tasks={todayTasks}
+                sortBy="due_date"
+                expandedTaskId={expandedTaskId}
+                onToggleExpand={onToggleExpand}
+                onUpdateTask={onTaskUpdate}
+                onTaskDeleted={onTaskDeleted}
+                onShowToast={onShowToast}
+              />
+            )}
+          </div>
+
           {overdueTasks.length > 0 && (
             <div className="mb-6">
               <button
@@ -83,25 +102,6 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
               )}
             </div>
           )}
-
-          <div className="mb-6">
-            <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
-              {t('sections.today_header')} <span className="ml-1 text-[var(--text-muted)]">({todayTasks.length})</span>
-            </h2>
-            {todayTasks.length === 0 ? (
-              <div className="py-4 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>
-            ) : (
-              <TaskList
-                tasks={todayTasks}
-                sortBy="due_date"
-                expandedTaskId={expandedTaskId}
-                onToggleExpand={onToggleExpand}
-                onUpdateTask={onTaskUpdate}
-                onTaskDeleted={onTaskDeleted}
-                onShowToast={onShowToast}
-              />
-            )}
-          </div>
         </>
       )}
     </div>
