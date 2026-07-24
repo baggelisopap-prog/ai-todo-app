@@ -126,9 +126,14 @@ class AirtableTaskRepository:
         Returns a new TaskRecord instance containing the server-generated record_id and created_time.
         """
         fields_dict = self._task_to_airtable_fields(task)
-        
-        # Execute the network call
-        response = self.table.create(fields_dict)
+
+        # typecast=True lets Airtable match/auto-create select field options
+        # (category, ai_suggested_category) from the plain string values we
+        # send, instead of rejecting anything that isn't an exact pre-existing
+        # option — needed since category and ai_suggested_category are two
+        # independently-configured select fields that must both stay in sync
+        # with models.py's category Literal.
+        response = self.table.create(fields_dict, typecast=True)
         
         # Log success
         logger.info(f"Successfully saved new task to Airtable. Assigned ID: {response.get('id')}")
@@ -189,7 +194,7 @@ class AirtableTaskRepository:
         mapped_updates.pop("record_id", None)
         mapped_updates.pop("created_time", None)
 
-        response = self.table.update(record_id, mapped_updates)
+        response = self.table.update(record_id, mapped_updates, typecast=True)
 
         logger.info(f"Successfully updated task in Airtable. ID: {record_id}")
         return self._airtable_to_task(response)
