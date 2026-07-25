@@ -117,7 +117,9 @@ class AirtableTaskRepository:
             ai_suggested_category=fields["ai_suggested_category"],
             ai_suggested_priority=fields["ai_suggested_priority"],
             record_id=record_id,
-            created_time=created_time
+            created_time=created_time,
+            hostaway_created_at=fields.get("hostaway_created_at", None),
+            hostaway_last_notified_at=fields.get("hostaway_last_notified_at", None),
         )
 
     def save_task(self, task: TaskRecord) -> TaskRecord:
@@ -455,6 +457,25 @@ def mark_notification_sent(record_id: str) -> None:
     """Sets notification_sent = True for a task."""
     repo = _get_tasks_repo_for_scheduler()
     repo.table.update(record_id, {"notification_sent": True})
+
+
+def get_active_hostaway_tasks(tasks: Optional[list[TaskRecord]] = None) -> list[TaskRecord]:
+    """
+    Returns all not-completed, not-rejected category="Hostaway" tasks —
+    the candidate set for escalation re-notification. Pass a pre-fetched
+    `tasks` list to avoid a second Airtable scan; omit it to fetch fresh.
+    """
+    all_tasks = tasks if tasks is not None else get_all_tasks_for_scheduler()
+    return [
+        t for t in all_tasks
+        if t.category == "Hostaway" and not t.is_completed and not t.is_rejected
+    ]
+
+
+def update_hostaway_last_notified(record_id: str, last_notified_at: str) -> None:
+    """Updates hostaway_last_notified_at on a task record."""
+    repo = _get_tasks_repo_for_scheduler()
+    repo.table.update(record_id, {"hostaway_last_notified_at": last_notified_at})
 
 
 def get_tasks_for_date(

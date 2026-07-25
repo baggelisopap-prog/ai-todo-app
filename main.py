@@ -472,7 +472,10 @@ async def hostaway_webhook(request: Request):
     arrival = reservation_details["arrival_date"]
     departure = reservation_details["departure_date"]
 
-    today_str = datetime.now(ZoneInfo("Europe/Athens")).strftime("%Y-%m-%d")
+    now = datetime.now(ZoneInfo("Europe/Athens"))
+    today_str = now.strftime("%Y-%m-%d")
+    now_str = now.isoformat()
+    priority = classification["priority"]
 
     task_name = f"Hostaway: {guest_name} - {listing_name}"
     description = (
@@ -482,17 +485,32 @@ async def hostaway_webhook(request: Request):
         f"Original message: {message_body}"
     )
 
+    # Instant notification for every priority, then ongoing re-notification
+    # at a priority-paced interval for as long as the task stays open —
+    # see TaskService._check_hostaway_escalations / HOSTAWAY_ESCALATION_INTERVALS
+    # in services.py, run from the existing scheduler cycle.
+    priority_emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(priority, "")
+    try:
+        service.send_push_to_all(
+            title=f"{priority_emoji} {task_name}",
+            body=classification["summary"],
+        )
+    except Exception as e:
+        logging.error(f"[hostaway webhook] Failed to send instant notification: {e}")
+
     try:
         service.create_task_manual({
             "task_name": task_name,
             "description": description,
             "category": "Hostaway",
-            "priority": classification["priority"],
+            "priority": priority,
             "due_date": today_str,
             "due_time": None,
             "checklist": [],
+            "hostaway_created_at": now_str,
+            "hostaway_last_notified_at": now_str,
         })
-        logging.info(f"[hostaway webhook] Created task: {task_name} (priority={classification['priority']})")
+        logging.info(f"[hostaway webhook] Created task: {task_name} (priority={priority})")
     except Exception as e:
         logging.error(f"[hostaway webhook] Failed to create task: {e}")
         return {"status": "error", "note": "task creation failed, see logs"}

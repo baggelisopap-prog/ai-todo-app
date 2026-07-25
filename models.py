@@ -74,6 +74,13 @@ class TaskRecord(SingleTask):
     record_id: Optional[str] = None
     created_time: Optional[str] = None
 
+    # Hostaway escalation tracking (only set on category="Hostaway" tasks).
+    # hostaway_last_notified_at advances every time an escalation notification
+    # fires, so "time since last notification" can be compared against the
+    # priority's interval on each scheduler tick.
+    hostaway_created_at: Optional[str] = None
+    hostaway_last_notified_at: Optional[str] = None
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str

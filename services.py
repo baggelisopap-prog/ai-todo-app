@@ -22,6 +22,14 @@ REMINDER_OFFSET_MINUTES = 15
 # Fixed lead time for "before_first_task" daily summary mode (not user-configurable).
 DAILY_SUMMARY_BEFORE_FIRST_TASK_OFFSET_MINUTES = 30
 
+# How often an unresolved Hostaway task gets re-notified, by priority.
+# Repeats indefinitely at this pace until the task is marked completed.
+HOSTAWAY_ESCALATION_INTERVALS = {
+    "P1": timedelta(minutes=30),
+    "P2": timedelta(hours=1),
+    "P3": timedelta(hours=2),
+}
+
 # pywebpush's webpush() only accepts a Vapid instance or a private-key file
 # path for vapid_private_key — passing the raw multi-line PEM string directly
 # fails, since it's not routed through Vapid.from_file()'s PEM parsing. So we
@@ -211,10 +219,13 @@ class TaskService:
             approval_status=True,  # Manual = pre-approved
             is_completed=False,
             is_rejected=False,
+            notify_enabled=fields.get("notify_enabled", False),
             ai_suggested_category=fields.get("category", "Unknown"),
             ai_suggested_priority=fields.get("priority", "P3"),
             record_id=None,
             created_time=None,
+            hostaway_created_at=fields.get("hostaway_created_at"),
+            hostaway_last_notified_at=fields.get("hostaway_last_notified_at"),
         )
         return self.repository.save_task(task)
 
@@ -332,12 +343,53 @@ class TaskService:
 
         daily_summary_sent = self._maybe_send_daily_summary(now, settings, all_tasks)
 
+        hostaway_result = self._check_hostaway_escalations(now, all_tasks)
+
         return {
             "status": "ok",
             "checked": len(due_tasks),
             "sent": sent,
             "daily_summary_sent": daily_summary_sent,
+            "hostaway_checked": hostaway_result["checked"],
+            "hostaway_escalations_sent": hostaway_result["escalations_sent"],
         }
+
+    def _check_hostaway_escalations(self, now: datetime, all_tasks: list[TaskRecord]) -> dict:
+        """
+        Checks all active (not completed, not rejected) Hostaway-category
+        tasks. For each, if the time since its last notification meets or
+        exceeds its priority's escalation interval (HOSTAWAY_ESCALATION_INTERVALS),
+        sends another notification and advances the timestamp. This repeats
+        indefinitely — no cap on the number of re-notifications — for as
+        long as the task remains open.
+        """
+        hostaway_tasks = repository.get_active_hostaway_tasks(tasks=all_tasks)
+
+        escalations_sent = 0
+
+        for task in hostaway_tasks:
+            if not task.hostaway_last_notified_at:
+                continue  # missing tracking field (e.g. task created before this feature existed)
+
+            try:
+                last_notified = datetime.fromisoformat(task.hostaway_last_notified_at)
+            except (ValueError, TypeError):
+                continue
+
+            interval = HOSTAWAY_ESCALATION_INTERVALS.get(task.priority, timedelta(hours=2))
+
+            if now - last_notified >= interval:
+                try:
+                    self.send_push_to_all(
+                        title=f"⏰ {task.task_name}",
+                        body="Ακόμα δεν έχει απαντηθεί.",
+                    )
+                    repository.update_hostaway_last_notified(task.record_id, now.isoformat())
+                    escalations_sent += 1
+                except Exception as e:
+                    logger.error(f"[hostaway escalation] Failed to send for task {task.record_id}: {e}")
+
+        return {"checked": len(hostaway_tasks), "escalations_sent": escalations_sent}
 
     def _maybe_send_daily_summary(self, now: datetime, settings, all_tasks: list[TaskRecord]) -> bool:
         """
