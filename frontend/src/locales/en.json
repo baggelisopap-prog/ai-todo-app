@@ -81,6 +81,7 @@
   },
   "task": {
     "no_date": "No date",
+    "received_at": "Received {{time}}",
     "pending": "Pending",
     "pending_approval": "Pending approval",
     "mark_complete": "Mark complete",

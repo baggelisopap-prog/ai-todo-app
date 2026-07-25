@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { deleteTask } from '../api';
-import { formatDate } from '../utils/formatDate';
+import { formatDate, roundToNearestHalfHour } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import CustomSelect from './CustomSelect';
 
@@ -345,6 +345,11 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                       style={{ backgroundColor: categoryColor(task.category) }}
                     />
                     {task.category}
+                  </span>
+                )}
+                {task.category === 'Hostaway' && task.hostaway_created_at && (
+                  <span className="text-xs text-[var(--text-muted)]">
+                    {t('task.received_at', { time: roundToNearestHalfHour(task.hostaway_created_at) })}
                   </span>
                 )}
                 {isPending && (

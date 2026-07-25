@@ -21,3 +21,16 @@ export function formatDate(dateStr, timeStr) {
   const dateFormatted = date.toLocaleDateString('en-US', options);
   return timeStr ? `${dateFormatted}, ${timeStr}` : dateFormatted;
 }
+
+/**
+ * Rounds an ISO timestamp to the nearest half-hour for display purposes
+ * (e.g. 14:12 -> 14:00, 14:18 -> 14:30). Display-only — never use this to
+ * derive a value that gets written back to the backend.
+ */
+export function roundToNearestHalfHour(isoString) {
+  if (!isoString) return null;
+  const date = new Date(isoString);
+  const halfHourMs = 30 * 60 * 1000;
+  const rounded = new Date(Math.round(date.getTime() / halfHourMs) * halfHourMs);
+  return rounded.toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
