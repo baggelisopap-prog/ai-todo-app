@@ -863,6 +863,7 @@ function ManualCreateModal({ date, time, onClose, onCreate, t }) {
     { value: 'Business', label: t('browse.filter_business') },
     { value: 'Personal', label: t('browse.filter_personal') },
     { value: 'Unknown', label: t('browse.filter_unknown') },
+    { value: 'Hostaway', label: t('browse.filter_hostaway') },
   ];
 
   async function handleSave() {

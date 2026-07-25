@@ -18,6 +18,7 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
       Business: base.filter((t) => t.category === 'Business').length,
       Personal: base.filter((t) => t.category === 'Personal').length,
       Unknown: base.filter((t) => t.category === 'Unknown').length,
+      Hostaway: base.filter((t) => t.category === 'Hostaway').length,
     };
   }, [tasks, showCompleted, showRejected]);
 
@@ -37,6 +38,7 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
     { value: 'Business', labelKey: 'browse.filter_business', accentClass: 'hover:border-[var(--category-business)]/60', selectedClass: 'border-[var(--category-business)] bg-[var(--category-business)]/10' },
     { value: 'Personal', labelKey: 'browse.filter_personal', accentClass: 'hover:border-[var(--category-personal)]/60', selectedClass: 'border-[var(--category-personal)] bg-[var(--category-personal)]/10' },
     { value: 'Unknown', labelKey: 'browse.filter_unknown', accentClass: 'hover:border-[var(--text-secondary)]', selectedClass: 'border-[var(--text-secondary)] bg-[var(--bg-hover)]' },
+    { value: 'Hostaway', labelKey: 'browse.filter_hostaway', accentClass: 'hover:border-[var(--category-hostaway)]/60', selectedClass: 'border-[var(--category-hostaway)] bg-[var(--category-hostaway)]/10' },
   ];
 
   const sortOptions = [
@@ -54,7 +56,7 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
 
       <div className="mb-6 space-y-4">
         {/* Category cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           {categoryOptions.map(({ value, labelKey, accentClass, selectedClass }) => {
             const isSelected = selectedCategory === value;
             return (

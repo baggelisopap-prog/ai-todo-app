@@ -11,6 +11,8 @@ function categoryColor(category) {
       return 'var(--category-business)';
     case 'Personal':
       return 'var(--category-personal)';
+    case 'Hostaway':
+      return 'var(--category-hostaway)';
     default:
       return 'var(--category-unknown)';
   }
@@ -57,6 +59,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
     { value: 'Business', label: t('browse.filter_business') },
     { value: 'Personal', label: t('browse.filter_personal') },
     { value: 'Unknown', label: t('browse.filter_unknown') },
+    { value: 'Hostaway', label: t('browse.filter_hostaway') },
   ];
 
   const priorityOptions = [

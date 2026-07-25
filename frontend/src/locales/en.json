@@ -118,6 +118,7 @@
     "filter_business": "Business",
     "filter_personal": "Personal",
     "filter_unknown": "Unknown",
+    "filter_hostaway": "Hostaway",
     "show_completed": "Show completed",
     "show_rejected": "Show rejected",
     "sort_label": "Sort:",
