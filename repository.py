@@ -1,11 +1,9 @@
 import os
-import json
 import logging
 from datetime import datetime
 from typing import Optional
 from dotenv import load_dotenv
-from pyairtable import Api
-from pyairtable.formulas import match
+from supabase import create_client
 from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings
 
 # Set up module-level logging
@@ -14,161 +12,178 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY")
+
+if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
+    raise RuntimeError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set in .env")
+
+# Single module-level client, reused by every function below. The secret
+# key always bypasses RLS — fine for now since the app is single-user with
+# no auth wiring yet (that's Phase C/D).
+supabase = create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
+
+
+def _get(row: dict, key: str, default=None):
+    """
+    Reads a key from a Supabase row, substituting `default` for both a
+    missing key AND an explicit SQL NULL. Airtable omitted blank fields
+    entirely (so plain dict.get(key, default) was safe there); Supabase
+    always includes every column, with blanks coming back as None — so a
+    bare dict.get default only kicks in for absent keys, not NULLs, and
+    would silently let None through where the rest of the app expects a
+    typed default (e.g. "" or False).
+    """
+    value = row.get(key)
+    return value if value is not None else default
+
+
 class AirtableTaskRepository:
     """
-    Repository layer for managing TaskRecord persistence in Airtable.
-    Handles all translation between Pydantic models and Airtable's specific JSON structure.
+    Repository layer for managing TaskRecord persistence in Supabase.
+
+    Kept the name AirtableTaskRepository (rather than renaming to something
+    like SupabaseTaskRepository) because services.py imports and type-hints
+    against this exact class name — renaming it would ripple into a file
+    this migration is explicitly not supposed to touch. It is now backed by
+    Supabase's Postgres `tasks` table, not Airtable.
     """
 
     def __init__(self):
-        """
-        Initializes the Airtable client and verifies environment configuration.
-        Fails fast with a RuntimeError if required variables are missing.
-        """
-        token = os.getenv("AIRTABLE_TOKEN")
-        base_id = os.getenv("AIRTABLE_BASE_ID")
-        table_id = os.getenv("AIRTABLE_TABLE_ID")
+        # The module-level `supabase` client above already does all the
+        # setup/validation; nothing instance-specific is needed here, but
+        # __init__ is kept so `AirtableTaskRepository()` still works
+        # everywhere it's currently called.
+        logger.info("AirtableTaskRepository initialized (Supabase-backed, table: tasks)")
 
-        if not all([token, base_id, table_id]):
-            raise RuntimeError(
-                "Missing Airtable configuration. Ensure AIRTABLE_TOKEN, AIRTABLE_BASE_ID, "
-                "and AIRTABLE_TABLE_ID are set in your .env file."
-            )
-
-        self.api = Api(token)
-        self.table = self.api.table(base_id, table_id)
-        logger.info(f"AirtableTaskRepository initialized (Base: {base_id}, Table: {table_id})")
-
-    def _task_to_airtable_fields(self, task: TaskRecord) -> dict:
+    def _checklist_to_jsonb(self, checklist) -> list[dict]:
         """
-        Translates a Pydantic TaskRecord into an Airtable-ready fields dictionary.
-        Handles serialization of nested types (like lists to JSON strings).
-        Strips server-generated metadata (record_id, created_time).
+        Normalizes a checklist (list of ChecklistItem models or plain dicts)
+        into a list of plain dicts ready to hand to the Supabase client,
+        which JSON-encodes them into the JSONB column automatically.
         """
-        # Convert Pydantic object to dict
+        return [
+            item if isinstance(item, dict) else item.model_dump()
+            for item in (checklist or [])
+        ]
+
+    def _task_to_supabase_fields(self, task: TaskRecord) -> dict:
+        """
+        Translates a Pydantic TaskRecord into a Supabase-ready fields
+        dictionary. Strips server-generated metadata (record_id,
+        created_time) that the DB manages itself.
+        """
         fields = task.model_dump()
-        
-        # Remove server-generated fields that Airtable will reject if sent
+
+        # Remove server-generated fields Supabase manages itself
         fields.pop("record_id", None)
         fields.pop("created_time", None)
 
-        # Airtable expects lists to be JSON strings if storing in a Long Text field
-        fields["checklist"] = json.dumps(fields.get("checklist", []), ensure_ascii=False)
+        # checklist is a JSONB column now — hand it a plain list of dicts,
+        # no manual JSON string encoding needed.
+        fields["checklist"] = self._checklist_to_jsonb(task.checklist)
 
         return fields
 
-    def _airtable_to_task(self, airtable_record: dict) -> TaskRecord:
+    def _supabase_row_to_task(self, row: dict) -> TaskRecord:
         """
-        Translates a raw Airtable API response dictionary back into a Pydantic TaskRecord.
-        Handles deserialization (JSON strings to lists) and extracts top-level metadata.
+        Translates a raw Supabase row (already a flat dict — no nested
+        "fields" wrapper like Airtable had) back into a Pydantic TaskRecord.
         """
-        fields = airtable_record.get("fields", {})
-        
-        # Extract top-level metadata
-        record_id = airtable_record.get("id")
-        created_time = airtable_record.get("createdTime")
+        record_id = row.get("id")
 
-        # Parse checklist from JSON string back to a Python list
-        raw_checklist = fields.get("checklist")
-        if raw_checklist:
-            try:
-                checklist = json.loads(raw_checklist)
-            except json.JSONDecodeError:
-                logger.error(f"Failed to parse checklist JSON for record {record_id}: {raw_checklist}")
-                checklist = []
-        else:
-            checklist = []
-
-        # Normalize to new format; accept legacy list[str] and new list[dict] transparently
+        # checklist arrives already parsed (JSONB) as a list of dicts/None.
+        # Still normalize defensively to accept legacy list[str] items,
+        # same as the old Airtable path did.
+        raw_checklist = row.get("checklist") or []
         normalized = []
-        for item in checklist:
+        for item in raw_checklist:
             if isinstance(item, str):
                 normalized.append({"text": item, "done": False})
             elif isinstance(item, dict) and "text" in item:
                 normalized.append({"text": item["text"], "done": item.get("done", False)})
         checklist = normalized
 
-        # Enforce strict data integrity on immutable snapshot fields
-        if "ai_suggested_category" not in fields:
+        # Enforce strict data integrity on immutable snapshot fields. Unlike
+        # Airtable (which omits empty fields entirely), Supabase always
+        # includes the key in a `select("*")` row — so the check here is
+        # against a None/missing value, not key absence.
+        if row.get("ai_suggested_category") is None:
             raise ValueError(
                 f"Record {record_id} is missing ai_suggested_category. "
                 "This is a data integrity issue — the field should never be empty."
             )
-        if "ai_suggested_priority" not in fields:
+        if row.get("ai_suggested_priority") is None:
             raise ValueError(
                 f"Record {record_id} is missing ai_suggested_priority. "
                 "This is a data integrity issue — the field should never be empty."
             )
 
-        # Construct the Pydantic object, providing safe defaults for fields Airtable might omit
+        # Construct the Pydantic object, providing safe defaults for fields Supabase might return as null
         return TaskRecord(
-            task_name=fields.get("task_name", ""),
-            description=fields.get("description", ""),
-            category=fields.get("category", "Unknown"),
-            priority=fields.get("priority", "P3"),
-            due_date=fields.get("due_date", None),
-            due_time=fields.get("due_time", None),
+            task_name=_get(row, "task_name", ""),
+            description=_get(row, "description", ""),
+            category=_get(row, "category", "Unknown"),
+            priority=_get(row, "priority", "P3"),
+            due_date=row.get("due_date"),
+            due_time=row.get("due_time"),
             checklist=checklist,
-            approval_status=fields.get("approval_status", False),
-            is_completed=fields.get("is_completed", False),
-            is_rejected=fields.get("is_rejected", False),
-            notify_enabled=fields.get("notify_enabled", False),
-            notification_sent=fields.get("notification_sent", False),
-            ai_suggested_category=fields["ai_suggested_category"],
-            ai_suggested_priority=fields["ai_suggested_priority"],
+            approval_status=_get(row, "approval_status", False),
+            is_completed=_get(row, "is_completed", False),
+            is_rejected=_get(row, "is_rejected", False),
+            notify_enabled=_get(row, "notify_enabled", False),
+            notification_sent=_get(row, "notification_sent", False),
+            ai_suggested_category=row["ai_suggested_category"],
+            ai_suggested_priority=row["ai_suggested_priority"],
             record_id=record_id,
-            created_time=created_time,
-            hostaway_created_at=fields.get("hostaway_created_at", None),
-            hostaway_last_notified_at=fields.get("hostaway_last_notified_at", None),
+            created_time=row.get("created_time"),
+            hostaway_created_at=row.get("hostaway_created_at"),
+            hostaway_last_notified_at=row.get("hostaway_last_notified_at"),
         )
 
     def save_task(self, task: TaskRecord) -> TaskRecord:
         """
-        Creates a new task record in Airtable.
+        Creates a new task record in Supabase.
         Returns a new TaskRecord instance containing the server-generated record_id and created_time.
         """
-        fields_dict = self._task_to_airtable_fields(task)
+        fields_dict = self._task_to_supabase_fields(task)
 
-        # typecast=True lets Airtable match/auto-create select field options
-        # (category, ai_suggested_category) from the plain string values we
-        # send, instead of rejecting anything that isn't an exact pre-existing
-        # option — needed since category and ai_suggested_category are two
-        # independently-configured select fields that must both stay in sync
-        # with models.py's category Literal.
-        response = self.table.create(fields_dict, typecast=True)
-        
-        # Log success
-        logger.info(f"Successfully saved new task to Airtable. Assigned ID: {response.get('id')}")
-        
-        # Return a fresh Pydantic model built from the server response
-        return self._airtable_to_task(response)
+        response = supabase.table("tasks").insert(fields_dict).execute()
+        new_row = response.data[0]
+
+        logger.info(f"Successfully saved new task to Supabase. Assigned ID: {new_row.get('id')}")
+
+        return self._supabase_row_to_task(new_row)
 
     def get_all_tasks(self) -> list[TaskRecord]:
         """
-        Retrieves all task records currently stored in Airtable.
+        Retrieves all task records currently stored in Supabase.
         """
-        records = self.table.all()
-        logger.info(f"Retrieved {len(records)} tasks from Airtable.")
-        return [self._airtable_to_task(record) for record in records]
+        response = supabase.table("tasks").select("*").execute()
+        rows = response.data
+        logger.info(f"Retrieved {len(rows)} tasks from Supabase.")
+        return [self._supabase_row_to_task(row) for row in rows]
 
     def get_task(self, record_id: str) -> Optional[TaskRecord]:
         """
-        Retrieves a single task by its Airtable record_id.
+        Retrieves a single task by its Supabase record_id (UUID).
         Returns None if the record does not exist.
         """
         try:
-            record = self.table.get(record_id)
-            return self._airtable_to_task(record)
+            response = supabase.table("tasks").select("*").eq("id", record_id).execute()
+            if not response.data:
+                return None
+            return self._supabase_row_to_task(response.data[0])
         except Exception as e:
-            # Catching a broad exception here because pyairtable's specific HTTP error classes 
-            # can vary, and our requirement is strictly "return None if not found/failed".
+            # Catching a broad exception here since our requirement is
+            # strictly "return None if not found/failed".
             logger.warning(f"Failed to retrieve task with ID {record_id}: {e}")
             return None
 
     def update_task(self, record_id: str, updates: dict) -> TaskRecord:
         """
-        Updates specific fields on an existing Airtable task.
-        Applies data mapping (like JSON encoding) to the update dictionary before sending.
+        Updates specific fields on an existing Supabase task.
+        Applies data mapping (like checklist normalization) to the update dictionary before sending.
         Returns the fully updated TaskRecord.
         """
         # Work on a copy so we don't mutate the caller's dict
@@ -186,74 +201,39 @@ class AirtableTaskRepository:
 
         # Apply data mapping rules to the partial update dictionary
         if "checklist" in mapped_updates:
-            serializable = [
-                item if isinstance(item, dict) else item.model_dump()
-                for item in mapped_updates["checklist"]
-            ]
-            mapped_updates["checklist"] = json.dumps(serializable, ensure_ascii=False)
-            
+            mapped_updates["checklist"] = self._checklist_to_jsonb(mapped_updates["checklist"])
+
         # Prevent accidental overwrites of read-only fields
         mapped_updates.pop("record_id", None)
         mapped_updates.pop("created_time", None)
 
-        response = self.table.update(record_id, mapped_updates, typecast=True)
+        response = supabase.table("tasks").update(mapped_updates).eq("id", record_id).execute()
 
-        logger.info(f"Successfully updated task in Airtable. ID: {record_id}")
-        return self._airtable_to_task(response)
+        logger.info(f"Successfully updated task in Supabase. ID: {record_id}")
+        return self._supabase_row_to_task(response.data[0])
 
     def delete_task(self, record_id: str) -> bool:
         """
-        Permanently deletes a task from Airtable.
+        Permanently deletes a task from Supabase.
         Returns True if deletion succeeded.
         Raises an exception on failure (network, not found, etc.).
         """
-        response = self.table.delete(record_id)
-        logger.info(f"Successfully deleted task from Airtable. ID: {record_id}")
-        return response.get("deleted", False)
+        response = supabase.table("tasks").delete().eq("id", record_id).execute()
+        logger.info(f"Successfully deleted task from Supabase. ID: {record_id}")
+        return bool(response.data)
 
 
 # --- Push subscriptions ---
-# Mirrors AirtableTaskRepository's connection pattern (same Base, different
-# Table), but as module-level functions since push subscriptions don't need
-# the heavier field-mapping logic tasks do.
-
-_push_subscriptions_table = None
+# Module-level functions since push subscriptions don't need the heavier
+# field-mapping logic tasks do.
 
 
-def _get_push_subscriptions_table():
-    """
-    Lazily initializes and caches the Airtable Table client for push
-    subscriptions. Fails fast with a RuntimeError if required env vars
-    are missing.
-    """
-    global _push_subscriptions_table
-    if _push_subscriptions_table is not None:
-        return _push_subscriptions_table
-
-    token = os.getenv("AIRTABLE_TOKEN")
-    base_id = os.getenv("AIRTABLE_BASE_ID")
-    table_id = os.getenv("PUSH_SUBSCRIPTIONS_TABLE_ID")
-
-    if not all([token, base_id, table_id]):
-        raise RuntimeError(
-            "Missing Airtable configuration for push subscriptions. Ensure "
-            "AIRTABLE_TOKEN, AIRTABLE_BASE_ID, and PUSH_SUBSCRIPTIONS_TABLE_ID "
-            "are set in your .env file."
-        )
-
-    api = Api(token)
-    _push_subscriptions_table = api.table(base_id, table_id)
-    logger.info(f"Push subscriptions table initialized (Base: {base_id}, Table: {table_id})")
-    return _push_subscriptions_table
-
-
-def _airtable_to_push_subscription(record: dict) -> PushSubscriptionRecord:
-    fields = record.get("fields", {})
+def _supabase_row_to_push_subscription(row: dict) -> PushSubscriptionRecord:
     return PushSubscriptionRecord(
-        record_id=record.get("id"),
-        endpoint=fields.get("endpoint", ""),
-        p256dh=fields.get("p256dh", ""),
-        auth=fields.get("auth", ""),
+        record_id=row.get("id"),
+        endpoint=_get(row, "endpoint", ""),
+        p256dh=_get(row, "p256dh", ""),
+        auth=_get(row, "auth", ""),
     )
 
 
@@ -263,89 +243,81 @@ def save_push_subscription(subscription: PushSubscriptionRequest) -> PushSubscri
     unique per browser installation). If a record with this endpoint already
     exists, update its keys; otherwise create a new record.
     """
-    table = _get_push_subscriptions_table()
-
     fields = {
         "endpoint": subscription.endpoint,
         "p256dh": subscription.keys.p256dh,
         "auth": subscription.keys.auth,
     }
 
-    existing = table.first(formula=match({"endpoint": subscription.endpoint}))
-    if existing:
-        response = table.update(existing["id"], fields)
-        logger.info(f"Updated existing push subscription. ID: {response.get('id')}")
+    existing = (
+        supabase.table("push_subscriptions")
+        .select("id")
+        .eq("endpoint", subscription.endpoint)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        response = (
+            supabase.table("push_subscriptions")
+            .update(fields)
+            .eq("id", existing.data[0]["id"])
+            .execute()
+        )
+        logger.info(f"Updated existing push subscription. ID: {response.data[0].get('id')}")
     else:
-        response = table.create(fields)
-        logger.info(f"Created new push subscription. ID: {response.get('id')}")
+        response = supabase.table("push_subscriptions").insert(fields).execute()
+        logger.info(f"Created new push subscription. ID: {response.data[0].get('id')}")
 
-    return _airtable_to_push_subscription(response)
+    return _supabase_row_to_push_subscription(response.data[0])
 
 
 def list_push_subscriptions() -> list[PushSubscriptionRecord]:
     """Returns all stored push subscriptions."""
-    table = _get_push_subscriptions_table()
-    records = table.all()
-    return [_airtable_to_push_subscription(record) for record in records]
+    response = supabase.table("push_subscriptions").select("*").execute()
+    return [_supabase_row_to_push_subscription(row) for row in response.data]
 
 
 def delete_push_subscription(endpoint: str) -> None:
     """Removes a subscription by endpoint (used when a push fails permanently, e.g. 404/410)."""
-    table = _get_push_subscriptions_table()
-    existing = table.first(formula=match({"endpoint": endpoint}))
-    if existing:
-        table.delete(existing["id"])
-        logger.info(f"Deleted stale push subscription. ID: {existing['id']}")
+    existing = (
+        supabase.table("push_subscriptions")
+        .select("id")
+        .eq("endpoint", endpoint)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        record_id = existing.data[0]["id"]
+        supabase.table("push_subscriptions").delete().eq("id", record_id).execute()
+        logger.info(f"Deleted stale push subscription. ID: {record_id}")
 
 
 # --- App settings ---
-# Single-record table holding app-wide toggles (currently just the
-# notifications master switch). Mirrors the push subscriptions connection
-# pattern above.
-
-_app_settings_table = None
-
-
-def _get_app_settings_table():
-    global _app_settings_table
-    if _app_settings_table is not None:
-        return _app_settings_table
-
-    token = os.getenv("AIRTABLE_TOKEN")
-    base_id = os.getenv("AIRTABLE_BASE_ID")
-    table_id = os.getenv("APP_SETTINGS_TABLE_ID")
-
-    if not all([token, base_id, table_id]):
-        raise RuntimeError(
-            "Missing Airtable configuration for app settings. Ensure "
-            "AIRTABLE_TOKEN, AIRTABLE_BASE_ID, and APP_SETTINGS_TABLE_ID "
-            "are set in your .env file."
-        )
-
-    api = Api(token)
-    _app_settings_table = api.table(base_id, table_id)
-    logger.info(f"App settings table initialized (Base: {base_id}, Table: {table_id})")
-    return _app_settings_table
+# Single-record table holding app-wide toggles. Always targets the oldest
+# existing row (ordered by created_at) as the canonical singleton, which
+# also fixes the old duplication bug going forward: every write now
+# consistently updates that one row instead of sometimes inserting a new
+# one.
 
 
 def get_app_settings() -> AppSettings:
     """
-    Reads the single app_settings record. If no record exists yet (first
-    run), returns default settings without creating a row — the row gets
-    created on first write via update_app_settings.
+    Reads the single app_settings record (oldest by created_at). If no
+    record exists yet (first run), returns default settings without
+    creating a row — the row gets created on first write via
+    update_app_settings.
     """
-    table = _get_app_settings_table()
-    records = table.all(max_records=1)
-    if not records:
+    response = supabase.table("app_settings").select("*").order("created_at").limit(1).execute()
+    if not response.data:
         return AppSettings()
-    fields = records[0].get("fields", {})
+    row = response.data[0]
     return AppSettings(
-        notifications_enabled=fields.get("notifications_enabled", True),
-        send_all_enabled=fields.get("send_all_enabled", True),
-        daily_summary_enabled=fields.get("daily_summary_enabled", False),
-        daily_summary_mode=fields.get("daily_summary_mode", "fixed_time"),
-        daily_summary_time=fields.get("daily_summary_time", "08:00"),
-        daily_summary_last_sent_date=fields.get("daily_summary_last_sent_date", ""),
+        notifications_enabled=_get(row, "notifications_enabled", True),
+        send_all_enabled=_get(row, "send_all_enabled", True),
+        daily_summary_enabled=_get(row, "daily_summary_enabled", False),
+        daily_summary_mode=_get(row, "daily_summary_mode", "fixed_time"),
+        daily_summary_time=_get(row, "daily_summary_time", "08:00"),
+        daily_summary_last_sent_date=_get(row, "daily_summary_last_sent_date", ""),
     )
 
 
@@ -361,8 +333,6 @@ def update_app_settings(
     NOT touch daily_summary_last_sent_date — that's scheduler-internal
     bookkeeping written separately by update_daily_summary_last_sent_date.
     """
-    table = _get_app_settings_table()
-    records = table.all(max_records=1)
     fields = {
         "notifications_enabled": notifications_enabled,
         "send_all_enabled": send_all_enabled,
@@ -370,10 +340,11 @@ def update_app_settings(
         "daily_summary_mode": daily_summary_mode,
         "daily_summary_time": daily_summary_time,
     }
-    if records:
-        table.update(records[0]["id"], fields)
+    existing = supabase.table("app_settings").select("id").order("created_at").limit(1).execute()
+    if existing.data:
+        supabase.table("app_settings").update(fields).eq("id", existing.data[0]["id"]).execute()
     else:
-        table.create(fields)
+        supabase.table("app_settings").insert(fields).execute()
     return AppSettings(
         notifications_enabled=notifications_enabled,
         send_all_enabled=send_all_enabled,
@@ -384,9 +355,9 @@ def update_app_settings(
 
 
 # --- Notification scheduler queries ---
-# Reuses AirtableTaskRepository (same Base/Table as the main task CRUD
-# path) via a lazily-cached instance, so field parsing stays identical to
-# the rest of the app instead of duplicating _airtable_to_task here.
+# Reuses AirtableTaskRepository (same underlying `tasks` table) via a
+# lazily-cached instance, so row parsing stays identical to the rest of the
+# app instead of duplicating _supabase_row_to_task here.
 
 _tasks_repo_for_scheduler = None
 
@@ -402,7 +373,7 @@ def get_all_tasks_for_scheduler() -> list[TaskRecord]:
     """
     Fetches the full task list once per scheduler tick, so both the
     per-task reminder check and the daily summary check can filter the
-    same list in Python instead of each doing their own Airtable scan.
+    same list in Python instead of each doing their own table scan.
     """
     repo = _get_tasks_repo_for_scheduler()
     return repo.get_all_tasks()
@@ -424,10 +395,10 @@ def get_tasks_due_for_notification(
     skipped — used when the "send all" scope setting is on, so every
     eligible timed task gets reminded regardless of its bell state.
 
-    Filtered in Python rather than via an Airtable formula — due_date and
+    Filtered in Python rather than via a DB-side query — due_date and
     due_time are separate text fields, and at this app's scale a full
     table scan per scheduler run (every ~5 minutes) is simple and cheap
-    enough not to need formula-level filtering. Pass a pre-fetched `tasks`
+    enough not to need query-level filtering. Pass a pre-fetched `tasks`
     list (e.g. from get_all_tasks_for_scheduler) to avoid a second scan;
     omit it to fetch fresh.
     """
@@ -455,15 +426,14 @@ def get_tasks_due_for_notification(
 
 def mark_notification_sent(record_id: str) -> None:
     """Sets notification_sent = True for a task."""
-    repo = _get_tasks_repo_for_scheduler()
-    repo.table.update(record_id, {"notification_sent": True})
+    supabase.table("tasks").update({"notification_sent": True}).eq("id", record_id).execute()
 
 
 def get_active_hostaway_tasks(tasks: Optional[list[TaskRecord]] = None) -> list[TaskRecord]:
     """
     Returns all not-completed, not-rejected category="Hostaway" tasks —
     the candidate set for escalation re-notification. Pass a pre-fetched
-    `tasks` list to avoid a second Airtable scan; omit it to fetch fresh.
+    `tasks` list to avoid a second table scan; omit it to fetch fresh.
     """
     all_tasks = tasks if tasks is not None else get_all_tasks_for_scheduler()
     return [
@@ -474,8 +444,7 @@ def get_active_hostaway_tasks(tasks: Optional[list[TaskRecord]] = None) -> list[
 
 def update_hostaway_last_notified(record_id: str, last_notified_at: str) -> None:
     """Updates hostaway_last_notified_at on a task record."""
-    repo = _get_tasks_repo_for_scheduler()
-    repo.table.update(record_id, {"hostaway_last_notified_at": last_notified_at})
+    supabase.table("tasks").update({"hostaway_last_notified_at": last_notified_at}).eq("id", record_id).execute()
 
 
 def get_tasks_for_date(
@@ -486,7 +455,7 @@ def get_tasks_for_date(
     is_rejected=False) with due_date == date_str, regardless of whether
     they have a due_time — used for the daily summary listing, which
     includes all-day tasks too. Pass a pre-fetched `tasks` list to avoid
-    a second Airtable scan.
+    a second table scan.
     """
     all_tasks = tasks if tasks is not None else get_all_tasks_for_scheduler()
     return [
@@ -515,49 +484,22 @@ def get_first_task_datetime_today(
 
 def update_daily_summary_last_sent_date(date_str: str) -> None:
     """Upserts daily_summary_last_sent_date on the single app_settings record."""
-    table = _get_app_settings_table()
-    records = table.all(max_records=1)
     fields = {"daily_summary_last_sent_date": date_str}
-    if records:
-        table.update(records[0]["id"], fields)
+    existing = supabase.table("app_settings").select("id").order("created_at").limit(1).execute()
+    if existing.data:
+        supabase.table("app_settings").update(fields).eq("id", existing.data[0]["id"]).execute()
     else:
-        table.create(fields)
+        supabase.table("app_settings").insert(fields).execute()
 
 
 # --- Token usage log ---
 # Tracks per-call Gemini token usage for the developer-only usage/cost
-# dashboard. Mirrors the push subscriptions/app settings connection pattern
-# (own Table ID env var, same Base).
-
-_token_usage_table = None
-
-
-def _get_token_usage_table():
-    global _token_usage_table
-    if _token_usage_table is not None:
-        return _token_usage_table
-
-    token = os.getenv("AIRTABLE_TOKEN")
-    base_id = os.getenv("AIRTABLE_BASE_ID")
-    table_id = os.getenv("TOKEN_USAGE_TABLE_ID")
-
-    if not all([token, base_id, table_id]):
-        raise RuntimeError(
-            "Missing Airtable configuration for token usage logging. Ensure "
-            "AIRTABLE_TOKEN, AIRTABLE_BASE_ID, and TOKEN_USAGE_TABLE_ID "
-            "are set in your .env file."
-        )
-
-    api = Api(token)
-    _token_usage_table = api.table(base_id, table_id)
-    logger.info(f"Token usage table initialized (Base: {base_id}, Table: {table_id})")
-    return _token_usage_table
+# dashboard.
 
 
 def save_token_usage_log(call_type: str, timestamp: str, prompt_tokens: int, output_tokens: int, thinking_tokens: int, total_tokens: int, model: str = "gemini-3.5-flash") -> None:
-    """Appends a row to the token_usage_log Airtable table, including which model was used."""
-    table = _get_token_usage_table()
-    table.create({
+    """Appends a row to the token_usage_log Supabase table, including which model was used."""
+    supabase.table("token_usage_log").insert({
         "call_type": call_type,
         "timestamp": timestamp,
         "prompt_tokens": prompt_tokens,
@@ -565,7 +507,7 @@ def save_token_usage_log(call_type: str, timestamp: str, prompt_tokens: int, out
         "thinking_tokens": thinking_tokens,
         "total_tokens": total_tokens,
         "model": model,
-    })
+    }).execute()
 
 
 def get_all_token_usage_logs() -> list[dict]:
@@ -573,17 +515,16 @@ def get_all_token_usage_logs() -> list[dict]:
     call_type, timestamp, prompt_tokens, output_tokens, thinking_tokens, total_tokens, model.
     Rows logged before the model field existed default to 'gemini-3.5-flash' so
     historical cost estimates don't break."""
-    table = _get_token_usage_table()
-    records = table.all()
+    response = supabase.table("token_usage_log").select("*").execute()
     return [
         {
-            "call_type": r["fields"].get("call_type", ""),
-            "timestamp": r["fields"].get("timestamp", ""),
-            "prompt_tokens": r["fields"].get("prompt_tokens", 0),
-            "output_tokens": r["fields"].get("output_tokens", 0),
-            "thinking_tokens": r["fields"].get("thinking_tokens", 0),
-            "total_tokens": r["fields"].get("total_tokens", 0),
-            "model": r["fields"].get("model", "gemini-3.5-flash"),
+            "call_type": _get(r, "call_type", ""),
+            "timestamp": _get(r, "timestamp", ""),
+            "prompt_tokens": _get(r, "prompt_tokens", 0),
+            "output_tokens": _get(r, "output_tokens", 0),
+            "thinking_tokens": _get(r, "thinking_tokens", 0),
+            "total_tokens": _get(r, "total_tokens", 0),
+            "model": _get(r, "model", "gemini-3.5-flash"),
         }
-        for r in records
+        for r in response.data
     ]
