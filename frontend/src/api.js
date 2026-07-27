@@ -1,7 +1,27 @@
 // Centralized API client. All backend HTTP calls go through this file.
 // If the backend URL or auth requirements change, update here only.
 
+import { supabase } from './supabaseClient';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+/**
+ * Attaches the current Supabase session's access token (if any) as a
+ * Bearer Authorization header, then performs a normal fetch. Every
+ * backend call in this file goes through this instead of raw fetch, since
+ * every user-facing endpoint now requires a valid token.
+ */
+async function authenticatedFetch(url, options = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const headers = {
+    ...options.headers,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  return fetch(url, { ...options, headers });
+}
 
 /**
  * Generic helper for HTTP requests. Handles JSON encoding, error responses,
@@ -16,7 +36,7 @@ async function request(path, options = {}) {
 
   let response;
   try {
-    response = await fetch(url, config);
+    response = await authenticatedFetch(url, config);
   } catch (error) {
     // Network failure (server down, no internet, CORS misconfigured)
     throw new Error(`Network error: ${error.message}`);
@@ -75,7 +95,7 @@ export async function extractTasksFromAudio(audioBlob) {
 
   let response;
   try {
-    response = await fetch(`${API_BASE_URL}/extract-voice`, {
+    response = await authenticatedFetch(`${API_BASE_URL}/extract-voice`, {
       method: 'POST',
       body: formData,
       // No Content-Type header — the browser sets it with the correct multipart boundary
@@ -113,7 +133,7 @@ export async function extractTasksFromImage(imageBlob, context = '') {
 
   let response;
   try {
-    response = await fetch(`${API_BASE_URL}/extract-image`, {
+    response = await authenticatedFetch(`${API_BASE_URL}/extract-image`, {
       method: 'POST',
       body: formData,
     });
@@ -162,7 +182,7 @@ export async function updateTask(recordId, updates) {
  * Returns void on success (204 No Content).
  */
 export async function deleteTask(recordId) {
-  const response = await fetch(`${API_BASE_URL}/tasks/${recordId}`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/tasks/${recordId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {

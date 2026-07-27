@@ -7,6 +7,7 @@ import {
   subscribeToPush,
 } from '../utils/notifications';
 import { registerPushSubscription, getAppSettings, updateAppSettings, getTokenUsage } from '../api';
+import { supabase } from '../supabaseClient';
 
 const SETTINGS_CATEGORIES = [
   { id: 'notifications', labelKey: 'settings.category_notifications', icon: BellIcon },
@@ -142,6 +143,12 @@ export function SettingsModal({ onClose }) {
                 </button>
               );
             })}
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="w-full text-left px-3 py-3 rounded-md hover:bg-[var(--bg-hover)] text-red-600"
+            >
+              {t('auth.sign_out')}
+            </button>
           </div>
         )}
 

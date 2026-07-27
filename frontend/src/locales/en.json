@@ -191,5 +191,26 @@
     "send": "Send",
     "thinking": "Thinking...",
     "error": "Something went wrong. Please try again."
+  },
+  "auth": {
+    "log_in": "Log In",
+    "sign_up": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "loading": "Loading...",
+    "have_account": "Already have an account? Log in",
+    "no_account": "Don't have an account? Sign up",
+    "or": "or",
+    "google_signin": "Sign in with Google",
+    "sign_out": "Sign Out",
+    "verify_title": "Check your email",
+    "check_email": "We sent a verification code to {{email}}",
+    "enter_code": "Enter code",
+    "verify": "Verify",
+    "back_to_login": "Back to login",
+    "confirm_password": "Confirm password",
+    "password_mismatch": "Passwords don't match",
+    "show_password": "Show password",
+    "hide_password": "Hide password"
   }
 }

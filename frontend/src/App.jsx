@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAllTasks, updateTask } from './api';
+import { supabase } from './supabaseClient';
+import { LoginScreen } from './components/LoginScreen';
 import BottomNav from './components/BottomNav';
 import InboxView from './components/InboxView';
 import TodayView from './components/TodayView';
@@ -28,7 +30,28 @@ function App() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [toast, setToast] = useState(null); // { message, variant, action?, duration? }
 
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // Only fetch once a session exists — before that, the backend would
+    // just reject the request with 401 since every /tasks* endpoint now
+    // requires a valid auth token.
+    if (!session) return;
+
     async function loadTasks() {
       try {
         setIsLoading(true);
@@ -42,7 +65,7 @@ function App() {
       }
     }
     loadTasks();
-  }, []);
+  }, [session]);
 
   // Notification-tap navigation: the app opened fresh via a deep link
   // (?view=...) from the service worker's notificationclick handler, or
@@ -139,6 +162,17 @@ function App() {
     onTaskDeleted: handleTaskDeleted,
     onShowToast: handleShowToast,
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-[var(--text-muted)] text-sm italic">
+        {t('auth.loading')}
+      </div>
+    );
+  }
+  if (!session) {
+    return <LoginScreen />;
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">

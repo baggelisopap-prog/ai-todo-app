@@ -17,13 +17,14 @@ Interactive docs: http://localhost:8000/docs
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings
 from services import TaskService
 from repository import save_push_subscription, get_app_settings, update_app_settings
+from auth import get_current_user_id
 import agent_engine
 import hostaway_integration
 import token_tracker
@@ -129,7 +130,7 @@ async def health_check():
     return HealthResponse(status="ok", service="ai-todo-app")
 
 @app.post("/extract", response_model=ExtractResponse, status_code=status.HTTP_201_CREATED)
-async def extract_and_save_tasks(request: ExtractRequest):
+async def extract_and_save_tasks(request: ExtractRequest, user_id: str = Depends(get_current_user_id)):
     """
     Extract tasks from natural language text and save them to the database.
     Returns the saved tasks with their assigned record_ids.
@@ -159,7 +160,7 @@ async def extract_and_save_tasks(request: ExtractRequest):
         )
 
 @app.post("/extract-voice", response_model=ExtractResponse, status_code=status.HTTP_201_CREATED)
-async def extract_voice(audio: UploadFile = File(...)):
+async def extract_voice(audio: UploadFile = File(...), user_id: str = Depends(get_current_user_id)):
     """
     Extract tasks from an audio recording and save them to the database.
     Accepts any audio/* MIME type up to 10 MB. Audio is processed in memory and never stored.
@@ -205,7 +206,7 @@ async def extract_voice(audio: UploadFile = File(...)):
 
 
 @app.post("/extract-image", response_model=ExtractResponse, status_code=status.HTTP_201_CREATED)
-async def extract_image(image: UploadFile = File(...), context: str = Form(None)):
+async def extract_image(image: UploadFile = File(...), context: str = Form(None), user_id: str = Depends(get_current_user_id)):
     """
     Extract tasks from an image and save them to the database.
     Accepts any image/* MIME type up to 10 MB. Image is processed in memory and never stored.
@@ -252,7 +253,7 @@ async def extract_image(image: UploadFile = File(...), context: str = Form(None)
 
 
 @app.get("/tasks", response_model=TasksListResponse, status_code=status.HTTP_200_OK)
-async def list_tasks():
+async def list_tasks(user_id: str = Depends(get_current_user_id)):
     """Retrieve all tasks from the database."""
     try:
         tasks = service.get_all_tasks()
@@ -265,7 +266,7 @@ async def list_tasks():
         )
 
 @app.post("/tasks", response_model=TaskRecord, status_code=status.HTTP_201_CREATED)
-async def create_task_manual(request: CreateTaskRequest):
+async def create_task_manual(request: CreateTaskRequest, user_id: str = Depends(get_current_user_id)):
     """
     Create a task manually without AI extraction. Used when the user
     knows exactly what they want (e.g., clicking a specific time slot).
@@ -287,7 +288,7 @@ async def create_task_manual(request: CreateTaskRequest):
         )
 
 @app.patch("/tasks/{record_id}", response_model=TaskRecord, status_code=status.HTTP_200_OK)
-async def update_task(record_id: str, request: UpdateTaskRequest):
+async def update_task(record_id: str, request: UpdateTaskRequest, user_id: str = Depends(get_current_user_id)):
     """
     Update specific fields on an existing task.
     Only fields included in the request body will be updated.
@@ -314,7 +315,7 @@ async def update_task(record_id: str, request: UpdateTaskRequest):
         )
 
 @app.delete("/tasks/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_task(record_id: str):
+async def delete_task(record_id: str, user_id: str = Depends(get_current_user_id)):
     """
     Permanently delete a task. Returns 204 No Content on success.
     This is a HARD delete — the record is gone from Airtable.
@@ -331,7 +332,7 @@ async def delete_task(record_id: str):
 
 
 @app.post("/push/subscribe", status_code=status.HTTP_201_CREATED)
-async def subscribe_push(subscription: PushSubscriptionRequest):
+async def subscribe_push(subscription: PushSubscriptionRequest, user_id: str = Depends(get_current_user_id)):
     """
     Registers (or updates) a browser's push subscription so the backend
     can send it Web Push notifications even when the app is closed.
@@ -377,7 +378,7 @@ async def run_scheduler(secret: str):
 
 
 @app.get("/settings", response_model=AppSettings)
-async def get_settings():
+async def get_settings(user_id: str = Depends(get_current_user_id)):
     """Returns the current app-wide settings (notifications, send-all scope, daily summary)."""
     try:
         return get_app_settings()
@@ -387,7 +388,7 @@ async def get_settings():
 
 
 @app.patch("/settings", response_model=AppSettings)
-async def update_settings(payload: AppSettings):
+async def update_settings(payload: AppSettings, user_id: str = Depends(get_current_user_id)):
     """Updates the notifications master toggle, send-all scope, and daily summary settings."""
     try:
         return update_app_settings(
@@ -403,7 +404,7 @@ async def update_settings(payload: AppSettings):
 
 
 @app.post("/agent/query", response_model=AgentQueryResponse)
-async def agent_query(request: AgentQueryRequest):
+async def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_current_user_id)):
     """
     Answers a natural-language question about the user's tasks via the
     read-only AI agent in agent_engine.py. Isolated from the task
@@ -519,6 +520,6 @@ async def hostaway_webhook(request: Request):
 
 
 @app.get("/dev/token-usage")
-async def dev_token_usage():
-    """Developer-only: not linked from main navigation, no auth (personal app)."""
+async def dev_token_usage(user_id: str = Depends(get_current_user_id)):
+    """Developer-only: not linked from main navigation. Now gated behind login like every other user-facing endpoint."""
     return token_tracker.get_usage_summary()
