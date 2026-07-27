@@ -48,7 +48,7 @@ When extracting tasks:
 # ==========================================
 # EXTRACTION ENGINE
 # ==========================================
-def extract_tasks(raw_input: str) -> Optional[TaskList]:
+def extract_tasks(raw_input: str, user_id: str) -> Optional[TaskList]:
     """
     Extracts structured task data from unstructured text.
 
@@ -88,14 +88,14 @@ def extract_tasks(raw_input: str) -> Optional[TaskList]:
             if not response or not response.text:
                 logging.warning(f"Attempt {attempt + 1}: Received empty response from model.")
                 if response is not None:
-                    token_tracker.log_token_usage("extract_text_empty_attempt", response.usage_metadata)
+                    token_tracker.log_token_usage("extract_text_empty_attempt", response.usage_metadata, user_id=user_id)
                 # Don't wait on the final attempt
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
                 continue
 
             response_text = response.text
-            token_tracker.log_token_usage("extract_text", response.usage_metadata)
+            token_tracker.log_token_usage("extract_text", response.usage_metadata, user_id=user_id)
 
             # Parse and Validate with Pydantic
             try:
@@ -157,7 +157,7 @@ def extract_tasks(raw_input: str) -> Optional[TaskList]:
     return None
 
 
-def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str) -> Optional[TaskList]:
+def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str, user_id: str) -> Optional[TaskList]:
     """
     Extracts structured task data from an audio recording via Gemini multimodal input.
     Audio is sent inline and never stored to disk.
@@ -196,13 +196,13 @@ def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str) -> Optional[Tas
             if not response or not response.text:
                 logging.warning(f"Attempt {attempt + 1}: Received empty response from model.")
                 if response is not None:
-                    token_tracker.log_token_usage("extract_voice_empty_attempt", response.usage_metadata)
+                    token_tracker.log_token_usage("extract_voice_empty_attempt", response.usage_metadata, user_id=user_id)
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
                 continue
 
             response_text = response.text
-            token_tracker.log_token_usage("extract_voice", response.usage_metadata)
+            token_tracker.log_token_usage("extract_voice", response.usage_metadata, user_id=user_id)
 
             # Parse and Validate with Pydantic
             try:
@@ -253,7 +253,7 @@ def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str) -> Optional[Tas
     return None
 
 
-def extract_tasks_from_image(image_bytes: bytes, mime_type: str, additional_context: str = None) -> Optional[TaskList]:
+def extract_tasks_from_image(image_bytes: bytes, mime_type: str, user_id: str, additional_context: str = None) -> Optional[TaskList]:
     """
     Extracts structured task data from an image via Gemini multimodal input.
     Image is sent inline and never stored to disk.
@@ -296,13 +296,13 @@ def extract_tasks_from_image(image_bytes: bytes, mime_type: str, additional_cont
             if not response or not response.text:
                 logging.warning(f"Attempt {attempt + 1}: Received empty response from model.")
                 if response is not None:
-                    token_tracker.log_token_usage("extract_image_empty_attempt", response.usage_metadata)
+                    token_tracker.log_token_usage("extract_image_empty_attempt", response.usage_metadata, user_id=user_id)
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
                 continue
 
             response_text = response.text
-            token_tracker.log_token_usage("extract_image", response.usage_metadata)
+            token_tracker.log_token_usage("extract_image", response.usage_metadata, user_id=user_id)
 
             # Parse and Validate with Pydantic
             try:

@@ -142,7 +142,7 @@ async def extract_and_save_tasks(request: ExtractRequest, user_id: str = Depends
         )
     
     try:
-        saved_tasks = service.extract_and_save(request.text)
+        saved_tasks = service.extract_and_save(request.text, user_id=user_id)
         return ExtractResponse(saved_tasks=saved_tasks, count=len(saved_tasks))
     except RuntimeError as e:
         # Service raises RuntimeError when extraction fails or all saves fail
@@ -189,6 +189,7 @@ async def extract_voice(audio: UploadFile = File(...), user_id: str = Depends(ge
         saved_tasks = service.extract_and_save_from_audio(
             audio_bytes=audio_bytes,
             mime_type=audio.content_type,
+            user_id=user_id,
         )
         return ExtractResponse(saved_tasks=saved_tasks, count=len(saved_tasks))
     except RuntimeError as e:
@@ -235,6 +236,7 @@ async def extract_image(image: UploadFile = File(...), context: str = Form(None)
         saved_tasks = service.extract_and_save_from_image(
             image_bytes=image_bytes,
             mime_type=image.content_type,
+            user_id=user_id,
             additional_context=context,
         )
         return ExtractResponse(saved_tasks=saved_tasks, count=len(saved_tasks))
@@ -256,7 +258,7 @@ async def extract_image(image: UploadFile = File(...), context: str = Form(None)
 async def list_tasks(user_id: str = Depends(get_current_user_id)):
     """Retrieve all tasks from the database."""
     try:
-        tasks = service.get_all_tasks()
+        tasks = service.get_all_tasks(user_id)
         return TasksListResponse(tasks=tasks, count=len(tasks))
     except Exception as e:
         logger.exception("Failed to retrieve tasks")
@@ -278,7 +280,7 @@ async def create_task_manual(request: CreateTaskRequest, user_id: str = Depends(
         )
 
     try:
-        saved = service.create_task_manual(request.model_dump())
+        saved = service.create_task_manual(user_id, request.model_dump())
         return saved
     except Exception as e:
         logger.exception("Failed to create task manually")
@@ -303,7 +305,7 @@ async def update_task(record_id: str, request: UpdateTaskRequest, user_id: str =
         )
     
     try:
-        updated_task = service.update_task(record_id, updates)
+        updated_task = service.update_task(user_id, record_id, updates)
         return updated_task
     except Exception as e:
         # We can't easily distinguish "not found" from "network error" with current repository
@@ -322,7 +324,7 @@ async def delete_task(record_id: str, user_id: str = Depends(get_current_user_id
     For soft delete (preserves data for AI learning), use PATCH with is_rejected=true.
     """
     try:
-        service.delete_task(record_id)
+        service.delete_task(user_id, record_id)
     except Exception as e:
         logger.exception(f"Failed to delete task {record_id}")
         raise HTTPException(
@@ -338,7 +340,7 @@ async def subscribe_push(subscription: PushSubscriptionRequest, user_id: str = D
     can send it Web Push notifications even when the app is closed.
     """
     try:
-        record = save_push_subscription(subscription)
+        record = save_push_subscription(user_id, subscription)
         return {"status": "subscribed", "record_id": record.record_id}
     except Exception as e:
         logger.exception("Failed to save push subscription")
@@ -346,13 +348,18 @@ async def subscribe_push(subscription: PushSubscriptionRequest, user_id: str = D
 
 
 @app.post("/push/send-test")
-async def send_test_push():
+async def send_test_push(user_id: str = Depends(get_current_user_id)):
     """
-    Sends a real Web Push notification to every stored subscription.
-    Proves the backend can push on demand — actual scheduling (e.g. a
-    daily summary) is handled by a future session.
+    Sends a real Web Push notification to every subscription belonging to
+    the calling user. Proves the backend can push on demand — actual
+    scheduling (e.g. a daily summary) is handled by a future session.
+
+    Now requires auth (added in this phase): the underlying send-to-all
+    capability was replaced by a per-user send, so this endpoint needs a
+    user_id to target — it structurally could not stay unauthenticated.
     """
-    result = service.send_push_to_all(
+    result = service.send_push_to_user(
+        user_id,
         title="Δοκιμαστική ειδοποίηση",
         body="Αυτό είναι ένα πραγματικό push notification από το backend.",
     )
@@ -381,7 +388,7 @@ async def run_scheduler(secret: str):
 async def get_settings(user_id: str = Depends(get_current_user_id)):
     """Returns the current app-wide settings (notifications, send-all scope, daily summary)."""
     try:
-        return get_app_settings()
+        return get_app_settings(user_id)
     except Exception as e:
         logger.exception("Failed to load app settings")
         raise HTTPException(status_code=500, detail=f"Failed to load settings: {str(e)}")
@@ -392,6 +399,7 @@ async def update_settings(payload: AppSettings, user_id: str = Depends(get_curre
     """Updates the notifications master toggle, send-all scope, and daily summary settings."""
     try:
         return update_app_settings(
+            user_id=user_id,
             notifications_enabled=payload.notifications_enabled,
             send_all_enabled=payload.send_all_enabled,
             daily_summary_enabled=payload.daily_summary_enabled,
@@ -413,7 +421,7 @@ async def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_cur
     if not request.question or not request.question.strip():
         raise HTTPException(status_code=422, detail="question cannot be empty")
     try:
-        answer = agent_engine.ask_agent(request.question.strip())
+        answer = agent_engine.ask_agent(request.question.strip(), user_id=user_id)
         return AgentQueryResponse(answer=answer)
     except RuntimeError as e:
         logger.error(f"Agent query failed: {e}")
@@ -453,6 +461,9 @@ async def hostaway_webhook(request: Request):
     listing_map_id = data.get("listingMapId")
     reservation_id = data.get("reservationId")
 
+    hostaway_account_id = payload.get("accountId")
+    user_id = hostaway_integration.get_user_id_for_hostaway_account(hostaway_account_id)
+
     try:
         listing_name = hostaway_integration.get_listing_name(listing_map_id) if listing_map_id else "Άγνωστο property"
         reservation_details = hostaway_integration.get_reservation_details(reservation_id) if reservation_id else {
@@ -464,7 +475,7 @@ async def hostaway_webhook(request: Request):
         reservation_details = {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"}
 
     try:
-        classification = hostaway_integration.classify_message(message_body)
+        classification = hostaway_integration.classify_message(message_body, user_id=user_id)
     except Exception as e:
         logging.error(f"[hostaway webhook] Classification failed unexpectedly: {e}")
         classification = {"summary": message_body[:200], "priority": "P1"}
@@ -492,7 +503,8 @@ async def hostaway_webhook(request: Request):
     # in services.py, run from the existing scheduler cycle.
     priority_emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(priority, "")
     try:
-        service.send_push_to_all(
+        service.send_push_to_user(
+            user_id,
             title=f"{priority_emoji} {task_name}",
             body=classification["summary"],
         )
@@ -500,7 +512,7 @@ async def hostaway_webhook(request: Request):
         logging.error(f"[hostaway webhook] Failed to send instant notification: {e}")
 
     try:
-        service.create_task_manual({
+        service.create_task_manual(user_id, {
             "task_name": task_name,
             "description": description,
             "category": "Hostaway",
@@ -522,4 +534,4 @@ async def hostaway_webhook(request: Request):
 @app.get("/dev/token-usage")
 async def dev_token_usage(user_id: str = Depends(get_current_user_id)):
     """Developer-only: not linked from main navigation. Now gated behind login like every other user-facing endpoint."""
-    return token_tracker.get_usage_summary()
+    return token_tracker.get_usage_summary(user_id)

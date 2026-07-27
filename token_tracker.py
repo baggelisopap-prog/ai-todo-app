@@ -29,16 +29,16 @@ def calculate_cost(prompt_tokens: int, output_tokens: int, thinking_tokens: int 
     return round(input_cost + output_cost, 6)
 
 
-def log_token_usage(call_type: str, usage_metadata, model: str = DEFAULT_MODEL) -> None:
+def log_token_usage(call_type: str, usage_metadata, model: str = DEFAULT_MODEL, user_id: str = None) -> None:
     """
     Logs token usage from a Gemini API response — a full per-field breakdown
     (prompt / output / thinking / total) to the application log on every
-    call, plus a persisted row in the token_usage_log Airtable table. Never
-    raises — a logging failure must not break the actual AI call, whether
-    that call already succeeded or is being logged as a failed/empty
-    attempt. Call this after ANY generate_content() call, passing
-    response.usage_metadata and the exact model string that was used, so
-    cost is calculated at the rate that call actually billed.
+    call, plus a persisted row in the token_usage_log Supabase table, owned
+    by user_id. Never raises — a logging failure must not break the actual
+    AI call, whether that call already succeeded or is being logged as a
+    failed/empty attempt. Call this after ANY generate_content() call,
+    passing response.usage_metadata and the exact model string that was
+    used, so cost is calculated at the rate that call actually billed.
     """
     if usage_metadata is None:
         logging.warning(f"[token_tracker] No usage_metadata available for call_type={call_type}")
@@ -56,6 +56,7 @@ def log_token_usage(call_type: str, usage_metadata, model: str = DEFAULT_MODEL) 
 
     try:
         repository.save_token_usage_log(
+            user_id=user_id,
             call_type=call_type,
             timestamp=datetime.now(ZoneInfo("Europe/Athens")).isoformat(),
             prompt_tokens=prompt_tokens,
@@ -68,12 +69,13 @@ def log_token_usage(call_type: str, usage_metadata, model: str = DEFAULT_MODEL) 
         logging.error(f"[token_tracker] Failed to log token usage for {call_type}: {e}")
 
 
-def get_usage_summary() -> dict:
+def get_usage_summary(user_id: str) -> dict:
     """
-    Returns recent calls plus today/this-week aggregate totals (tokens + cost),
-    using each logged row's own model for accurate per-call cost calculation.
+    Returns recent calls plus today/this-week aggregate totals (tokens + cost)
+    for user_id, using each logged row's own model for accurate per-call
+    cost calculation.
     """
-    all_logs = repository.get_all_token_usage_logs()
+    all_logs = repository.get_all_token_usage_logs(user_id=user_id)
 
     now = datetime.now(ZoneInfo("Europe/Athens"))
     today_str = now.strftime("%Y-%m-%d")

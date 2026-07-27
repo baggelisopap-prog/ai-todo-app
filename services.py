@@ -102,41 +102,41 @@ class TaskService:
             # approval_status and is_completed use their defaults (False)
         )
 
-    def extract_and_save(self, raw_input: str) -> list[TaskRecord]:
+    def extract_and_save(self, raw_input: str, user_id: str) -> list[TaskRecord]:
         """
-        Main business operation. 
+        Main business operation.
         Extracts tasks from raw text via AI, converts them to records, and saves them to the DB.
         Returns a list of successfully saved TaskRecords.
         """
         logger.info("Processing input for extraction and save...")
-        
+
         # 1. AI Extraction
-        task_list = extract_tasks(raw_input)
-        
+        task_list = extract_tasks(raw_input, user_id=user_id)
+
         if not task_list:
             raise RuntimeError("AI extraction failed to produce valid tasks.")
-            
+
         saved_tasks = []
-        
+
         # 2. Conversion and Saving
         for task in task_list.items:
             task_record = self._single_task_to_record(task)
-            
+
             try:
-                saved_task = self.repository.save_task(task_record)
+                saved_task = self.repository.save_task(user_id, task_record)
                 saved_tasks.append(saved_task)
             except Exception as e:
                 # Log individual failures but continue processing the rest
                 logger.error(f"Failed to save task '{task.task_name}' to database: {e}")
-                
+
         # 3. Final Validation
         if not saved_tasks and len(task_list.items) > 0:
             raise RuntimeError("All extracted tasks failed to save to the database.")
-            
+
         logger.info(f"Successfully saved {len(saved_tasks)} tasks to database.")
         return saved_tasks
 
-    def extract_and_save_from_audio(self, audio_bytes: bytes, mime_type: str) -> list[TaskRecord]:
+    def extract_and_save_from_audio(self, audio_bytes: bytes, mime_type: str, user_id: str) -> list[TaskRecord]:
         """
         Extracts tasks from an audio recording via AI and saves them to the database.
         Mirrors extract_and_save exactly — only the AI call differs.
@@ -144,7 +144,7 @@ class TaskService:
         logger.info("Processing audio input for extraction and save...")
 
         # 1. AI Extraction
-        task_list = extract_tasks_from_audio(audio_bytes, mime_type)
+        task_list = extract_tasks_from_audio(audio_bytes, mime_type, user_id=user_id)
 
         if not task_list:
             raise RuntimeError("AI extraction failed to produce valid tasks from audio.")
@@ -156,7 +156,7 @@ class TaskService:
             task_record = self._single_task_to_record(task)
 
             try:
-                saved_task = self.repository.save_task(task_record)
+                saved_task = self.repository.save_task(user_id, task_record)
                 saved_tasks.append(saved_task)
             except Exception as e:
                 logger.error(f"Failed to save task '{task.task_name}' to database: {e}")
@@ -168,7 +168,7 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from audio to database.")
         return saved_tasks
 
-    def extract_and_save_from_image(self, image_bytes: bytes, mime_type: str, additional_context: str = None) -> list[TaskRecord]:
+    def extract_and_save_from_image(self, image_bytes: bytes, mime_type: str, user_id: str, additional_context: str = None) -> list[TaskRecord]:
         """
         Extracts tasks from an image via AI and saves them to the database.
         Mirrors extract_and_save exactly — only the AI call differs.
@@ -176,7 +176,7 @@ class TaskService:
         logger.info("Processing image input for extraction and save...")
 
         # 1. AI Extraction
-        task_list = extract_tasks_from_image(image_bytes, mime_type, additional_context=additional_context)
+        task_list = extract_tasks_from_image(image_bytes, mime_type, user_id=user_id, additional_context=additional_context)
 
         if not task_list:
             raise RuntimeError("AI extraction failed to produce valid tasks from image.")
@@ -188,7 +188,7 @@ class TaskService:
             task_record = self._single_task_to_record(task)
 
             try:
-                saved_task = self.repository.save_task(task_record)
+                saved_task = self.repository.save_task(user_id, task_record)
                 saved_tasks.append(saved_task)
             except Exception as e:
                 logger.error(f"Failed to save task '{task.task_name}' to database: {e}")
@@ -200,7 +200,7 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from image to database.")
         return saved_tasks
 
-    def create_task_manual(self, fields: dict) -> TaskRecord:
+    def create_task_manual(self, user_id: str, fields: dict) -> TaskRecord:
         """
         Manually create a task. Fills in AI-suggested fields as duplicates
         of user's choices (since there's no AI here) and sets defaults for
@@ -227,41 +227,41 @@ class TaskService:
             hostaway_created_at=fields.get("hostaway_created_at"),
             hostaway_last_notified_at=fields.get("hostaway_last_notified_at"),
         )
-        return self.repository.save_task(task)
+        return self.repository.save_task(user_id, task)
 
-    def get_all_tasks(self) -> list[TaskRecord]:
+    def get_all_tasks(self, user_id: str) -> list[TaskRecord]:
         """
-        Retrieves all tasks from the database.
+        Retrieves all tasks belonging to user_id from the database.
         """
-        return self.repository.get_all_tasks()
+        return self.repository.get_all_tasks(user_id)
 
-    def update_task(self, record_id: str, updates: dict) -> TaskRecord:
+    def update_task(self, user_id: str, record_id: str, updates: dict) -> TaskRecord:
         """
-        Updates an existing task in the database.
+        Updates an existing task in the database, scoped to user_id.
         """
-        return self.repository.update_task(record_id, updates)
+        return self.repository.update_task(user_id, record_id, updates)
 
-    def delete_task(self, record_id: str) -> None:
+    def delete_task(self, user_id: str, record_id: str) -> None:
         """
-        Permanently deletes a task. No return value — raises on failure.
+        Permanently deletes a task, scoped to user_id. No return value — raises on failure.
         """
-        success = self.repository.delete_task(record_id)
+        success = self.repository.delete_task(user_id, record_id)
         if not success:
             raise RuntimeError(f"Failed to delete task {record_id}")
         logger.info(f"Deleted task {record_id}.")
 
-    def send_push_to_all(self, title: str, body: str, view: Optional[str] = None) -> dict:
+    def send_push_to_user(self, user_id: str, title: str, body: str, view: Optional[str] = None) -> dict:
         """
-        Sends a push notification to every stored subscription.
-        Cleans up subscriptions that the push service reports as gone
-        (404/410 — meaning the browser unsubscribed or the installation
-        was removed).
+        Sends a push notification to every subscription belonging to
+        user_id. Cleans up subscriptions that the push service reports as
+        gone (404/410 — meaning the browser unsubscribed or the
+        installation was removed).
 
         `view` is an optional tab id (e.g. "today") tagged onto the push
         payload so the service worker's notificationclick handler knows
         which in-app view to open/switch to.
         """
-        subscriptions = repository.list_push_subscriptions()
+        subscriptions = repository.list_push_subscriptions(user_id)
         sent = 0
         failed = 0
 
@@ -290,7 +290,7 @@ class TaskService:
                 failed += 1
                 status_code = getattr(e.response, "status_code", None)
                 if status_code in (404, 410):
-                    repository.delete_push_subscription(sub.endpoint)
+                    repository.delete_push_subscription(user_id, sub.endpoint)
                 logger.error(f"Push failed for {sub.endpoint[:50]}...: {e}")
             except Exception as e:
                 # Covers errors raised before a request is even made (e.g.
@@ -304,66 +304,80 @@ class TaskService:
 
     def run_notification_scheduler(self) -> dict:
         """
-        Checks the master notifications toggle (skip everything if off),
-        then finds and sends advance reminders for tasks due within
-        REMINDER_OFFSET_MINUTES. The send_all_enabled setting only matters
-        when the master toggle is on: True reminds about every eligible
-        timed task regardless of its bell state, False restricts reminders
-        to tasks with notify_enabled=True. Meant to be triggered every ~5
-        minutes by an external cron service — because of that polling
-        interval, a reminder may fire anywhere from ~10 to ~15 minutes
-        before the task is actually due, which is expected slack.
+        Loops through every registered user (repository.get_all_active_user_ids)
+        and, for each, checks their master notifications toggle (skip that
+        user if off), then finds and sends advance reminders for their
+        tasks due within REMINDER_OFFSET_MINUTES. The send_all_enabled
+        setting only matters when the master toggle is on: True reminds
+        about every eligible timed task regardless of its bell state,
+        False restricts reminders to tasks with notify_enabled=True. Meant
+        to be triggered every ~5 minutes by an external cron service —
+        because of that polling interval, a reminder may fire anywhere
+        from ~10 to ~15 minutes before the task is actually due, which is
+        expected slack.
         """
-        settings = repository.get_app_settings()
-        if not settings.notifications_enabled:
-            return {"status": "skipped", "reason": "notifications disabled"}
-
-        require_bell = not settings.send_all_enabled
-
+        all_user_ids = repository.get_all_active_user_ids()
         now = datetime.now(ZoneInfo("Europe/Athens"))
-        all_tasks = repository.get_all_tasks_for_scheduler()
+        results = []
 
-        window_start = now
-        window_end = now + timedelta(minutes=REMINDER_OFFSET_MINUTES)
+        for user_id in all_user_ids:
+            settings = repository.get_app_settings(user_id)
+            if not settings.notifications_enabled:
+                results.append({"user_id": user_id, "status": "skipped", "reason": "notifications disabled"})
+                continue
 
-        due_tasks = repository.get_tasks_due_for_notification(
-            window_start, window_end, tasks=all_tasks, require_bell_enabled=require_bell
-        )
+            require_bell = not settings.send_all_enabled
 
-        sent = 0
-        for task in due_tasks:
-            result = self.send_push_to_all(
-                title=task.task_name,
-                body=f"Σε 15 λεπτά: {task.task_name}" if not task.description else task.description,
-                view="today",
+            # Fetched once per user per tick, then filtered multiple ways in
+            # Python — mirrors the original single-global-fetch pattern,
+            # just scoped per user now instead of across everyone at once.
+            user_tasks = self.repository.get_all_tasks(user_id)
+
+            window_start = now
+            window_end = now + timedelta(minutes=REMINDER_OFFSET_MINUTES)
+
+            due_tasks = repository.get_tasks_due_for_notification(
+                user_id, window_start, window_end, tasks=user_tasks, require_bell_enabled=require_bell
             )
-            if result.get("sent", 0) > 0:
-                repository.mark_notification_sent(task.record_id)
-                sent += 1
 
-        daily_summary_sent = self._maybe_send_daily_summary(now, settings, all_tasks)
+            sent = 0
+            for task in due_tasks:
+                result = self.send_push_to_user(
+                    user_id,
+                    title=task.task_name,
+                    body=f"Σε 15 λεπτά: {task.task_name}" if not task.description else task.description,
+                    view="today",
+                )
+                if result.get("sent", 0) > 0:
+                    repository.mark_notification_sent(user_id, task.record_id)
+                    sent += 1
 
-        hostaway_result = self._check_hostaway_escalations(now, all_tasks)
+            daily_summary_sent = self._maybe_send_daily_summary(user_id, now, settings, user_tasks)
 
-        return {
-            "status": "ok",
-            "checked": len(due_tasks),
-            "sent": sent,
-            "daily_summary_sent": daily_summary_sent,
-            "hostaway_checked": hostaway_result["checked"],
-            "hostaway_escalations_sent": hostaway_result["escalations_sent"],
-        }
+            hostaway_result = self._check_hostaway_escalations(user_id, now, user_tasks)
 
-    def _check_hostaway_escalations(self, now: datetime, all_tasks: list[TaskRecord]) -> dict:
+            results.append({
+                "user_id": user_id,
+                "status": "ok",
+                "checked": len(due_tasks),
+                "sent": sent,
+                "daily_summary_sent": daily_summary_sent,
+                "hostaway_checked": hostaway_result["checked"],
+                "hostaway_escalations_sent": hostaway_result["escalations_sent"],
+            })
+
+        return {"status": "ok", "users_processed": len(all_user_ids), "results": results}
+
+    def _check_hostaway_escalations(self, user_id: str, now: datetime, user_tasks: list[TaskRecord]) -> dict:
         """
-        Checks all active (not completed, not rejected) Hostaway-category
-        tasks. For each, if the time since its last notification meets or
-        exceeds its priority's escalation interval (HOSTAWAY_ESCALATION_INTERVALS),
-        sends another notification and advances the timestamp. This repeats
-        indefinitely — no cap on the number of re-notifications — for as
-        long as the task remains open.
+        Checks all of user_id's active (not completed, not rejected)
+        Hostaway-category tasks. For each, if the time since its last
+        notification meets or exceeds its priority's escalation interval
+        (HOSTAWAY_ESCALATION_INTERVALS), sends another notification and
+        advances the timestamp. This repeats indefinitely — no cap on the
+        number of re-notifications — for as long as the task remains open.
         """
-        hostaway_tasks = repository.get_active_hostaway_tasks(tasks=all_tasks)
+        hostaway_tasks = repository.get_active_hostaway_tasks(user_id, tasks=user_tasks)
 
         escalations_sent = 0
 
@@ -380,26 +394,28 @@ class TaskService:
 
             if now - last_notified >= interval:
                 try:
-                    self.send_push_to_all(
+                    self.send_push_to_user(
+                        user_id,
                         title=f"⏰ {task.task_name}",
                         body="Ακόμα δεν έχει απαντηθεί.",
                     )
-                    repository.update_hostaway_last_notified(task.record_id, now.isoformat())
+                    repository.update_hostaway_last_notified(user_id, task.record_id, now.isoformat())
                     escalations_sent += 1
                 except Exception as e:
                     logger.error(f"[hostaway escalation] Failed to send for task {task.record_id}: {e}")
 
         return {"checked": len(hostaway_tasks), "escalations_sent": escalations_sent}
 
-    def _maybe_send_daily_summary(self, now: datetime, settings, all_tasks: list[TaskRecord]) -> bool:
+    def _maybe_send_daily_summary(self, user_id: str, now: datetime, settings, user_tasks: list[TaskRecord]) -> bool:
         """
-        Sends the once-a-day task summary if enabled and not already sent
-        today. The ONLY guard against repeat-firing is the date comparison
-        against daily_summary_last_sent_date — there is deliberately no
-        upper-bound time window (unlike the per-task reminder's window):
-        whichever cron tick first satisfies "now >= target time" fires it,
-        and every later tick that same day sees the date already recorded
-        and skips. The guard resets naturally at midnight.
+        Sends user_id's once-a-day task summary if enabled and not already
+        sent today. The ONLY guard against repeat-firing is the date
+        comparison against daily_summary_last_sent_date — there is
+        deliberately no upper-bound time window (unlike the per-task
+        reminder's window): whichever cron tick first satisfies "now >=
+        target time" fires it, and every later tick that same day sees the
+        date already recorded and skips. The guard resets naturally at
+        midnight.
         """
         today_str = now.strftime("%Y-%m-%d")
         if not settings.daily_summary_enabled or settings.daily_summary_last_sent_date == today_str:
@@ -415,7 +431,7 @@ class TaskService:
                 should_send_now = True
 
         elif settings.daily_summary_mode == "before_first_task":
-            first_task_time = repository.get_first_task_datetime_today(today_str, tasks=all_tasks)
+            first_task_time = repository.get_first_task_datetime_today(user_id, today_str, tasks=user_tasks)
             if first_task_time is not None:
                 first_task_time = first_task_time.replace(tzinfo=now.tzinfo)
                 target_datetime = first_task_time - timedelta(minutes=DAILY_SUMMARY_BEFORE_FIRST_TASK_OFFSET_MINUTES)
@@ -425,11 +441,11 @@ class TaskService:
         if not should_send_now:
             return False
 
-        todays_tasks = repository.get_tasks_for_date(today_str, tasks=all_tasks)
+        todays_tasks = repository.get_tasks_for_date(user_id, today_str, tasks=user_tasks)
         summary_body = _format_daily_summary(todays_tasks)
-        result = self.send_push_to_all(title="Το πρόγραμμα της ημέρας", body=summary_body, view="today")
+        result = self.send_push_to_user(user_id, title="Το πρόγραμμα της ημέρας", body=summary_body, view="today")
         if result.get("sent", 0) > 0:
-            repository.update_daily_summary_last_sent_date(today_str)
+            repository.update_daily_summary_last_sent_date(user_id, today_str)
             return True
         return False
 

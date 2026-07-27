@@ -57,7 +57,7 @@ class _SummedUsage:
         self.total_token_count = total_tokens
 
 
-def ask_agent(question: str) -> str:
+def ask_agent(question: str, user_id: str) -> str:
     """
     Sends a natural-language question to the agent via Gemini 3.1 Flash-Lite,
     with Automatic Function Calling DISABLED so we can manually run the
@@ -69,7 +69,7 @@ def ask_agent(question: str) -> str:
     system_instruction = agent_tools.build_system_instruction()
 
     try:
-        cached_tasks = repository.get_all_tasks_for_scheduler()
+        cached_tasks = repository.get_tasks_for_user(user_id=user_id)
     except Exception as e:
         logging.error(f"[agent] Failed to fetch tasks: {e}")
         raise RuntimeError(f"Could not load task data: {e}")
@@ -127,7 +127,7 @@ def ask_agent(question: str) -> str:
             if response.text:
                 if token_tracker:
                     summed = _SummedUsage(total_prompt_tokens, total_output_tokens, total_tokens_sum)
-                    token_tracker.log_token_usage("agent_query", summed, model=GEMINI_AGENT_MODEL)
+                    token_tracker.log_token_usage("agent_query", summed, model=GEMINI_AGENT_MODEL, user_id=user_id)
                 return response.text
             raise RuntimeError("Agent produced no answer")
 

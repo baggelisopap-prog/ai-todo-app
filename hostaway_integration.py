@@ -23,6 +23,20 @@ HOSTAWAY_CLASSIFICATION_MODEL = "gemini-3.5-flash"  # deliberately the higher-ac
 _cached_access_token = None
 
 
+def get_user_id_for_hostaway_account(hostaway_account_id) -> str:
+    """
+    Maps a Hostaway accountId to the app user_id who owns that Hostaway
+    connection. Currently hardcoded to the app owner's own user_id, since
+    only they have Hostaway connected today. When multiple users each
+    connect their own Hostaway account in the future, this is the ONLY
+    function that needs to change (replace the hardcoded return with a
+    real lookup against a future hostaway_accounts mapping table) — every
+    other Hostaway-related code path (webhook handler, escalation checker)
+    calls this function and needs no changes when that day comes.
+    """
+    return "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7"
+
+
 def _get_hostaway_access_token() -> str:
     """
     Gets (and caches in-process) an OAuth2 access token for calling back
@@ -126,7 +140,7 @@ Read the guest's message and:
 Respond only with the structured output matching the required schema."""
 
 
-def classify_message(message_text: str) -> dict:
+def classify_message(message_text: str, user_id: str) -> dict:
     """
     Uses AI to summarize a guest message and classify its priority.
     Uses gemini-3.5-flash (not the cheaper agent model) since misclassifying
@@ -151,7 +165,7 @@ def classify_message(message_text: str) -> dict:
             if response and response.text:
                 parsed = _MessageClassification.model_validate_json(response.text)
                 try:
-                    token_tracker.log_token_usage("hostaway_classification", response.usage_metadata, model=HOSTAWAY_CLASSIFICATION_MODEL)
+                    token_tracker.log_token_usage("hostaway_classification", response.usage_metadata, model=HOSTAWAY_CLASSIFICATION_MODEL, user_id=user_id)
                 except Exception as e:
                     logging.error(f"[hostaway] Failed to log token usage: {e}")
                 return {"summary": parsed.summary, "priority": parsed.priority}
