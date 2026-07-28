@@ -17,7 +17,12 @@
     "rescheduled": "Rescheduled",
     "undo": "Undo",
     "drag_hint": "Long-press to drag",
-    "close_day": "Close"
+    "close_day": "Close",
+    "connect": "Connect Google Calendar",
+    "connected": "Google Calendar connected",
+    "test": "Test connection",
+    "test_failed": "Connection test failed",
+    "disconnect": "Disconnect"
   },
   "app": {
     "title": "AI To-Do",
@@ -161,6 +166,7 @@
     "title": "Settings",
     "back": "Back",
     "category_notifications": "Notifications",
+    "category_calendar": "Calendar",
     "notifications_intro": "Get notified about your tasks. We'll ask your browser for permission first.",
     "enable_notifications": "Enable Notifications",
     "requesting": "Requesting...",

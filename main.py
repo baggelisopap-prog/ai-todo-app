@@ -15,7 +15,7 @@ Interactive docs: http://localhost:8000/docs
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +26,9 @@ from services import TaskService
 from repository import save_push_subscription, get_app_settings, update_app_settings
 from auth import get_current_user_id
 import agent_engine
+import google_calendar
 import hostaway_integration
+import repository
 import token_tracker
 import os
 from dotenv import load_dotenv
@@ -74,6 +76,11 @@ class CreateTaskRequest(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     service: str
+
+class CalendarConnectRequest(BaseModel):
+    """Request body for POST /calendar/connect"""
+    access_token: str
+    refresh_token: str
 
 class AgentQueryRequest(BaseModel):
     """Request body for POST /agent/query"""
@@ -409,6 +416,47 @@ async def update_settings(payload: AppSettings, user_id: str = Depends(get_curre
     except Exception as e:
         logger.exception("Failed to update app settings")
         raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")
+
+
+@app.post("/calendar/connect")
+async def connect_calendar(payload: CalendarConnectRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Stores the Google provider tokens captured by the frontend right after
+    the Calendar-scope OAuth flow completes. This is a ONE-TIME capture —
+    all future refreshing happens server-side via google_calendar.py, never
+    via Supabase's own session refresh (see google_calendar.py docstring).
+    """
+    expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+    repository.save_google_calendar_connection(user_id, payload.access_token, payload.refresh_token, expiry)
+    return {"status": "connected"}
+
+
+@app.get("/calendar/status")
+async def calendar_status(user_id: str = Depends(get_current_user_id)):
+    """Returns whether this user has a stored Google Calendar connection."""
+    connection = repository.get_google_calendar_connection(user_id)
+    return {"connected": connection is not None}
+
+
+@app.post("/calendar/disconnect")
+async def disconnect_calendar(user_id: str = Depends(get_current_user_id)):
+    """Deletes this user's stored Google Calendar connection."""
+    repository.disconnect_google_calendar(user_id)
+    return {"status": "disconnected"}
+
+
+@app.get("/calendar/test")
+async def test_calendar(user_id: str = Depends(get_current_user_id)):
+    """
+    Verifies the stored connection actually works by calling the Google
+    Calendar API on the user's behalf. Phase 1's success criterion — no
+    sync logic here, just proof the tokens are valid and usable.
+    """
+    try:
+        result = google_calendar.test_calendar_connection(user_id)
+        return {"status": "ok", "calendar_name": result.get("summary")}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Calendar connection test failed: {e}")
 
 
 @app.post("/agent/query", response_model=AgentQueryResponse)

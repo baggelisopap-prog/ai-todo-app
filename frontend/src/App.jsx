@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAllTasks, updateTask } from './api';
+import { getAllTasks, updateTask, connectGoogleCalendar } from './api';
 import { supabase } from './supabaseClient';
 import { LoginScreen } from './components/LoginScreen';
 import BottomNav from './components/BottomNav';
@@ -41,6 +41,20 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
+
+      // Distinguishes "this sign-in was specifically the Connect Calendar
+      // flow" (triggered from Settings, see SettingsModal.jsx) from a normal
+      // login — a normal Google login also comes back with a provider_token,
+      // just without the Calendar scope, so only send tokens to the backend
+      // when this flag was deliberately set right before the calendar OAuth
+      // redirect.
+      const isConnectingCalendar = sessionStorage.getItem('connecting_google_calendar') === 'true';
+      if (isConnectingCalendar && newSession?.provider_token && newSession?.provider_refresh_token) {
+        sessionStorage.removeItem('connecting_google_calendar');
+        connectGoogleCalendar(newSession.provider_token, newSession.provider_refresh_token).catch(err => {
+          console.error('Failed to save calendar connection:', err);
+        });
+      }
     });
 
     return () => subscription.unsubscribe();

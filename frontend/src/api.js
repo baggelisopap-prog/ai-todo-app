@@ -260,3 +260,39 @@ export async function askAgent(question) {
 export async function getTokenUsage() {
   return request('/dev/token-usage');
 }
+
+/**
+ * POST /calendar/connect — sends the Google provider tokens captured right
+ * after the Calendar-scope OAuth flow completes, for the backend to store.
+ * Returns { status: 'connected' }.
+ */
+export async function connectGoogleCalendar(accessToken, refreshToken) {
+  return request('/calendar/connect', {
+    method: 'POST',
+    body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
+  });
+}
+
+/**
+ * GET /calendar/status — whether this user has a stored Google Calendar connection.
+ * Returns { connected: boolean }.
+ */
+export async function getCalendarStatus() {
+  return request('/calendar/status');
+}
+
+/**
+ * POST /calendar/disconnect — deletes this user's stored Google Calendar connection.
+ * Returns { status: 'disconnected' }.
+ */
+export async function disconnectGoogleCalendar() {
+  return request('/calendar/disconnect', { method: 'POST' });
+}
+
+/**
+ * GET /calendar/test — verifies the stored connection by fetching the
+ * user's real calendar name from Google. Returns { status, calendar_name }.
+ */
+export async function testCalendarConnection() {
+  return request('/calendar/test');
+}

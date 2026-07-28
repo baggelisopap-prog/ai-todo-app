@@ -6,11 +6,20 @@ import {
   requestNotificationPermission,
   subscribeToPush,
 } from '../utils/notifications';
-import { registerPushSubscription, getAppSettings, updateAppSettings, getTokenUsage } from '../api';
+import {
+  registerPushSubscription,
+  getAppSettings,
+  updateAppSettings,
+  getTokenUsage,
+  getCalendarStatus,
+  disconnectGoogleCalendar,
+  testCalendarConnection,
+} from '../api';
 import { supabase } from '../supabaseClient';
 
 const SETTINGS_CATEGORIES = [
   { id: 'notifications', labelKey: 'settings.category_notifications', icon: BellIcon },
+  { id: 'calendar', labelKey: 'settings.category_calendar', icon: CalendarIcon },
 ];
 
 export function SettingsModal({ onClose }) {
@@ -113,6 +122,7 @@ export function SettingsModal({ onClose }) {
           )}
           <h2 className="text-lg font-semibold text-[var(--text-primary)] flex-1">
             {currentCategory === 'notifications' && t('settings.category_notifications')}
+            {currentCategory === 'calendar' && t('settings.category_calendar')}
             {currentCategory === 'developer' && t('settings.category_developer')}
             {!currentCategory && t('settings.title')}
           </h2>
@@ -307,8 +317,100 @@ export function SettingsModal({ onClose }) {
           </div>
         )}
 
+        {currentCategory === 'calendar' && <CalendarConnectionView />}
+
         {currentCategory === 'developer' && <DeveloperUsageView />}
       </div>
+    </div>
+  );
+}
+
+function CalendarConnectionView() {
+  const { t } = useTranslation();
+  const [calendarConnected, setCalendarConnected] = useState(false);
+  const [statusLoaded, setStatusLoaded] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [calendarTestResult, setCalendarTestResult] = useState(null);
+
+  useEffect(() => {
+    getCalendarStatus()
+      .then(s => setCalendarConnected(s.connected))
+      .catch(err => console.error('Failed to load calendar status:', err))
+      .finally(() => setStatusLoaded(true));
+  }, []);
+
+  async function handleConnectCalendar() {
+    // Read by App.jsx's onAuthStateChange listener once this OAuth flow
+    // completes, to distinguish it from a normal Google login.
+    sessionStorage.setItem('connecting_google_calendar', 'true');
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        scopes: 'https://www.googleapis.com/auth/calendar.events',
+        // Required for Google to reliably re-issue a refresh_token even if
+        // this app already has some prior grant from this user (e.g. login)
+        // — do not remove.
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+  }
+
+  async function handleDisconnectCalendar() {
+    await disconnectGoogleCalendar();
+    setCalendarConnected(false);
+    setCalendarTestResult(null);
+  }
+
+  async function handleTestCalendar() {
+    setIsTesting(true);
+    setCalendarTestResult(null);
+    try {
+      const result = await testCalendarConnection();
+      setCalendarTestResult(result.calendar_name);
+    } catch (err) {
+      setCalendarTestResult(t('calendar.test_failed'));
+    } finally {
+      setIsTesting(false);
+    }
+  }
+
+  if (!statusLoaded) {
+    return <p className="text-sm text-[var(--text-muted)]">{t('settings.loading')}</p>;
+  }
+
+  return (
+    <div>
+      {!calendarConnected ? (
+        <button
+          onClick={handleConnectCalendar}
+          className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium"
+        >
+          {t('calendar.connect')}
+        </button>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-[var(--text-secondary)]">{t('calendar.connected')}</p>
+          <button
+            onClick={handleTestCalendar}
+            disabled={isTesting}
+            className="px-4 py-2 rounded-md border border-[var(--border-subtle)] text-sm font-medium disabled:opacity-50"
+          >
+            {t('calendar.test')}
+          </button>
+          {calendarTestResult && (
+            <p className="text-sm text-[var(--text-primary)]">{calendarTestResult}</p>
+          )}
+          <button
+            onClick={handleDisconnectCalendar}
+            className="w-full text-left px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] text-red-600 text-sm"
+          >
+            {t('calendar.disconnect')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -379,6 +481,17 @@ function ChevronRightIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function CalendarIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   );
 }

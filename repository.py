@@ -584,6 +584,41 @@ def save_token_usage_log(user_id: str, call_type: str, timestamp: str, prompt_to
     }).execute()
 
 
+# --- Google Calendar connections ---
+# One row per user, holding the Google OAuth tokens captured once from the
+# Supabase session right after the Calendar-scope OAuth flow completes.
+# Refreshing is handled entirely by google_calendar.py against Google's own
+# OAuth endpoint — never by Supabase — so these functions are plain
+# CRUD/upsert on the google_calendar_connections table with no refresh logic
+# of their own.
+
+
+def save_google_calendar_connection(user_id: str, access_token: str, refresh_token: str, token_expiry: datetime) -> None:
+    """Upserts the connection — handles both first-time connect and reconnect cleanly."""
+    supabase.table("google_calendar_connections").upsert({
+        "user_id": user_id,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_expiry": token_expiry.isoformat(),
+    }, on_conflict="user_id").execute()
+
+
+def get_google_calendar_connection(user_id: str) -> Optional[dict]:
+    result = supabase.table("google_calendar_connections").select("*").eq("user_id", user_id).execute()
+    return result.data[0] if result.data else None
+
+
+def update_google_calendar_token(user_id: str, access_token: str, token_expiry: datetime) -> None:
+    supabase.table("google_calendar_connections").update({
+        "access_token": access_token,
+        "token_expiry": token_expiry.isoformat(),
+    }).eq("user_id", user_id).execute()
+
+
+def disconnect_google_calendar(user_id: str) -> None:
+    supabase.table("google_calendar_connections").delete().eq("user_id", user_id).execute()
+
+
 def get_all_token_usage_logs(user_id: str) -> list[dict]:
     """Returns all rows from token_usage_log belonging to user_id, as a list of dicts with keys:
     call_type, timestamp, prompt_tokens, output_tokens, thinking_tokens, total_tokens, model.
