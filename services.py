@@ -10,6 +10,7 @@ from pywebpush import webpush, WebPushException
 from models import SingleTask, TaskList, TaskRecord
 from ai_engine import extract_tasks, extract_tasks_from_audio, extract_tasks_from_image
 from repository import AirtableTaskRepository
+import google_calendar
 import repository
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,38 @@ def _get_vapid_key_file() -> str:
         f.write(private_key_pem)
     _vapid_key_file_path = path
     return path
+
+
+def sync_google_calendar_for_user(user_id: str) -> dict:
+    """
+    One user's worth of Google Calendar sync for a single scheduler tick:
+    pushes locally-changed timed tasks to Google, then pulls back any
+    changes Google reports for events this app created (see
+    google_calendar.pull_calendar_changes for the pull-scope rules). Never
+    raises — a connection lookup or API failure for one user must not
+    interrupt the scheduler's processing of every other user, or any of
+    the other per-user checks (reminders, daily summary, Hostaway
+    escalations) in the same loop tick.
+    """
+    connection = repository.get_google_calendar_connection(user_id)
+    if not connection:
+        return {"status": "not_connected"}
+
+    try:
+        tasks_to_push = repository.get_tasks_needing_calendar_push(user_id)
+        pushed = 0
+        for task in tasks_to_push:
+            event_id = google_calendar.sync_task_to_google_calendar(user_id, task)
+            if event_id:
+                repository.update_task_calendar_sync(task["id"], event_id)
+                pushed += 1
+
+        pulled = google_calendar.pull_calendar_changes(user_id)
+
+        return {"status": "ok", "pushed": pushed, "pulled": pulled}
+    except Exception as e:
+        logger.error(f"[calendar sync] Failed for user {user_id}: {e}")
+        return {"status": "error", "error": str(e)}
 
 
 class TaskService:
@@ -244,11 +277,25 @@ class TaskService:
     def delete_task(self, user_id: str, record_id: str) -> None:
         """
         Permanently deletes a task, scoped to user_id. No return value — raises on failure.
+        If the task had a linked Google Calendar event, also deletes that
+        event (looked up before the task row is gone). A failure on the
+        calendar side is logged and never blocks the actual task deletion —
+        google_calendar.delete_calendar_event already never raises, but the
+        lookup itself is guarded too, just in case.
         """
+        google_event_id = None
+        try:
+            google_event_id = repository.get_task_google_event_id(user_id, record_id)
+        except Exception as e:
+            logger.error(f"[calendar sync] Failed to look up linked calendar event before deleting task {record_id}: {e}")
+
         success = self.repository.delete_task(user_id, record_id)
         if not success:
             raise RuntimeError(f"Failed to delete task {record_id}")
         logger.info(f"Deleted task {record_id}.")
+
+        if google_event_id:
+            google_calendar.delete_calendar_event(user_id, google_event_id)
 
     def send_push_to_user(self, user_id: str, title: str, body: str, view: Optional[str] = None) -> dict:
         """
@@ -356,6 +403,8 @@ class TaskService:
 
             hostaway_result = self._check_hostaway_escalations(user_id, now, user_tasks)
 
+            calendar_result = sync_google_calendar_for_user(user_id)
+
             results.append({
                 "user_id": user_id,
                 "status": "ok",
@@ -364,6 +413,7 @@ class TaskService:
                 "daily_summary_sent": daily_summary_sent,
                 "hostaway_checked": hostaway_result["checked"],
                 "hostaway_escalations_sent": hostaway_result["escalations_sent"],
+                "calendar_sync": calendar_result,
             })
 
         return {"status": "ok", "users_processed": len(all_user_ids), "results": results}

@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
 from supabase import create_client
@@ -617,6 +617,93 @@ def update_google_calendar_token(user_id: str, access_token: str, token_expiry: 
 
 def disconnect_google_calendar(user_id: str) -> None:
     supabase.table("google_calendar_connections").delete().eq("user_id", user_id).execute()
+
+
+# --- Google Calendar sync (Phase 2) ---
+# Push/pull bookkeeping used by services.sync_google_calendar_for_user, run
+# once per user on every scheduler tick. Deliberately works on raw Supabase
+# row dicts (not TaskRecord) for the push-candidate query, since google_event_id
+# and google_last_synced_at are internal sync bookkeeping columns, not part of
+# the TaskRecord shape the rest of the app (and frontend) works with.
+
+
+def get_tasks_needing_calendar_push(user_id: str) -> list[dict]:
+    """Tasks with due_date+due_time set, not completed/rejected, that have
+    changed since their last calendar push (or were never pushed)."""
+    result = (
+        supabase.table("tasks")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("is_rejected", False)
+        .eq("is_completed", False)
+        .not_.is_("due_date", "null")
+        .not_.is_("due_time", "null")
+        .execute()
+    )
+    needing_push = []
+    for task in result.data:
+        if not task.get("google_last_synced_at"):
+            needing_push.append(task)
+        else:
+            try:
+                updated = datetime.fromisoformat(task["updated_at"].replace("Z", "+00:00"))
+                synced = datetime.fromisoformat(task["google_last_synced_at"].replace("Z", "+00:00"))
+                if updated > synced:
+                    needing_push.append(task)
+            except (ValueError, TypeError, KeyError):
+                needing_push.append(task)  # if timestamps are malformed, err on the side of re-pushing
+    return needing_push
+
+
+def update_task_calendar_sync(task_id: str, google_event_id: str) -> None:
+    supabase.table("tasks").update({
+        "google_event_id": google_event_id,
+        "google_last_synced_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", task_id).execute()
+
+
+def unlink_task_from_calendar(task_id: str) -> None:
+    supabase.table("tasks").update({"google_event_id": None}).eq("id", task_id).execute()
+
+
+def update_task_from_calendar_event(task_id: str, due_date: str, due_time: str, task_name: str) -> None:
+    supabase.table("tasks").update({
+        "due_date": due_date,
+        "due_time": due_time,
+        "task_name": task_name,
+        "google_last_synced_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", task_id).execute()
+
+
+def update_calendar_sync_token(user_id: str, sync_token: Optional[str]) -> None:
+    supabase.table("google_calendar_connections").update({
+        "calendar_sync_token": sync_token,
+    }).eq("user_id", user_id).execute()
+
+
+def get_all_connected_calendar_user_ids() -> list[str]:
+    """Users who have an active Google Calendar connection."""
+    result = supabase.table("google_calendar_connections").select("user_id").execute()
+    return [row["user_id"] for row in result.data]
+
+
+def get_task_google_event_id(user_id: str, record_id: str) -> Optional[str]:
+    """
+    Raw lookup of a task's linked google_event_id, scoped to user_id.
+    Bypasses the TaskRecord parsing pipeline (which doesn't surface this
+    field) since this is purely an internal read used just before deletion,
+    to know whether a linked Google Calendar event also needs deleting.
+    """
+    result = (
+        supabase.table("tasks")
+        .select("google_event_id")
+        .eq("id", record_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        return None
+    return result.data[0].get("google_event_id")
 
 
 def get_all_token_usage_logs(user_id: str) -> list[dict]:
