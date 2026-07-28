@@ -163,6 +163,21 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
     }
   }
 
+  async function handleToggleCalendarSync(e) {
+    e.stopPropagation();
+    // Unlike the reminder bell (which needs a due_time), calendar sync only
+    // needs a due_date — a task with no due_time still syncs as an all-day event.
+    if (!task.due_date) {
+      onShowToast('calendar.no_date_for_sync', 'neutral');
+      return;
+    }
+    try {
+      await onUpdate(task.record_id, { calendar_sync_enabled: !task.calendar_sync_enabled });
+    } catch (err) {
+      setActionError(err.message);
+    }
+  }
+
   async function handleAction(actionName, updates) {
     setIsMenuOpen(false);
     setPendingAction(actionName);
@@ -377,6 +392,24 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                     <BellFilledIcon className="w-4 h-4" />
                   ) : (
                     <BellOutlineIcon className="w-4 h-4" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleCalendarSync}
+                  className={`p-1 -m-1 rounded transition-colors ${
+                    !task.due_date
+                      ? 'text-[var(--text-muted)] opacity-40'
+                      : task.calendar_sync_enabled
+                        ? 'text-[var(--brand-primary)]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                  }`}
+                  aria-label={!task.due_date ? t('calendar.no_date_for_sync') : t('calendar.sync_task_tooltip')}
+                >
+                  {task.calendar_sync_enabled && task.due_date ? (
+                    <CalendarFilledIcon className="w-4 h-4" />
+                  ) : (
+                    <CalendarIcon className="w-4 h-4" />
                   )}
                 </button>
               </div>
@@ -734,6 +767,14 @@ function CalendarIcon({ className }) {
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function CalendarFilledIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path fillRule="evenodd" d="M8 2a1 1 0 0 1 1 1v1h6V3a1 1 0 1 1 2 0v1h1a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1zM4.75 9.5v10.25c0 .414.336.75.75.75h13a.75.75 0 0 0 .75-.75V9.5H4.75z" clipRule="evenodd" />
     </svg>
   );
 }

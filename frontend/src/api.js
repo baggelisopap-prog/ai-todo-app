@@ -178,6 +178,15 @@ export async function updateTask(recordId, updates) {
 }
 
 /**
+ * PATCH /tasks/{record_id} — toggles this task's per-task Google Calendar
+ * sync opt-in. Thin wrapper over updateTask for a single named field.
+ * Returns the updated task object.
+ */
+export async function toggleTaskCalendarSync(recordId, enabled) {
+  return updateTask(recordId, { calendar_sync_enabled: enabled });
+}
+
+/**
  * DELETE /tasks/{record_id} — permanently delete a task.
  * Returns void on success (204 No Content).
  */

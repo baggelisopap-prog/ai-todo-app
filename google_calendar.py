@@ -87,14 +87,27 @@ def sync_task_to_google_calendar(user_id: str, task: dict) -> Optional[str]:
     try:
         access_token = get_valid_access_token(user_id)
 
-        start_dt = datetime.fromisoformat(f"{task['due_date']}T{task['due_time']}:00")
-        end_dt = start_dt + timedelta(minutes=EVENT_DEFAULT_DURATION_MINUTES)
+        if task.get("due_time"):
+            start_dt = datetime.fromisoformat(f"{task['due_date']}T{task['due_time']}:00")
+            end_dt = start_dt + timedelta(minutes=EVENT_DEFAULT_DURATION_MINUTES)
+            time_fields = {
+                "start": {"dateTime": start_dt.isoformat(), "timeZone": "Europe/Athens"},
+                "end": {"dateTime": end_dt.isoformat(), "timeZone": "Europe/Athens"},
+            }
+        else:
+            # All-day event. Google Calendar's all-day 'end.date' is EXCLUSIVE,
+            # so a single-day all-day event needs end = start + 1 day.
+            due_date_obj = datetime.strptime(task["due_date"], "%Y-%m-%d").date()
+            next_day = due_date_obj + timedelta(days=1)
+            time_fields = {
+                "start": {"date": task["due_date"]},
+                "end": {"date": next_day.strftime("%Y-%m-%d")},
+            }
 
         event_body = {
             "summary": task["task_name"],
             "description": task.get("description") or "",
-            "start": {"dateTime": start_dt.isoformat(), "timeZone": "Europe/Athens"},
-            "end": {"dateTime": end_dt.isoformat(), "timeZone": "Europe/Athens"},
+            **time_fields,
             "extendedProperties": {"private": {TASK_ID_EXTENDED_PROPERTY: task["id"]}},
         }
 
@@ -189,14 +202,23 @@ def pull_calendar_changes(user_id: str) -> int:
             if event.get("status") == "cancelled":
                 repository.unlink_task_from_calendar(task_id)
             else:
-                start = event.get("start", {}).get("dateTime")
-                if start:
-                    dt = datetime.fromisoformat(start)
+                start_info = event.get("start", {})
+                start_datetime = start_info.get("dateTime")
+                start_date = start_info.get("date")
+
+                if start_datetime:
+                    dt = datetime.fromisoformat(start_datetime)
                     due_date = dt.strftime("%Y-%m-%d")
                     due_time = dt.strftime("%H:%M")
-                    repository.update_task_from_calendar_event(
-                        task_id, due_date, due_time, event.get("summary", "")
-                    )
+                elif start_date:
+                    due_date = start_date
+                    due_time = None
+                else:
+                    continue  # malformed event, skip
+
+                repository.update_task_from_calendar_event(
+                    task_id, due_date, due_time, event.get("summary", "")
+                )
             changes_processed += 1
 
         page_token = data.get("nextPageToken")

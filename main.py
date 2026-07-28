@@ -62,6 +62,7 @@ class UpdateTaskRequest(BaseModel):
     due_time: Optional[str] = None
     checklist: Optional[list[ChecklistItem]] = None
     notify_enabled: Optional[bool] = None
+    calendar_sync_enabled: Optional[bool] = None
 
 class CreateTaskRequest(BaseModel):
     """Request body for manual task creation via POST /tasks"""
@@ -412,6 +413,7 @@ async def update_settings(payload: AppSettings, user_id: str = Depends(get_curre
             daily_summary_enabled=payload.daily_summary_enabled,
             daily_summary_mode=payload.daily_summary_mode,
             daily_summary_time=payload.daily_summary_time,
+            calendar_sync_all_enabled=payload.calendar_sync_all_enabled,
         )
     except Exception as e:
         logger.exception("Failed to update app settings")

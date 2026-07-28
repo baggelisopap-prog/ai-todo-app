@@ -65,6 +65,7 @@ class TaskRecord(SingleTask):
     is_rejected: bool = False
     notify_enabled: bool = False
     notification_sent: bool = False
+    calendar_sync_enabled: bool = False
 
     # Frozen snapshots of the original AI output, kept for the future learning loop.
     # These must never change after creation to preserve the original AI intent.
@@ -106,3 +107,4 @@ class AppSettings(BaseModel):
     daily_summary_mode: str = "fixed_time"
     daily_summary_time: str = "08:00"
     daily_summary_last_sent_date: str = ""
+    calendar_sync_all_enabled: bool = False

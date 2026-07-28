@@ -140,6 +140,7 @@ class AirtableTaskRepository:
             is_rejected=_get(row, "is_rejected", False),
             notify_enabled=_get(row, "notify_enabled", False),
             notification_sent=_get(row, "notification_sent", False),
+            calendar_sync_enabled=_get(row, "calendar_sync_enabled", False),
             ai_suggested_category=row["ai_suggested_category"],
             ai_suggested_priority=row["ai_suggested_priority"],
             record_id=record_id,
@@ -383,6 +384,7 @@ def get_app_settings(user_id: str) -> AppSettings:
         daily_summary_mode=_get(row, "daily_summary_mode", "fixed_time"),
         daily_summary_time=_get(row, "daily_summary_time", "08:00"),
         daily_summary_last_sent_date=_get(row, "daily_summary_last_sent_date", ""),
+        calendar_sync_all_enabled=_get(row, "calendar_sync_all_enabled", False),
     )
 
 
@@ -628,18 +630,31 @@ def disconnect_google_calendar(user_id: str) -> None:
 
 
 def get_tasks_needing_calendar_push(user_id: str) -> list[dict]:
-    """Tasks with due_date+due_time set, not completed/rejected, that have
-    changed since their last calendar push (or were never pushed)."""
-    result = (
+    """
+    Tasks with due_date set (due_time is now optional — a task with only a
+    due_date pushes as an all-day event), not completed/rejected, eligible
+    per the sync-all-or-per-task-toggle rule (mirrors send_all_enabled for
+    notifications: global calendar_sync_all_enabled ON means every eligible
+    task syncs regardless of its own calendar_sync_enabled; OFF means only
+    tasks with calendar_sync_enabled=True do), that have changed since their
+    last calendar push (or were never pushed).
+    """
+    settings = get_app_settings(user_id)
+    sync_all = settings.calendar_sync_all_enabled
+
+    query = (
         supabase.table("tasks")
         .select("*")
         .eq("user_id", user_id)
         .eq("is_rejected", False)
         .eq("is_completed", False)
         .not_.is_("due_date", "null")
-        .not_.is_("due_time", "null")
-        .execute()
     )
+    if not sync_all:
+        query = query.eq("calendar_sync_enabled", True)
+
+    result = query.execute()
+
     needing_push = []
     for task in result.data:
         if not task.get("google_last_synced_at"):
@@ -655,6 +670,10 @@ def get_tasks_needing_calendar_push(user_id: str) -> list[dict]:
     return needing_push
 
 
+def set_task_calendar_sync_enabled(task_id: str, enabled: bool) -> None:
+    supabase.table("tasks").update({"calendar_sync_enabled": enabled}).eq("id", task_id).execute()
+
+
 def update_task_calendar_sync(task_id: str, google_event_id: str) -> None:
     supabase.table("tasks").update({
         "google_event_id": google_event_id,
@@ -666,7 +685,7 @@ def unlink_task_from_calendar(task_id: str) -> None:
     supabase.table("tasks").update({"google_event_id": None}).eq("id", task_id).execute()
 
 
-def update_task_from_calendar_event(task_id: str, due_date: str, due_time: str, task_name: str) -> None:
+def update_task_from_calendar_event(task_id: str, due_date: str, due_time: Optional[str], task_name: str) -> None:
     supabase.table("tasks").update({
         "due_date": due_date,
         "due_time": due_time,
