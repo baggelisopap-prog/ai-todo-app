@@ -45,11 +45,22 @@ def get_valid_access_token(user_id: str) -> str:
 
 
 def test_calendar_connection(user_id: str) -> dict:
-    """Verifies the connection actually works by fetching the user's primary calendar's metadata."""
+    """
+    Verifies the connection works by listing a small number of events on the
+    user's primary calendar — an events-scope operation, matching the
+    calendar.events OAuth scope actually requested. (A calendar-metadata-only
+    endpoint like GET /calendars/primary requires a broader scope than
+    calendar.events and would incorrectly 403 even with a valid connection.)
+    The events.list response conveniently includes a top-level 'summary'
+    field with the calendar's display name, so we still get a name to show
+    in the UI without needing broader scope.
+    """
     access_token = get_valid_access_token(user_id)
     response = requests.get(
-        "https://www.googleapis.com/calendar/v3/calendars/primary",
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
         headers={"Authorization": f"Bearer {access_token}"},
+        params={"maxResults": 1},
     )
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+    return {"calendar_name": data.get("summary", "Google Calendar")}

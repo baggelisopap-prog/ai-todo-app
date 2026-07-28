@@ -454,7 +454,7 @@ async def test_calendar(user_id: str = Depends(get_current_user_id)):
     """
     try:
         result = google_calendar.test_calendar_connection(user_id)
-        return {"status": "ok", "calendar_name": result.get("summary")}
+        return {"status": "ok", "calendar_name": result.get("calendar_name")}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Calendar connection test failed: {e}")
 
