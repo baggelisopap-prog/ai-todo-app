@@ -326,3 +326,14 @@ export async function convertCalendarEventToTask(eventRecordId) {
     method: 'POST',
   });
 }
+
+/**
+ * POST /calendar/events/{event_record_id}/dismiss — hides a foreign
+ * calendar event from the events views. Does not touch Google Calendar or
+ * delete the underlying row; it just won't reappear on the next sync.
+ */
+export async function dismissCalendarEvent(eventRecordId) {
+  return request(`/calendar/events/${eventRecordId}/dismiss`, {
+    method: 'POST',
+  });
+}

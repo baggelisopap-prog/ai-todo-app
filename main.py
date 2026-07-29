@@ -485,6 +485,13 @@ async def convert_calendar_event(event_record_id: str, user_id: str = Depends(ge
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@app.post("/calendar/events/{event_record_id}/dismiss")
+async def dismiss_calendar_event(event_record_id: str, user_id: str = Depends(get_current_user_id)):
+    """User-initiated hide of a foreign calendar event — does not touch Google Calendar, just stops showing it here."""
+    repository.dismiss_calendar_event(user_id, event_record_id)
+    return {"status": "dismissed"}
+
+
 @app.post("/agent/query", response_model=AgentQueryResponse)
 async def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_current_user_id)):
     """

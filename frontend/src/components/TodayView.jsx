@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
-import { getGoogleCalendarEvents } from '../api';
+import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent } from '../api';
 
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
@@ -17,6 +17,24 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   useEffect(() => {
     getGoogleCalendarEvents(today).then(setTodayEvents).catch(console.error);
   }, [today]);
+
+  async function handleMakeTask(eventId) {
+    try {
+      await convertCalendarEventToTask(eventId);
+      setTodayEvents((current) => current.filter((e) => e.id !== eventId));
+    } catch (err) {
+      console.error('Failed to convert calendar event:', err);
+    }
+  }
+
+  async function handleDismissEvent(eventId) {
+    try {
+      await dismissCalendarEvent(eventId);
+      setTodayEvents((current) => current.filter((e) => e.id !== eventId));
+    } catch (err) {
+      console.error('Failed to dismiss calendar event:', err);
+    }
+  }
 
   const filteredTasks = tasks.filter((task) =>
     (selectedCategory === 'All' || task.category === selectedCategory) &&
@@ -74,7 +92,20 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
                 {event.start_time && (
                   <span className="text-xs text-[var(--text-muted)] tabular-nums">{event.start_time}</span>
                 )}
-                <span className="text-sm text-[var(--text-primary)] truncate">{event.title}</span>
+                <span className="text-sm text-[var(--text-primary)] truncate flex-1">{event.title}</span>
+                <button
+                  onClick={() => handleMakeTask(event.id)}
+                  className="text-xs px-2 py-1 rounded bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium shrink-0"
+                >
+                  {t('calendar.make_task')}
+                </button>
+                <button
+                  onClick={() => handleDismissEvent(event.id)}
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0 px-1"
+                  aria-label={t('calendar.dismiss')}
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>

@@ -271,8 +271,27 @@ class TaskService:
     def update_task(self, user_id: str, record_id: str, updates: dict) -> TaskRecord:
         """
         Updates an existing task in the database, scoped to user_id.
+        There is no separate "mark complete" endpoint — completion goes
+        through this same generic PATCH path with is_completed=True in
+        updates, alongside any other field change. If this update marks
+        the task completed AND it has a linked Google Calendar event, that
+        event is also deleted — a completed task shouldn't keep cluttering
+        the calendar. Mirrors delete_task's calendar cleanup, except the
+        task itself survives here; only its calendar link is torn down.
+        Never blocks the actual completion if the calendar side fails.
         """
-        return self.repository.update_task(user_id, record_id, updates)
+        updated_task = self.repository.update_task(user_id, record_id, updates)
+
+        if updates.get("is_completed") is True:
+            try:
+                google_event_id = repository.get_task_google_event_id(user_id, record_id)
+                if google_event_id:
+                    google_calendar.delete_calendar_event(user_id, google_event_id)
+                    repository.unlink_task_from_calendar(record_id)
+            except Exception as e:
+                logger.error(f"[calendar sync] Failed to delete calendar event on task completion for task {record_id}: {e}")
+
+        return updated_task
 
     def delete_task(self, user_id: str, record_id: str) -> None:
         """

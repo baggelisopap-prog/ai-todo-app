@@ -111,6 +111,14 @@ def sync_task_to_google_calendar(user_id: str, task: dict) -> Optional[str]:
             "extendedProperties": {"private": {TASK_ID_EXTENDED_PROPERTY: task["id"]}},
         }
 
+        # IMPORTANT: a task converted from a foreign Google Calendar event
+        # (see repository.convert_calendar_event_to_task) already carries
+        # that event's real google_event_id at creation time. That means
+        # THIS branch — PUT to the existing event — is what runs the first
+        # time such a task gets pushed, not the POST-a-new-event branch
+        # below. Do not "simplify" this by dropping the PUT path or a
+        # converted event would get duplicated on Google Calendar instead
+        # of updated in place.
         existing_event_id = task.get("google_event_id")
 
         if existing_event_id:

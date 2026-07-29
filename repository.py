@@ -749,16 +749,17 @@ def delete_google_calendar_event_record(user_id: str, google_event_id: str) -> N
 
 def get_google_calendar_events_for_user(user_id: str, date_filter: Optional[str] = None) -> list[dict]:
     """
-    Only events not yet converted to a task. Pass date_filter (YYYY-MM-DD)
-    to narrow to a single day (e.g. the Today view's inline events section);
-    omit it for the full list (Settings panel), which is the original,
-    unchanged behavior.
+    Only events not yet converted to a task AND not dismissed. Pass
+    date_filter (YYYY-MM-DD) to narrow to a single day (e.g. the Today
+    view's inline events section); omit it for the full list (Settings
+    panel).
     """
     query = (
         supabase.table("google_calendar_events")
         .select("*")
         .eq("user_id", user_id)
         .is_("converted_to_task_id", "null")
+        .eq("dismissed", False)
     )
     if date_filter:
         query = query.eq("start_date", date_filter)
@@ -766,10 +767,30 @@ def get_google_calendar_events_for_user(user_id: str, date_filter: Optional[str]
     return result.data
 
 
+def dismiss_calendar_event(user_id: str, event_record_id: str) -> None:
+    """
+    Soft-hides a foreign calendar event from the events views without
+    deleting the underlying row or touching Google Calendar itself — a
+    dismiss is purely a local "stop showing me this" and must not reappear
+    on the next pull sync (get_google_calendar_events_for_user already
+    filters dismissed=False).
+    """
+    supabase.table("google_calendar_events").update({"dismissed": True}).eq("id", event_record_id).eq("user_id", user_id).execute()
+
+
 def convert_calendar_event_to_task(user_id: str, calendar_event_record_id: str) -> dict:
-    """Creates a real task from a stored foreign Google Calendar event, links
+    """
+    Creates a real task from a stored foreign Google Calendar event, links
     them, and marks the event record as converted (so it stops appearing in
-    the separate events view)."""
+    the separate events view).
+
+    IMPORTANT: the new task is created WITH the original google_event_id
+    already set (below). That means the next scheduler push-sync tick
+    (google_calendar.sync_task_to_google_calendar) will see an existing
+    google_event_id on this task and PUT-update that same real event
+    instead of POST-creating a duplicate — do not remove google_event_id
+    from this insert, and do not clear it anywhere after conversion.
+    """
     event_result = (
         supabase.table("google_calendar_events")
         .select("*")
