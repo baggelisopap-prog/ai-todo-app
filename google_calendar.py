@@ -191,6 +191,7 @@ def pull_calendar_changes(user_id: str) -> int:
     changes_processed = 0
 
     while True:
+        logging.info(f"[calendar pull DIAGNOSTIC] user={user_id} requesting with params={params}")
         response = requests.get(
             "https://www.googleapis.com/calendar/v3/calendars/primary/events",
             headers={"Authorization": f"Bearer {access_token}"},
@@ -203,6 +204,7 @@ def pull_calendar_changes(user_id: str) -> int:
             repository.update_calendar_sync_token(user_id, None)
             params.pop("syncToken", None)
             params["timeMin"] = _bootstrap_time_min_isoformat()
+            logging.info(f"[calendar pull DIAGNOSTIC] user={user_id} retrying with params={params}")
             response = requests.get(
                 "https://www.googleapis.com/calendar/v3/calendars/primary/events",
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -214,6 +216,15 @@ def pull_calendar_changes(user_id: str) -> int:
 
         items = data.get("items", [])
         logging.info(f"[calendar pull] user={user_id} Google returned {len(items)} events in this page")
+        logging.info(f"[calendar pull DIAGNOSTIC] user={user_id} raw event count: {len(items)}")
+        for event in items:
+            logging.info(
+                f"[calendar pull DIAGNOSTIC] event: id={event.get('id')} "
+                f"summary={event.get('summary')!r} eventType={event.get('eventType')} "
+                f"organizer={event.get('organizer')} creator={event.get('creator')} "
+                f"start={event.get('start')} recurringEventId={event.get('recurringEventId')} "
+                f"status={event.get('status')}"
+            )
 
         for event in items:
             task_id = event.get("extendedProperties", {}).get("private", {}).get(TASK_ID_EXTENDED_PROPERTY)
