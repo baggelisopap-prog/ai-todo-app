@@ -20,9 +20,14 @@
     "close_day": "Close",
     "connect": "Connect Google Calendar",
     "connected": "Google Calendar connected",
+    "not_connected": "Not connected",
     "test": "Test connection",
     "test_failed": "Connection test failed",
-    "disconnect": "Disconnect"
+    "disconnect": "Disconnect",
+    "sync_all": "Sync all tasks to Google Calendar",
+    "sync_all_description": "When on, every task with a due date syncs to Calendar regardless of its own toggle. When off, only tasks where you've enabled the calendar icon sync.",
+    "sync_task_tooltip": "Sync this task to Google Calendar",
+    "no_date_for_sync": "Add a due date to this task to sync it to Calendar"
   },
   "app": {
     "title": "AI To-Do",

@@ -332,12 +332,41 @@ function CalendarConnectionView() {
   const [isTesting, setIsTesting] = useState(false);
   const [calendarTestResult, setCalendarTestResult] = useState(null);
 
+  // Independent copy of app settings, scoped to this view — mirrors how the
+  // Notifications category manages its own settings state. Only the
+  // calendar_sync_all_enabled field is read/written here; the other fields
+  // just ride along unchanged so a PATCH from this view never clobbers the
+  // notification settings (the /settings endpoint takes the full object).
+  const [settings, setSettings] = useState(null);
+
+  // Fires automatically on mount (no button needed) — this is what makes
+  // "Connected" show immediately whenever the user opens this Calendar
+  // settings section. "Test connection" below is a separate, optional
+  // manual check that the API call still actually works.
   useEffect(() => {
     getCalendarStatus()
       .then(s => setCalendarConnected(s.connected))
       .catch(err => console.error('Failed to load calendar status:', err))
       .finally(() => setStatusLoaded(true));
   }, []);
+
+  useEffect(() => {
+    getAppSettings()
+      .then(s => setSettings(s))
+      .catch(err => console.error('Failed to load settings:', err));
+  }, []);
+
+  async function handleToggleSyncAll() {
+    const previous = settings;
+    const updated = { ...settings, calendar_sync_all_enabled: !settings.calendar_sync_all_enabled };
+    setSettings(updated); // optimistic
+    try {
+      await updateAppSettings(updated);
+    } catch (err) {
+      setSettings(previous); // revert on failure
+      console.error('Failed to update settings:', err);
+    }
+  }
 
   async function handleConnectCalendar() {
     // Read by App.jsx's onAuthStateChange listener once this OAuth flow
@@ -384,31 +413,62 @@ function CalendarConnectionView() {
   return (
     <div>
       {!calendarConnected ? (
-        <button
-          onClick={handleConnectCalendar}
-          className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium"
-        >
-          {t('calendar.connect')}
-        </button>
-      ) : (
         <div className="space-y-3">
-          <p className="text-sm text-[var(--text-secondary)]">{t('calendar.connected')}</p>
+          <p className="text-sm text-[var(--text-secondary)]">{t('calendar.not_connected')}</p>
           <button
-            onClick={handleTestCalendar}
-            disabled={isTesting}
-            className="px-4 py-2 rounded-md border border-[var(--border-subtle)] text-sm font-medium disabled:opacity-50"
+            onClick={handleConnectCalendar}
+            className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium"
           >
-            {t('calendar.test')}
+            {t('calendar.connect')}
           </button>
-          {calendarTestResult && (
-            <p className="text-sm text-[var(--text-primary)]">{calendarTestResult}</p>
-          )}
-          <button
-            onClick={handleDisconnectCalendar}
-            className="w-full text-left px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] text-red-600 text-sm"
-          >
-            {t('calendar.disconnect')}
-          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--success)] font-medium">{t('calendar.connected')} ✓</p>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-[var(--text-primary)]">
+                {t('calendar.sync_all')}
+              </span>
+              <button
+                onClick={handleToggleSyncAll}
+                disabled={!settings}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  settings?.calendar_sync_all_enabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
+                }`}
+                aria-label={t('calendar.sync_all')}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                    settings?.calendar_sync_all_enabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              {t('calendar.sync_all_description')}
+            </p>
+          </div>
+
+          <div className="pt-3 border-t border-[var(--border-subtle)] space-y-3">
+            <button
+              onClick={handleTestCalendar}
+              disabled={isTesting}
+              className="px-4 py-2 rounded-md border border-[var(--border-subtle)] text-sm font-medium disabled:opacity-50"
+            >
+              {t('calendar.test')}
+            </button>
+            {calendarTestResult && (
+              <p className="text-sm text-[var(--text-primary)]">{calendarTestResult}</p>
+            )}
+            <button
+              onClick={handleDisconnectCalendar}
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] text-red-600 text-sm"
+            >
+              {t('calendar.disconnect')}
+            </button>
+          </div>
         </div>
       )}
     </div>
