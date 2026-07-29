@@ -1,16 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
+import { getGoogleCalendarEvents } from '../api';
 
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
   const [overdueExpanded, setOverdueExpanded] = useState(true);
+  const [todayEvents, setTodayEvents] = useState([]);
 
   const today = toLocalISODate(new Date());
+
+  useEffect(() => {
+    getGoogleCalendarEvents(today).then(setTodayEvents).catch(console.error);
+  }, [today]);
 
   const filteredTasks = tasks.filter((task) =>
     (selectedCategory === 'All' || task.category === selectedCategory) &&
@@ -53,6 +59,27 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
         onPriorityChange={setSelectedPriority}
         t={t}
       />
+
+      {todayEvents.length > 0 && (
+        <div className="mb-4">
+          <p className="text-sm font-semibold text-[var(--text-primary)] mb-2">
+            {t('calendar.events_header', { count: todayEvents.length })}
+          </p>
+          <div className="space-y-1.5">
+            {todayEvents.map(event => (
+              <div
+                key={event.id}
+                className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--bg-card)] border-l-4 border-[var(--brand-primary)]"
+              >
+                {event.start_time && (
+                  <span className="text-xs text-[var(--text-muted)] tabular-nums">{event.start_time}</span>
+                )}
+                <span className="text-sm text-[var(--text-primary)] truncate">{event.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isEmpty ? (
         <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>

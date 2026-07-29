@@ -462,14 +462,17 @@ async def test_calendar(user_id: str = Depends(get_current_user_id)):
 
 
 @app.get("/calendar/events")
-async def get_calendar_events(user_id: str = Depends(get_current_user_id)):
+async def get_calendar_events(date: Optional[str] = None, user_id: str = Depends(get_current_user_id)):
     """
     Returns Google Calendar events pulled in by the scheduler that were NOT
     created by this app (no task-id marker) and haven't been converted to a
     task yet. Shown only in their own separate view — never auto-merged into
     the regular task lists (see google_calendar.pull_calendar_changes).
+    Optional `date` (YYYY-MM-DD) narrows to a single day, used by the Today
+    view's inline events section; omitted, this is the original full list
+    used by the Settings panel.
     """
-    return repository.get_google_calendar_events_for_user(user_id)
+    return repository.get_google_calendar_events_for_user(user_id, date_filter=date)
 
 
 @app.post("/calendar/events/{event_record_id}/convert")

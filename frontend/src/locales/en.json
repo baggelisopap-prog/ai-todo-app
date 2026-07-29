@@ -30,7 +30,8 @@
     "no_date_for_sync": "Add a due date to this task to sync it to Calendar",
     "view_events": "Google Calendar Events",
     "make_task": "Make it a task",
-    "no_events": "No Google Calendar events to show"
+    "no_events": "No Google Calendar events to show",
+    "events_header": "Events ({{count}})"
   },
   "app": {
     "title": "AI To-Do",

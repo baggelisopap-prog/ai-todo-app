@@ -180,12 +180,20 @@ def pull_calendar_changes(user_id: str) -> int:
     access_token = get_valid_access_token(user_id)
     sync_token = connection.get("calendar_sync_token")
 
-    params = {"maxResults": 250}
+    # singleEvents=True expands recurring events into their actual individual
+    # date instances (without it, a recurring event only shows its first-ever
+    # occurrence) — kept on both request paths per Google's docs, which say a
+    # syncToken request should keep the same non-excluded parameters as the
+    # initial sync.
+    params = {"maxResults": 250, "singleEvents": True}
     if sync_token:
         params["syncToken"] = sync_token
+        # Do NOT add orderBy, timeMin, timeMax, q, or updatedMin here — all
+        # confirmed incompatible with syncToken (Google returns HTTP 400).
         logging.info(f"[calendar pull] user={user_id} using syncToken={sync_token[:20]}...")
     else:
         params["timeMin"] = _bootstrap_time_min_isoformat()
+        params["orderBy"] = "startTime"  # only valid (and only added) for non-syncToken requests
         logging.info(f"[calendar pull] user={user_id} BOOTSTRAP sync, timeMin={params['timeMin']}")
 
     changes_processed = 0
@@ -204,6 +212,7 @@ def pull_calendar_changes(user_id: str) -> int:
             repository.update_calendar_sync_token(user_id, None)
             params.pop("syncToken", None)
             params["timeMin"] = _bootstrap_time_min_isoformat()
+            params["orderBy"] = "startTime"  # this retry is also a fresh bootstrap (no syncToken)
             logging.info(f"[calendar pull DIAGNOSTIC] user={user_id} retrying with params={params}")
             response = requests.get(
                 "https://www.googleapis.com/calendar/v3/calendars/primary/events",

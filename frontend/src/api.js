@@ -309,10 +309,12 @@ export async function testCalendarConnection() {
 /**
  * GET /calendar/events — Google Calendar events pulled in by the scheduler
  * that this app didn't create and haven't been converted to a task yet.
+ * Pass a YYYY-MM-DD date to filter to just that day (e.g. for the Today
+ * view's inline events section); omit it for the full list (Settings panel).
  * Returns a list of event records.
  */
-export async function getGoogleCalendarEvents() {
-  return request('/calendar/events');
+export async function getGoogleCalendarEvents(date = null) {
+  return request(date ? `/calendar/events?date=${date}` : '/calendar/events');
 }
 
 /**

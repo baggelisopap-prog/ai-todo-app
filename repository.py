@@ -747,16 +747,22 @@ def delete_google_calendar_event_record(user_id: str, google_event_id: str) -> N
     supabase.table("google_calendar_events").delete().eq("user_id", user_id).eq("google_event_id", google_event_id).execute()
 
 
-def get_google_calendar_events_for_user(user_id: str) -> list[dict]:
-    """Only events not yet converted to a task."""
-    result = (
+def get_google_calendar_events_for_user(user_id: str, date_filter: Optional[str] = None) -> list[dict]:
+    """
+    Only events not yet converted to a task. Pass date_filter (YYYY-MM-DD)
+    to narrow to a single day (e.g. the Today view's inline events section);
+    omit it for the full list (Settings panel), which is the original,
+    unchanged behavior.
+    """
+    query = (
         supabase.table("google_calendar_events")
         .select("*")
         .eq("user_id", user_id)
         .is_("converted_to_task_id", "null")
-        .order("start_date")
-        .execute()
     )
+    if date_filter:
+        query = query.eq("start_date", date_filter)
+    result = query.order("start_date").execute()
     return result.data
 
 
