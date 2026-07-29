@@ -210,32 +210,65 @@ def pull_calendar_changes(user_id: str) -> int:
                 f"start={event_start} our_task_id={task_id!r}"
             )
 
-            if not task_id:
-                continue
-
-            if event.get("status") == "cancelled":
-                repository.unlink_task_from_calendar(task_id)
-                logging.info(f"[calendar pull] unlinked task {task_id} (event cancelled)")
-            else:
-                start_info = event.get("start", {})
-                start_datetime = start_info.get("dateTime")
-                start_date = start_info.get("date")
-
-                if start_datetime:
-                    dt = datetime.fromisoformat(start_datetime)
-                    due_date = dt.strftime("%Y-%m-%d")
-                    due_time = dt.strftime("%H:%M")
-                elif start_date:
-                    due_date = start_date
-                    due_time = None
+            if task_id:
+                # Our own task-linked event.
+                if event.get("status") == "cancelled":
+                    repository.mark_task_calendar_deleted(task_id)
+                    logging.info(f"[calendar pull] task {task_id} calendar event deleted — note added, unlinked")
                 else:
-                    logging.info(f"[calendar pull] event for task {task_id} has no start date/time, skipping")
-                    continue  # malformed event, skip
+                    start_info = event.get("start", {})
+                    start_datetime = start_info.get("dateTime")
+                    start_date = start_info.get("date")
 
-                repository.update_task_from_calendar_event(
-                    task_id, due_date, due_time, event.get("summary", "")
-                )
-                logging.info(f"[calendar pull] updated task {task_id}: due_date={due_date} due_time={due_time}")
+                    if start_datetime:
+                        dt = datetime.fromisoformat(start_datetime)
+                        due_date = dt.strftime("%Y-%m-%d")
+                        due_time = dt.strftime("%H:%M")
+                    elif start_date:
+                        due_date = start_date
+                        due_time = None
+                    else:
+                        logging.info(f"[calendar pull] event for task {task_id} has no start date/time, skipping")
+                        continue  # malformed event, skip
+
+                    repository.update_task_from_calendar_event(
+                        task_id, due_date, due_time, event.get("summary", "")
+                    )
+                    logging.info(f"[calendar pull] updated task {task_id}: due_date={due_date} due_time={due_time}")
+            else:
+                # Foreign event (not created by this app) — store it for the
+                # separate "Google Calendar Events" view, do NOT create a task.
+                if event.get("status") == "cancelled":
+                    repository.delete_google_calendar_event_record(user_id, event["id"])
+                    logging.info(f"[calendar pull] foreign event {event['id']} removed (cancelled on Google's side)")
+                else:
+                    start_info = event.get("start", {})
+                    start_datetime = start_info.get("dateTime")
+                    start_date_only = start_info.get("date")
+
+                    if start_datetime:
+                        dt = datetime.fromisoformat(start_datetime)
+                        ev_date = dt.strftime("%Y-%m-%d")
+                        ev_time = dt.strftime("%H:%M")
+                        is_all_day = False
+                    elif start_date_only:
+                        ev_date = start_date_only
+                        ev_time = None
+                        is_all_day = True
+                    else:
+                        logging.info(f"[calendar pull] foreign event {event.get('id')} has no start date/time, skipping")
+                        continue  # malformed event, skip
+
+                    repository.upsert_google_calendar_event(
+                        user_id=user_id,
+                        google_event_id=event["id"],
+                        title=event.get("summary", "(χωρίς τίτλο)"),
+                        description=event.get("description", ""),
+                        start_date=ev_date,
+                        start_time=ev_time,
+                        is_all_day=is_all_day,
+                    )
+                    logging.info(f"[calendar pull] stored foreign event {event['id']}: start_date={ev_date} start_time={ev_time}")
 
             changes_processed += 1
 

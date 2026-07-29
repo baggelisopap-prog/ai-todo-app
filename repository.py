@@ -685,6 +685,23 @@ def unlink_task_from_calendar(task_id: str) -> None:
     supabase.table("tasks").update({"google_event_id": None}).eq("id", task_id).execute()
 
 
+def mark_task_calendar_deleted(task_id: str) -> None:
+    """Called when a task's linked Google Calendar event was deleted on
+    Google's side. Appends a visible note to the task's description and
+    clears the link, WITHOUT deleting the task itself."""
+    result = supabase.table("tasks").select("description").eq("id", task_id).execute()
+    if not result.data:
+        return
+    existing_description = result.data[0].get("description") or ""
+    note = "\n\n⚠️ Διαγράφηκε το συνδεδεμένο event από το Google Calendar."
+    if note.strip() not in existing_description:  # avoid duplicate notes if this somehow runs twice
+        new_description = existing_description + note
+        supabase.table("tasks").update({
+            "description": new_description,
+            "google_event_id": None,
+        }).eq("id", task_id).execute()
+
+
 def update_task_from_calendar_event(task_id: str, due_date: str, due_time: Optional[str], task_name: str) -> None:
     supabase.table("tasks").update({
         "due_date": due_date,
@@ -704,6 +721,86 @@ def get_all_connected_calendar_user_ids() -> list[str]:
     """Users who have an active Google Calendar connection."""
     result = supabase.table("google_calendar_connections").select("user_id").execute()
     return [row["user_id"] for row in result.data]
+
+
+# --- Google Calendar foreign events (not created by this app) ---
+# Events pulled from the user's primary calendar that carry no TASK_ID_EXTENDED_PROPERTY
+# marker — i.e. events the user created directly in Google Calendar. These are
+# stored separately here, shown only in their own dedicated view, and never
+# auto-converted into tasks (see google_calendar.pull_calendar_changes).
+
+
+def upsert_google_calendar_event(user_id: str, google_event_id: str, title: str, description: str, start_date: str, start_time: Optional[str], is_all_day: bool) -> None:
+    supabase.table("google_calendar_events").upsert({
+        "user_id": user_id,
+        "google_event_id": google_event_id,
+        "title": title,
+        "description": description,
+        "start_date": start_date,
+        "start_time": start_time,
+        "is_all_day": is_all_day,
+        "last_synced_at": datetime.now(timezone.utc).isoformat(),
+    }, on_conflict="user_id,google_event_id").execute()
+
+
+def delete_google_calendar_event_record(user_id: str, google_event_id: str) -> None:
+    supabase.table("google_calendar_events").delete().eq("user_id", user_id).eq("google_event_id", google_event_id).execute()
+
+
+def get_google_calendar_events_for_user(user_id: str) -> list[dict]:
+    """Only events not yet converted to a task."""
+    result = (
+        supabase.table("google_calendar_events")
+        .select("*")
+        .eq("user_id", user_id)
+        .is_("converted_to_task_id", "null")
+        .order("start_date")
+        .execute()
+    )
+    return result.data
+
+
+def convert_calendar_event_to_task(user_id: str, calendar_event_record_id: str) -> dict:
+    """Creates a real task from a stored foreign Google Calendar event, links
+    them, and marks the event record as converted (so it stops appearing in
+    the separate events view)."""
+    event_result = (
+        supabase.table("google_calendar_events")
+        .select("*")
+        .eq("id", calendar_event_record_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not event_result.data:
+        raise ValueError("Calendar event not found")
+    ev = event_result.data[0]
+
+    new_task_result = supabase.table("tasks").insert({
+        "user_id": user_id,
+        "task_name": ev["title"],
+        "description": ev.get("description") or "",
+        "due_date": ev["start_date"],
+        "due_time": ev.get("start_time"),
+        "category": "Unknown",
+        "priority": "P3",
+        # ai_suggested_category/ai_suggested_priority are non-nullable snapshot
+        # fields enforced by _supabase_row_to_task (raises if missing) — there's
+        # no actual AI suggestion here since this task originated from a
+        # calendar event, not extraction, so they just mirror the chosen values.
+        "ai_suggested_category": "Unknown",
+        "ai_suggested_priority": "P3",
+        "approval_status": True,
+        "is_completed": False,
+        "is_rejected": False,
+        "google_event_id": ev["google_event_id"],
+    }).execute()
+
+    new_task = new_task_result.data[0]
+    supabase.table("google_calendar_events").update({
+        "converted_to_task_id": new_task["id"]
+    }).eq("id", calendar_event_record_id).execute()
+
+    return new_task
 
 
 def get_task_google_event_id(user_id: str, record_id: str) -> Optional[str]:

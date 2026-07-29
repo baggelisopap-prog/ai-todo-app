@@ -305,3 +305,22 @@ export async function disconnectGoogleCalendar() {
 export async function testCalendarConnection() {
   return request('/calendar/test');
 }
+
+/**
+ * GET /calendar/events — Google Calendar events pulled in by the scheduler
+ * that this app didn't create and haven't been converted to a task yet.
+ * Returns a list of event records.
+ */
+export async function getGoogleCalendarEvents() {
+  return request('/calendar/events');
+}
+
+/**
+ * POST /calendar/events/{event_record_id}/convert — explicitly converts a
+ * stored foreign calendar event into a real task. Returns the created task.
+ */
+export async function convertCalendarEventToTask(eventRecordId) {
+  return request(`/calendar/events/${eventRecordId}/convert`, {
+    method: 'POST',
+  });
+}

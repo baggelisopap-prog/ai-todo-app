@@ -461,6 +461,27 @@ async def test_calendar(user_id: str = Depends(get_current_user_id)):
         raise HTTPException(status_code=502, detail=f"Calendar connection test failed: {e}")
 
 
+@app.get("/calendar/events")
+async def get_calendar_events(user_id: str = Depends(get_current_user_id)):
+    """
+    Returns Google Calendar events pulled in by the scheduler that were NOT
+    created by this app (no task-id marker) and haven't been converted to a
+    task yet. Shown only in their own separate view — never auto-merged into
+    the regular task lists (see google_calendar.pull_calendar_changes).
+    """
+    return repository.get_google_calendar_events_for_user(user_id)
+
+
+@app.post("/calendar/events/{event_record_id}/convert")
+async def convert_calendar_event(event_record_id: str, user_id: str = Depends(get_current_user_id)):
+    """Explicit, user-initiated conversion of a stored foreign calendar event into a real task."""
+    try:
+        task = repository.convert_calendar_event_to_task(user_id, event_record_id)
+        return task
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @app.post("/agent/query", response_model=AgentQueryResponse)
 async def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_current_user_id)):
     """

@@ -16,6 +16,7 @@ import {
   testCalendarConnection,
 } from '../api';
 import { supabase } from '../supabaseClient';
+import GoogleCalendarEventsView from './GoogleCalendarEventsView';
 
 const SETTINGS_CATEGORIES = [
   { id: 'notifications', labelKey: 'settings.category_notifications', icon: BellIcon },
@@ -331,6 +332,7 @@ function CalendarConnectionView() {
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [calendarTestResult, setCalendarTestResult] = useState(null);
+  const [showEvents, setShowEvents] = useState(false);
 
   // Independent copy of app settings, scoped to this view — mirrors how the
   // Notifications category manages its own settings state. Only the
@@ -449,6 +451,21 @@ function CalendarConnectionView() {
             <p className="text-xs text-[var(--text-muted)] mt-1">
               {t('calendar.sync_all_description')}
             </p>
+          </div>
+
+          <div className="pt-3 border-t border-[var(--border-subtle)]">
+            <button
+              onClick={() => setShowEvents((v) => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] text-sm font-medium text-[var(--text-primary)]"
+            >
+              {t('calendar.view_events')}
+              <ChevronRightIcon className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${showEvents ? 'rotate-90' : ''}`} />
+            </button>
+            {showEvents && (
+              <div className="mt-2">
+                <GoogleCalendarEventsView />
+              </div>
+            )}
           </div>
 
           <div className="pt-3 border-t border-[var(--border-subtle)] space-y-3">
