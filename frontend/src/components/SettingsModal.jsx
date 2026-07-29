@@ -13,7 +13,6 @@ import {
   getTokenUsage,
   getCalendarStatus,
   disconnectGoogleCalendar,
-  testCalendarConnection,
 } from '../api';
 import { supabase } from '../supabaseClient';
 import GoogleCalendarEventsView from './GoogleCalendarEventsView';
@@ -330,8 +329,6 @@ function CalendarConnectionView() {
   const { t } = useTranslation();
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [statusLoaded, setStatusLoaded] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [calendarTestResult, setCalendarTestResult] = useState(null);
   const [showEvents, setShowEvents] = useState(false);
 
   // Independent copy of app settings, scoped to this view — mirrors how the
@@ -343,8 +340,7 @@ function CalendarConnectionView() {
 
   // Fires automatically on mount (no button needed) — this is what makes
   // "Connected" show immediately whenever the user opens this Calendar
-  // settings section. "Test connection" below is a separate, optional
-  // manual check that the API call still actually works.
+  // settings section.
   useEffect(() => {
     getCalendarStatus()
       .then(s => setCalendarConnected(s.connected))
@@ -392,20 +388,6 @@ function CalendarConnectionView() {
   async function handleDisconnectCalendar() {
     await disconnectGoogleCalendar();
     setCalendarConnected(false);
-    setCalendarTestResult(null);
-  }
-
-  async function handleTestCalendar() {
-    setIsTesting(true);
-    setCalendarTestResult(null);
-    try {
-      const result = await testCalendarConnection();
-      setCalendarTestResult(result.calendar_name);
-    } catch (err) {
-      setCalendarTestResult(t('calendar.test_failed'));
-    } finally {
-      setIsTesting(false);
-    }
   }
 
   if (!statusLoaded) {
@@ -468,17 +450,7 @@ function CalendarConnectionView() {
             )}
           </div>
 
-          <div className="pt-3 border-t border-[var(--border-subtle)] space-y-3">
-            <button
-              onClick={handleTestCalendar}
-              disabled={isTesting}
-              className="px-4 py-2 rounded-md border border-[var(--border-subtle)] text-sm font-medium disabled:opacity-50"
-            >
-              {t('calendar.test')}
-            </button>
-            {calendarTestResult && (
-              <p className="text-sm text-[var(--text-primary)]">{calendarTestResult}</p>
-            )}
+          <div className="pt-3 border-t border-[var(--border-subtle)]">
             <button
               onClick={handleDisconnectCalendar}
               className="w-full text-left px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] text-red-600 text-sm"

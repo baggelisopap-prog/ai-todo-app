@@ -319,6 +319,14 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     return acc;
   }, {});
 
+  const eventsByDate = calendarEvents.reduce((acc, event) => {
+    if (!event.start_date) return acc;
+    const key = event.start_date;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(event);
+    return acc;
+  }, {});
+
   const selectedISO = selectedDate ? toLocalISODate(selectedDate) : null;
   const selectedDayTasks = selectedISO
     ? (tasksByDate[selectedISO] || []).slice().sort((a, b) => statusRank(a) - statusRank(b))
@@ -370,6 +378,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
             selectedDate={selectedDate}
             onSelectDate={handleSelectDate}
             tasksByDate={tasksByDate}
+            eventsByDate={eventsByDate}
             todayISO={todayISO}
             t={t}
           />
@@ -380,6 +389,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
               onPrevWeek={handlePrevWeek}
               onNextWeek={handleNextWeek}
               tasks={filteredTasks}
+              calendarEvents={calendarEvents}
               todayISO={todayISO}
               onTaskClick={handleTaskClick}
               onSelectDate={handleSelectDate}
@@ -473,6 +483,7 @@ function MonthlyGrid({
   selectedDate,
   onSelectDate,
   tasksByDate,
+  eventsByDate,
   todayISO,
   t,
 }) {
@@ -519,6 +530,7 @@ function MonthlyGrid({
               isSelected={cellISO === selectedISO}
               isTodayCell={cellISO === todayISO}
               tasksForDay={tasksByDate[cellISO] || []}
+              eventsForDay={eventsByDate[cellISO] || []}
               onSelect={onSelectDate}
             />
           );
@@ -586,9 +598,18 @@ function DayDetailModal({ date, tasks, expandedTaskId, onToggleExpand, onTaskUpd
   );
 }
 
-function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, onSelect }) {
+function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, eventsForDay, onSelect }) {
   const dropId = `day:${toLocalISODate(cell.date)}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
+
+  // Tasks get priority to fill the (small, fixed) dot slots — events are
+  // contextual/secondary — then any overflow, tasks+events combined, folds
+  // into the existing "+" indicator rather than a separate one.
+  const maxDots = 3;
+  const taskDots = tasksForDay.slice(0, maxDots);
+  const eventDots = eventsForDay.slice(0, maxDots - taskDots.length);
+  const shownCount = taskDots.length + eventDots.length;
+  const totalCount = tasksForDay.length + eventsForDay.length;
 
   return (
     <button
@@ -606,14 +627,22 @@ function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, onSelect }
     >
       <span className="text-sm">{cell.date.getDate()}</span>
       <div className="flex gap-0.5 flex-wrap justify-center">
-        {tasksForDay.slice(0, 3).map((task, idx) => (
+        {taskDots.map((task, idx) => (
           <span
-            key={idx}
+            key={`task-${idx}`}
             className="w-1.5 h-1.5 rounded-full"
             style={{ backgroundColor: priorityColor(task.priority) }}
           />
         ))}
-        {tasksForDay.length > 3 && (
+        {eventDots.map((_, idx) => (
+          // Hollow ring instead of a filled dot — visually distinct from
+          // task priority dots at a glance (Google Calendar event, not a task).
+          <span
+            key={`event-${idx}`}
+            className="w-1.5 h-1.5 rounded-full border border-[var(--brand-primary)]"
+          />
+        ))}
+        {totalCount > shownCount && (
           <span className="text-[10px] text-[var(--text-secondary)]">+</span>
         )}
       </div>
@@ -621,7 +650,7 @@ function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, onSelect }
   );
 }
 
-function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO, onTaskClick, onSelectDate, onEmptyClick, t }) {
+function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, calendarEvents = [], todayISO, onTaskClick, onSelectDate, onEmptyClick, t }) {
   const weekDays = getWeekDays(currentWeekStart);
 
   const tasksByCell = {};
@@ -642,6 +671,26 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
       const cellKey = `${dateKey}-${clampedHour}`;
       if (!tasksByCell[cellKey]) tasksByCell[cellKey] = [];
       tasksByCell[cellKey].push(task);
+    }
+  }
+
+  // Same bucketing convention as tasks above, kept in its own maps so
+  // event rendering stays entirely additive to the existing task cells.
+  const eventsByCell = {};
+  const allDayEventsByDate = {};
+  for (const event of calendarEvents) {
+    if (!event.start_date) continue;
+    const dateKey = event.start_date;
+
+    if (!event.start_time) {
+      if (!allDayEventsByDate[dateKey]) allDayEventsByDate[dateKey] = [];
+      allDayEventsByDate[dateKey].push(event);
+    } else {
+      const hour = parseInt(event.start_time.split(':')[0], 10);
+      const clampedHour = Math.max(7, Math.min(22, hour));
+      const cellKey = `${dateKey}-${clampedHour}`;
+      if (!eventsByCell[cellKey]) eventsByCell[cellKey] = [];
+      eventsByCell[cellKey].push(event);
     }
   }
 
@@ -705,6 +754,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
                   day={day}
                   dayIndex={dayIndex}
                   tasks={allDayTasksByDate[dayKey] || []}
+                  events={allDayEventsByDate[dayKey] || []}
                   onTaskClick={onTaskClick}
                   onEmptyClick={onEmptyClick}
                 />
@@ -728,6 +778,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
                       dayIndex={dayIndex}
                       hour={hour}
                       tasks={tasksByCell[cellKey] || []}
+                      events={eventsByCell[cellKey] || []}
                       isTodayCol={dayISO === todayISO}
                       onTaskClick={onTaskClick}
                       onEmptyClick={onEmptyClick}
@@ -750,7 +801,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, todayISO,
   );
 }
 
-function WeeklyHourCell({ day, dayIndex, hour, tasks, isTodayCol, onTaskClick, onEmptyClick }) {
+function WeeklyHourCell({ day, dayIndex, hour, tasks, events = [], isTodayCol, onTaskClick, onEmptyClick }) {
   const dropId = `cell:${toLocalISODate(day)}:${hour}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
@@ -776,11 +827,14 @@ function WeeklyHourCell({ day, dayIndex, hour, tasks, isTodayCol, onTaskClick, o
       {tasks.map((task) => (
         <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
       ))}
+      {events.map((event) => (
+        <EventChip key={event.id} event={event} />
+      ))}
     </div>
   );
 }
 
-function WeeklyAllDayCell({ day, dayIndex, tasks, onTaskClick, onEmptyClick }) {
+function WeeklyAllDayCell({ day, dayIndex, tasks, events = [], onTaskClick, onEmptyClick }) {
   const dropId = `allday:${toLocalISODate(day)}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
@@ -802,6 +856,9 @@ function WeeklyAllDayCell({ day, dayIndex, tasks, onTaskClick, onEmptyClick }) {
     >
       {tasks.map((task) => (
         <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
+      ))}
+      {events.map((event) => (
+        <EventChip key={event.id} event={event} />
       ))}
     </div>
   );
@@ -853,6 +910,21 @@ function TaskChip({ task, onClick, isOverlay = false }) {
         {label}
       </div>
     </button>
+  );
+}
+
+function EventChip({ event }) {
+  // Display-only (no make-task/dismiss here — those stay in Today/Settings):
+  // deliberately not draggable/clickable, and styled lighter/secondary to
+  // TaskChip (muted background, dashed border, hollow ring indicator) so
+  // events read as contextual info rather than actionable app content.
+  return (
+    <div
+      className="w-full flex-1 min-h-0 flex items-center gap-1 text-left px-2 py-1 rounded text-[10px] md:text-xs bg-[var(--bg-hover)] text-[var(--text-secondary)] border border-dashed border-[var(--border-subtle)] overflow-hidden"
+    >
+      <span className="w-1.5 h-1.5 rounded-full border border-[var(--brand-primary)] flex-shrink-0" />
+      <span className="min-w-0 break-words md:truncate leading-tight">{event.title}</span>
+    </div>
   );
 }
 
