@@ -149,6 +149,21 @@ def delete_calendar_event(user_id: str, google_event_id: str) -> None:
         logging.error(f"[calendar sync] Failed to delete event {google_event_id} for user {user_id}: {e}")
 
 
+BOOTSTRAP_LOOKBACK_DAYS = 90
+
+
+def _bootstrap_time_min_isoformat() -> str:
+    """
+    90 days before now, in UTC. Used as the bootstrap sync's timeMin so a
+    fresh sync captures past events too, not just from today onward. No
+    corresponding timeMax — future events stay unbounded, since Google's
+    events.list with only timeMin already returns everything from that
+    point forward (paginated).
+    """
+    lookback_start = datetime.now(timezone.utc) - timedelta(days=BOOTSTRAP_LOOKBACK_DAYS)
+    return lookback_start.isoformat()
+
+
 def pull_calendar_changes(user_id: str) -> int:
     """
     Pulls changes from Google Calendar since the last sync (using Google's
@@ -170,7 +185,7 @@ def pull_calendar_changes(user_id: str) -> int:
         params["syncToken"] = sync_token
         logging.info(f"[calendar pull] user={user_id} using syncToken={sync_token[:20]}...")
     else:
-        params["timeMin"] = datetime.now(timezone.utc).isoformat()
+        params["timeMin"] = _bootstrap_time_min_isoformat()
         logging.info(f"[calendar pull] user={user_id} BOOTSTRAP sync, timeMin={params['timeMin']}")
 
     changes_processed = 0
@@ -187,7 +202,7 @@ def pull_calendar_changes(user_id: str) -> int:
             logging.info(f"[calendar pull] user={user_id} sync token expired (410), resetting to fresh bootstrap")
             repository.update_calendar_sync_token(user_id, None)
             params.pop("syncToken", None)
-            params["timeMin"] = datetime.now(timezone.utc).isoformat()
+            params["timeMin"] = _bootstrap_time_min_isoformat()
             response = requests.get(
                 "https://www.googleapis.com/calendar/v3/calendars/primary/events",
                 headers={"Authorization": f"Bearer {access_token}"},
