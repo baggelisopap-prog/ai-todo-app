@@ -331,6 +331,9 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const selectedDayTasks = selectedISO
     ? (tasksByDate[selectedISO] || []).slice().sort((a, b) => statusRank(a) - statusRank(b))
     : [];
+  // Filtered from the range already fetched for the visible grid (Monthly
+  // or Weekly) — no separate API call needed for the popup.
+  const selectedDayEvents = selectedISO ? (eventsByDate[selectedISO] || []) : [];
 
   const selectedTask = selectedTaskId ? tasks.find((tk) => tk.record_id === selectedTaskId) : null;
 
@@ -416,6 +419,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
           <DayDetailModal
             date={selectedDate}
             tasks={selectedDayTasks}
+            events={selectedDayEvents}
             expandedTaskId={expandedTaskId}
             onToggleExpand={onToggleExpand}
             onTaskUpdate={onTaskUpdate}
@@ -540,8 +544,12 @@ function MonthlyGrid({
   );
 }
 
-function DayDetailModal({ date, tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onClose, t }) {
+function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onClose, t }) {
   const dayLabel = formatSelectedDayLabel(date);
+  // Combined so the header count is never misleadingly "(0)" on a day that
+  // has events but no tasks — this is what previously made the popup look
+  // blank/broken for event-only days.
+  const totalCount = tasks.length + events.length;
 
   return (
     <div
@@ -556,7 +564,7 @@ function DayDetailModal({ date, tasks, expandedTaskId, onToggleExpand, onTaskUpd
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">
             {dayLabel}
             <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">
-              ({tasks.length})
+              ({totalCount})
             </span>
           </h2>
           <button
@@ -569,28 +577,59 @@ function DayDetailModal({ date, tasks, expandedTaskId, onToggleExpand, onTaskUpd
         </div>
 
         <div className="overflow-y-auto p-4">
-          {tasks.length > 0 ? (
-            <div className="space-y-2">
-              {tasks.map((task) => (
-                <div key={task.record_id} className="flex items-start gap-1">
-                  <DragHandle task={task} t={t} />
-                  <div className="flex-1 min-w-0">
-                    <TaskCard
-                      task={task}
-                      isExpanded={expandedTaskId === task.record_id}
-                      onToggleExpand={onToggleExpand}
-                      onUpdate={onTaskUpdate}
-                      onTaskDeleted={onTaskDeleted}
-                      onShowToast={onShowToast}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
+          {tasks.length === 0 && events.length === 0 && (
             <p className="text-sm text-[var(--text-muted)] italic">
               {t('empty.no_tasks')}
             </p>
+          )}
+
+          {tasks.length > 0 && (
+            <div className={events.length > 0 ? 'mb-4' : ''}>
+              <div className="space-y-2">
+                {tasks.map((task) => (
+                  <div key={task.record_id} className="flex items-start gap-1">
+                    <DragHandle task={task} t={t} />
+                    <div className="flex-1 min-w-0">
+                      <TaskCard
+                        task={task}
+                        isExpanded={expandedTaskId === task.record_id}
+                        onToggleExpand={onToggleExpand}
+                        onUpdate={onTaskUpdate}
+                        onTaskDeleted={onTaskDeleted}
+                        onShowToast={onShowToast}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {events.length > 0 && (
+            <div>
+              {/* Own labeled section, mirroring the Today view's events header — read-only, no make-task/dismiss here. */}
+              <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-2">
+                {t('calendar.events_header', { count: events.length })}
+              </p>
+              <div className="space-y-1.5">
+                {events.map((event) => (
+                  <div
+                    key={event.id}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md border-l-4"
+                    style={{
+                      backgroundColor: 'var(--calendar-event-bg)',
+                      borderLeftColor: 'var(--calendar-event)',
+                      color: 'var(--calendar-event-text)',
+                    }}
+                  >
+                    {event.start_time && (
+                      <span className="text-xs tabular-nums font-medium flex-shrink-0">{event.start_time}</span>
+                    )}
+                    <span className="text-sm truncate">{event.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -768,6 +807,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, calendarE
                   events={allDayEventsByDate[dayKey] || []}
                   onTaskClick={onTaskClick}
                   onEmptyClick={onEmptyClick}
+                  onSelectDate={onSelectDate}
                 />
               );
             })}
@@ -793,6 +833,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, calendarE
                       isTodayCol={dayISO === todayISO}
                       onTaskClick={onTaskClick}
                       onEmptyClick={onEmptyClick}
+                      onSelectDate={onSelectDate}
                     />
                   );
                 })}
@@ -812,7 +853,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, calendarE
   );
 }
 
-function WeeklyHourCell({ day, dayIndex, hour, tasks, events = [], isTodayCol, onTaskClick, onEmptyClick }) {
+function WeeklyHourCell({ day, dayIndex, hour, tasks, events = [], isTodayCol, onTaskClick, onEmptyClick, onSelectDate }) {
   const dropId = `cell:${toLocalISODate(day)}:${hour}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
@@ -839,13 +880,13 @@ function WeeklyHourCell({ day, dayIndex, hour, tasks, events = [], isTodayCol, o
         <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
       ))}
       {events.map((event) => (
-        <EventChip key={event.id} event={event} />
+        <EventChip key={event.id} event={event} onClick={() => onSelectDate(day)} />
       ))}
     </div>
   );
 }
 
-function WeeklyAllDayCell({ day, dayIndex, tasks, events = [], onTaskClick, onEmptyClick }) {
+function WeeklyAllDayCell({ day, dayIndex, tasks, events = [], onTaskClick, onEmptyClick, onSelectDate }) {
   const dropId = `allday:${toLocalISODate(day)}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
@@ -869,7 +910,7 @@ function WeeklyAllDayCell({ day, dayIndex, tasks, events = [], onTaskClick, onEm
         <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
       ))}
       {events.map((event) => (
-        <EventChip key={event.id} event={event} />
+        <EventChip key={event.id} event={event} onClick={() => onSelectDate(day)} />
       ))}
     </div>
   );
@@ -924,16 +965,24 @@ function TaskChip({ task, onClick, isOverlay = false }) {
   );
 }
 
-function EventChip({ event }) {
-  // Display-only (no make-task/dismiss here — those stay in Today/Settings):
-  // deliberately not draggable/clickable. Same chip shape/size as TaskChip
-  // (parallel visual treatment), but using the dedicated --calendar-event
-  // tokens (a distinct cyan, not any task priority/category color) so
-  // events are clearly not tasks while staying fully legible — not just a
-  // dot, the actual title (and start time, if timed) is shown.
+function EventChip({ event, onClick }) {
+  // Read-only content (no make-task/dismiss/edit here — those stay in
+  // Today/Settings): not draggable, and tapping it never mutates anything.
+  // The one thing a tap DOES do is open the same day-detail popup Monthly
+  // uses (via onClick, wired to onSelectDate by the parent cell) — events
+  // otherwise had no tap action at all in the Weekly grid. Same chip
+  // shape/size as TaskChip (parallel visual treatment), but using the
+  // dedicated --calendar-event tokens (a distinct cyan, not any task
+  // priority/category color) so events are clearly not tasks while staying
+  // fully legible — not just a dot, the actual title (and start time, if
+  // timed) is shown.
   return (
     <div
-      className="w-full flex-1 min-h-0 flex items-center gap-1 text-left px-2 py-1 rounded text-[10px] md:text-xs overflow-hidden"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(event);
+      }}
+      className="w-full flex-1 min-h-0 flex items-center gap-1 text-left px-2 py-1 rounded text-[10px] md:text-xs overflow-hidden cursor-pointer hover:brightness-95 transition-all"
       style={{ backgroundColor: 'var(--calendar-event-bg)', color: 'var(--calendar-event-text)' }}
     >
       <span
