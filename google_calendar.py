@@ -168,8 +168,10 @@ def pull_calendar_changes(user_id: str) -> int:
     params = {"maxResults": 250}
     if sync_token:
         params["syncToken"] = sync_token
+        logging.info(f"[calendar pull] user={user_id} using syncToken={sync_token[:20]}...")
     else:
         params["timeMin"] = datetime.now(timezone.utc).isoformat()
+        logging.info(f"[calendar pull] user={user_id} BOOTSTRAP sync, timeMin={params['timeMin']}")
 
     changes_processed = 0
 
@@ -182,6 +184,7 @@ def pull_calendar_changes(user_id: str) -> int:
 
         if response.status_code == 410:
             # Sync token expired/invalid — reset and do a fresh sync from now
+            logging.info(f"[calendar pull] user={user_id} sync token expired (410), resetting to fresh bootstrap")
             repository.update_calendar_sync_token(user_id, None)
             params.pop("syncToken", None)
             params["timeMin"] = datetime.now(timezone.utc).isoformat()
@@ -194,13 +197,25 @@ def pull_calendar_changes(user_id: str) -> int:
         response.raise_for_status()
         data = response.json()
 
-        for event in data.get("items", []):
+        items = data.get("items", [])
+        logging.info(f"[calendar pull] user={user_id} Google returned {len(items)} events in this page")
+
+        for event in items:
             task_id = event.get("extendedProperties", {}).get("private", {}).get(TASK_ID_EXTENDED_PROPERTY)
+            event_summary = event.get("summary", "(no title)")
+            event_start = event.get("start", {})
+            event_status = event.get("status")
+            logging.info(
+                f"[calendar pull] event: summary={event_summary!r} status={event_status} "
+                f"start={event_start} our_task_id={task_id!r}"
+            )
+
             if not task_id:
                 continue
 
             if event.get("status") == "cancelled":
                 repository.unlink_task_from_calendar(task_id)
+                logging.info(f"[calendar pull] unlinked task {task_id} (event cancelled)")
             else:
                 start_info = event.get("start", {})
                 start_datetime = start_info.get("dateTime")
@@ -214,11 +229,14 @@ def pull_calendar_changes(user_id: str) -> int:
                     due_date = start_date
                     due_time = None
                 else:
+                    logging.info(f"[calendar pull] event for task {task_id} has no start date/time, skipping")
                     continue  # malformed event, skip
 
                 repository.update_task_from_calendar_event(
                     task_id, due_date, due_time, event.get("summary", "")
                 )
+                logging.info(f"[calendar pull] updated task {task_id}: due_date={due_date} due_time={due_time}")
+
             changes_processed += 1
 
         page_token = data.get("nextPageToken")
@@ -229,6 +247,8 @@ def pull_calendar_changes(user_id: str) -> int:
         next_sync_token = data.get("nextSyncToken")
         if next_sync_token:
             repository.update_calendar_sync_token(user_id, next_sync_token)
+            logging.info(f"[calendar pull] user={user_id} stored new syncToken for next run")
         break
 
+    logging.info(f"[calendar pull] user={user_id} finished, {changes_processed} of our own tasks processed")
     return changes_processed
