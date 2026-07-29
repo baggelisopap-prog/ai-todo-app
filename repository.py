@@ -156,6 +156,12 @@ class AirtableTaskRepository:
         """
         fields_dict = self._task_to_supabase_fields(task)
         fields_dict["user_id"] = user_id
+        # Every task created through this normal path (manual, AI extraction
+        # from text/voice/photo, Hostaway) originates in the app, not from a
+        # converted Google Calendar event — see convert_calendar_event_to_task
+        # for the other origin, which bypasses save_task entirely and sets
+        # calendar_origin='google' itself.
+        fields_dict["calendar_origin"] = "app"
 
         response = supabase.table("tasks").insert(fields_dict).execute()
         new_row = response.data[0]
@@ -747,12 +753,19 @@ def delete_google_calendar_event_record(user_id: str, google_event_id: str) -> N
     supabase.table("google_calendar_events").delete().eq("user_id", user_id).eq("google_event_id", google_event_id).execute()
 
 
-def get_google_calendar_events_for_user(user_id: str, date_filter: Optional[str] = None) -> list[dict]:
+def get_google_calendar_events_for_user(
+    user_id: str,
+    date_filter: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> list[dict]:
     """
     Only events not yet converted to a task AND not dismissed. Pass
     date_filter (YYYY-MM-DD) to narrow to a single day (e.g. the Today
-    view's inline events section); omit it for the full list (Settings
-    panel).
+    view's inline events section); pass start_date/end_date (YYYY-MM-DD)
+    to narrow to a date range (e.g. the Monthly/Weekly Calendar view); omit
+    all three for the full list (Settings panel) — all filters are purely
+    additive/optional, so every existing caller's behavior is unchanged.
     """
     query = (
         supabase.table("google_calendar_events")
@@ -763,6 +776,10 @@ def get_google_calendar_events_for_user(user_id: str, date_filter: Optional[str]
     )
     if date_filter:
         query = query.eq("start_date", date_filter)
+    if start_date:
+        query = query.gte("start_date", start_date)
+    if end_date:
+        query = query.lte("start_date", end_date)
     result = query.order("start_date").execute()
     return result.data
 
@@ -820,6 +837,11 @@ def convert_calendar_event_to_task(user_id: str, calendar_event_record_id: str) 
         "is_completed": False,
         "is_rejected": False,
         "google_event_id": ev["google_event_id"],
+        # Origin-aware deletion (services.TaskService.delete_task) relies on
+        # this: since the event pre-existed on Google's side, deleting this
+        # derived task must NOT delete the event, unlike calendar_origin='app'
+        # tasks whose event this app itself created.
+        "calendar_origin": "google",
     }).execute()
 
     new_task = new_task_result.data[0]
@@ -830,23 +852,25 @@ def convert_calendar_event_to_task(user_id: str, calendar_event_record_id: str) 
     return new_task
 
 
-def get_task_google_event_id(user_id: str, record_id: str) -> Optional[str]:
+def get_task_calendar_fields(user_id: str, record_id: str) -> Optional[dict]:
     """
-    Raw lookup of a task's linked google_event_id, scoped to user_id.
-    Bypasses the TaskRecord parsing pipeline (which doesn't surface this
-    field) since this is purely an internal read used just before deletion,
-    to know whether a linked Google Calendar event also needs deleting.
+    Raw lookup of a task's calendar-linkage bookkeeping fields
+    (google_event_id, calendar_origin), scoped to user_id. Bypasses the
+    TaskRecord parsing pipeline (which doesn't surface these) — used by
+    the delete flow (to decide whether deleting the task should also
+    delete the Google event: only for calendar_origin='app') and the
+    complete/un-complete flow (to know whether there's an event to mark).
     """
     result = (
         supabase.table("tasks")
-        .select("google_event_id")
+        .select("google_event_id, calendar_origin")
         .eq("id", record_id)
         .eq("user_id", user_id)
         .execute()
     )
     if not result.data:
         return None
-    return result.data[0].get("google_event_id")
+    return result.data[0]
 
 
 def get_all_token_usage_logs(user_id: str) -> list[dict]:

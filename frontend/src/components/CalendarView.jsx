@@ -14,7 +14,7 @@ import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
 import CustomSelect from './CustomSelect';
 import FilterBar from './FilterBar';
-import { createTaskManual } from '../api';
+import { createTaskManual, getCalendarEventsInRange } from '../api';
 import { toLocalISODate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import { getEventLabel } from '../utils/eventType';
@@ -150,7 +150,27 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const [manualCreateSlot, setManualCreateSlot] = useState(null); // { date, time }
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
+  const [calendarEvents, setCalendarEvents] = useState([]);
   const taskDetailRef = useRef(null);
+
+  // Google Calendar events (display-only) for whatever range is currently
+  // visible — the full Monthly grid (including lead/tail days from
+  // adjacent months, same as tasks already show there via tasksByDate) or
+  // the current week. Refetches whenever the visible range changes.
+  useEffect(() => {
+    let startISO, endISO;
+    if (viewMode === 'monthly') {
+      const cells = getCalendarCells(currentMonth);
+      startISO = toLocalISODate(cells[0].date);
+      endISO = toLocalISODate(cells[cells.length - 1].date);
+    } else {
+      const weekEnd = new Date(currentWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      startISO = toLocalISODate(currentWeekStart);
+      endISO = toLocalISODate(weekEnd);
+    }
+    getCalendarEventsInRange(startISO, endISO).then(setCalendarEvents).catch(console.error);
+  }, [viewMode, currentMonth, currentWeekStart]);
 
   useEffect(() => {
     if (selectedTaskId && taskDetailRef.current) {

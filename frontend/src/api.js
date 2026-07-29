@@ -318,6 +318,15 @@ export async function getGoogleCalendarEvents(date = null) {
 }
 
 /**
+ * GET /calendar/events?start=...&end=... — Google Calendar events whose
+ * start_date falls within [startDate, endDate] (both YYYY-MM-DD, inclusive).
+ * Used by the Monthly/Weekly Calendar view. Returns a list of event records.
+ */
+export async function getCalendarEventsInRange(startDate, endDate) {
+  return request(`/calendar/events?start=${startDate}&end=${endDate}`);
+}
+
+/**
  * POST /calendar/events/{event_record_id}/convert — explicitly converts a
  * stored foreign calendar event into a real task. Returns the created task.
  */

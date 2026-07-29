@@ -271,40 +271,47 @@ class TaskService:
     def update_task(self, user_id: str, record_id: str, updates: dict) -> TaskRecord:
         """
         Updates an existing task in the database, scoped to user_id.
-        There is no separate "mark complete" endpoint — completion goes
-        through this same generic PATCH path with is_completed=True in
-        updates, alongside any other field change. If this update marks
-        the task completed AND it has a linked Google Calendar event, that
-        event is also deleted — a completed task shouldn't keep cluttering
-        the calendar. Mirrors delete_task's calendar cleanup, except the
-        task itself survives here; only its calendar link is torn down.
-        Never blocks the actual completion if the calendar side fails.
+        There is no separate "mark complete"/"un-complete" endpoint — both
+        go through this same generic PATCH path with is_completed in
+        updates, alongside any other field change. If this update changes
+        is_completed AND the task has a linked Google Calendar event, the
+        event's title gets a "✓ " prefix added (complete) or removed
+        (un-complete) — completion no longer DELETES the event (revised
+        from an earlier behavior); the event survives on the calendar
+        either way. Never blocks the actual completion/un-completion if
+        the calendar update fails.
         """
         updated_task = self.repository.update_task(user_id, record_id, updates)
 
-        if updates.get("is_completed") is True:
+        if "is_completed" in updates:
             try:
-                google_event_id = repository.get_task_google_event_id(user_id, record_id)
-                if google_event_id:
-                    google_calendar.delete_calendar_event(user_id, google_event_id)
-                    repository.unlink_task_from_calendar(record_id)
+                calendar_fields = repository.get_task_calendar_fields(user_id, record_id)
+                if calendar_fields and calendar_fields.get("google_event_id"):
+                    google_calendar.mark_event_completed(
+                        user_id,
+                        calendar_fields["google_event_id"],
+                        completed=bool(updates["is_completed"]),
+                        current_title=updated_task.task_name,
+                    )
             except Exception as e:
-                logger.error(f"[calendar sync] Failed to delete calendar event on task completion for task {record_id}: {e}")
+                logger.error(f"[calendar sync] Failed to mark calendar event completion for task {record_id}: {e}")
 
         return updated_task
 
     def delete_task(self, user_id: str, record_id: str) -> None:
         """
         Permanently deletes a task, scoped to user_id. No return value — raises on failure.
-        If the task had a linked Google Calendar event, also deletes that
-        event (looked up before the task row is gone). A failure on the
-        calendar side is logged and never blocks the actual task deletion —
-        google_calendar.delete_calendar_event already never raises, but the
-        lookup itself is guarded too, just in case.
+        Origin-aware calendar cleanup: only deletes the linked Google
+        Calendar event if this task originated in the app
+        (calendar_origin == 'app'). A task converted FROM a Google event
+        (calendar_origin == 'google') keeps its event on Google's side even
+        after the derived task is deleted here — the event pre-existed
+        there and deleting the task shouldn't remove it. A failure on the
+        calendar side is logged and never blocks the actual task deletion.
         """
-        google_event_id = None
+        calendar_fields = None
         try:
-            google_event_id = repository.get_task_google_event_id(user_id, record_id)
+            calendar_fields = repository.get_task_calendar_fields(user_id, record_id)
         except Exception as e:
             logger.error(f"[calendar sync] Failed to look up linked calendar event before deleting task {record_id}: {e}")
 
@@ -313,8 +320,8 @@ class TaskService:
             raise RuntimeError(f"Failed to delete task {record_id}")
         logger.info(f"Deleted task {record_id}.")
 
-        if google_event_id:
-            google_calendar.delete_calendar_event(user_id, google_event_id)
+        if calendar_fields and calendar_fields.get("google_event_id") and calendar_fields.get("calendar_origin") == "app":
+            google_calendar.delete_calendar_event(user_id, calendar_fields["google_event_id"])
 
     def send_push_to_user(self, user_id: str, title: str, body: str, view: Optional[str] = None) -> dict:
         """

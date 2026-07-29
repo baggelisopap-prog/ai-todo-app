@@ -22,6 +22,12 @@ EVENT_DEFAULT_DURATION_MINUTES = 30
 # (which must NOT be imported as new tasks — see Phase 2 scope notes).
 TASK_ID_EXTENDED_PROPERTY = "ai_todo_app_task_id"
 
+# Prefix added to a Google event's title to reflect task completion, without
+# deleting the event (see mark_event_completed). Shared with pull_calendar_changes,
+# which strips this same prefix before writing an event's title back into a
+# task's task_name — otherwise the checkmark would leak into the app.
+COMPLETION_CHECKMARK_PREFIX = "✓ "
+
 
 def get_valid_access_token(user_id: str) -> str:
     """
@@ -157,6 +163,35 @@ def delete_calendar_event(user_id: str, google_event_id: str) -> None:
         logging.error(f"[calendar sync] Failed to delete event {google_event_id} for user {user_id}: {e}")
 
 
+def mark_event_completed(user_id: str, google_event_id: str, completed: bool, current_title: str) -> None:
+    """
+    Prefixes (or un-prefixes) a Google Calendar event's title with a
+    checkmark to reflect task completion, without deleting the event —
+    completion no longer deletes the linked event (revised from an earlier
+    behavior); the event survives on the calendar either way. Never
+    raises — logs and moves on.
+    """
+    try:
+        access_token = get_valid_access_token(user_id)
+        has_prefix = current_title.startswith(COMPLETION_CHECKMARK_PREFIX)
+
+        if completed and not has_prefix:
+            new_title = COMPLETION_CHECKMARK_PREFIX + current_title
+        elif not completed and has_prefix:
+            new_title = current_title[len(COMPLETION_CHECKMARK_PREFIX):]
+        else:
+            return  # already in the desired state, nothing to do
+
+        response = requests.patch(
+            f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{google_event_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"summary": new_title},
+        )
+        response.raise_for_status()
+    except Exception as e:
+        logging.error(f"[calendar] Failed to mark event {google_event_id} completed={completed}: {e}")
+
+
 BOOTSTRAP_LOOKBACK_DAYS = 90
 
 
@@ -274,8 +309,17 @@ def pull_calendar_changes(user_id: str) -> int:
                         logging.info(f"[calendar pull] event for task {task_id} has no start date/time, skipping")
                         continue  # malformed event, skip
 
+                    # Strip our own completion checkmark before writing the
+                    # title back into task_name — mark_event_completed adds
+                    # this prefix to the Google event, but it must stay a
+                    # calendar-only visual marker and never leak into the
+                    # app's task name via pull sync.
+                    event_title = event.get("summary", "")
+                    if event_title.startswith(COMPLETION_CHECKMARK_PREFIX):
+                        event_title = event_title[len(COMPLETION_CHECKMARK_PREFIX):]
+
                     repository.update_task_from_calendar_event(
-                        task_id, due_date, due_time, event.get("summary", "")
+                        task_id, due_date, due_time, event_title
                     )
                     logging.info(f"[calendar pull] updated task {task_id}: due_date={due_date} due_time={due_time}")
             else:
