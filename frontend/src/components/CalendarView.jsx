@@ -602,22 +602,26 @@ function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, eventsForD
   const dropId = `day:${toLocalISODate(cell.date)}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
-  // Tasks get priority to fill the (small, fixed) dot slots — events are
-  // contextual/secondary — then any overflow, tasks+events combined, folds
-  // into the existing "+" indicator rather than a separate one.
-  const maxDots = 3;
-  const taskDots = tasksForDay.slice(0, maxDots);
-  const eventDots = eventsForDay.slice(0, maxDots - taskDots.length);
-  const shownCount = taskDots.length + eventDots.length;
+  // Tasks are primary content and fill the (small, fixed) preview slots
+  // first — events are contextual/secondary and fill whatever's left —
+  // mirroring the same task-first ordering used in the Weekly view's cells.
+  // Any overflow, tasks+events combined, folds into a single "+N more" line
+  // rather than a separate indicator per type.
+  const maxShown = 2;
+  const shownTasks = tasksForDay.slice(0, maxShown);
+  const shownEvents = eventsForDay.slice(0, Math.max(0, maxShown - shownTasks.length));
+  const shownCount = shownTasks.length + shownEvents.length;
   const totalCount = tasksForDay.length + eventsForDay.length;
+  const overflowCount = totalCount - shownCount;
+  const selectedTextClass = isSelected ? 'text-white' : '';
 
   return (
     <button
       ref={setNodeRef}
       onClick={() => onSelect(cell.date)}
       className={`
-        aspect-square p-1 rounded flex flex-col items-center justify-start gap-1
-        transition-colors
+        min-h-[64px] md:min-h-[80px] p-1 rounded flex flex-col items-stretch justify-start gap-0.5
+        transition-colors text-left
         ${cell.inCurrentMonth ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}
         ${isSelected ? 'bg-[var(--brand-primary)] text-white' : ''}
         ${!isSelected && isTodayCell ? 'font-bold ring-2 ring-[var(--brand-primary)]/40' : ''}
@@ -625,25 +629,32 @@ function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, eventsForD
         ${!isSelected && !isOver ? 'hover:bg-[var(--bg-hover)]' : ''}
       `}
     >
-      <span className="text-sm">{cell.date.getDate()}</span>
-      <div className="flex gap-0.5 flex-wrap justify-center">
-        {taskDots.map((task, idx) => (
+      <span className="text-sm self-center md:self-start">{cell.date.getDate()}</span>
+      <div className="flex flex-col gap-0.5 w-full min-w-0">
+        {shownTasks.map((task) => (
+          // Same short-label convention as the Weekly view's TaskChip
+          // (getEventLabel), so tasks read consistently across both modes.
           <span
-            key={`task-${idx}`}
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ backgroundColor: priorityColor(task.priority) }}
-          />
+            key={task.record_id}
+            className={`block w-full truncate rounded px-1 text-[8px] md:text-[10px] leading-tight font-medium ${task.is_completed ? 'line-through opacity-60' : ''}`}
+            style={{ backgroundColor: priorityColor(task.priority), color: 'var(--text-inverse)' }}
+          >
+            {getEventLabel(task.task_name)}
+          </span>
         ))}
-        {eventDots.map((_, idx) => (
-          // Hollow ring instead of a filled dot — visually distinct from
-          // task priority dots at a glance (Google Calendar event, not a task).
+        {shownEvents.map((event) => (
           <span
-            key={`event-${idx}`}
-            className="w-1.5 h-1.5 rounded-full border border-[var(--brand-primary)]"
-          />
+            key={event.id}
+            className="block w-full truncate rounded px-1 text-[8px] md:text-[10px] leading-tight"
+            style={{ backgroundColor: 'var(--calendar-event-bg)', color: 'var(--calendar-event-text)' }}
+          >
+            {event.start_time ? `${event.start_time} ` : ''}{event.title}
+          </span>
         ))}
-        {totalCount > shownCount && (
-          <span className="text-[10px] text-[var(--text-secondary)]">+</span>
+        {overflowCount > 0 && (
+          <span className={`text-[8px] md:text-[10px] px-1 ${selectedTextClass || 'text-[var(--text-secondary)]'}`}>
+            +{overflowCount} more
+          </span>
         )}
       </div>
     </button>
@@ -915,14 +926,23 @@ function TaskChip({ task, onClick, isOverlay = false }) {
 
 function EventChip({ event }) {
   // Display-only (no make-task/dismiss here — those stay in Today/Settings):
-  // deliberately not draggable/clickable, and styled lighter/secondary to
-  // TaskChip (muted background, dashed border, hollow ring indicator) so
-  // events read as contextual info rather than actionable app content.
+  // deliberately not draggable/clickable. Same chip shape/size as TaskChip
+  // (parallel visual treatment), but using the dedicated --calendar-event
+  // tokens (a distinct cyan, not any task priority/category color) so
+  // events are clearly not tasks while staying fully legible — not just a
+  // dot, the actual title (and start time, if timed) is shown.
   return (
     <div
-      className="w-full flex-1 min-h-0 flex items-center gap-1 text-left px-2 py-1 rounded text-[10px] md:text-xs bg-[var(--bg-hover)] text-[var(--text-secondary)] border border-dashed border-[var(--border-subtle)] overflow-hidden"
+      className="w-full flex-1 min-h-0 flex items-center gap-1 text-left px-2 py-1 rounded text-[10px] md:text-xs overflow-hidden"
+      style={{ backgroundColor: 'var(--calendar-event-bg)', color: 'var(--calendar-event-text)' }}
     >
-      <span className="w-1.5 h-1.5 rounded-full border border-[var(--brand-primary)] flex-shrink-0" />
+      <span
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+        style={{ backgroundColor: 'var(--calendar-event)' }}
+      />
+      {event.start_time && (
+        <span className="tabular-nums flex-shrink-0 font-medium">{event.start_time}</span>
+      )}
       <span className="min-w-0 break-words md:truncate leading-tight">{event.title}</span>
     </div>
   );

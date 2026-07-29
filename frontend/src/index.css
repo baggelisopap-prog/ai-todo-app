@@ -33,6 +33,13 @@
   --priority-p3-bg: #dbeafe;   /* soft blue */
   --priority-p3-text: #1e40af; /* dark blue */
 
+  /* Google Calendar events (Calendar view chips) — cyan, deliberately
+     distinct from priority-p3's blue, category-business's purple, and
+     category-hostaway's teal, so events never get confused for tasks. */
+  --calendar-event: #0891b2;      /* Cyan, event indicator dot */
+  --calendar-event-bg: #cffafe;   /* soft cyan */
+  --calendar-event-text: #164e63; /* dark cyan */
+
   /* Category */
   --category-business: #8b5cf6;  /* Purple */
   --category-personal: #10b981;  /* Green */
