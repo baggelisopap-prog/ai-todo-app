@@ -14,10 +14,11 @@ import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
 import CustomSelect from './CustomSelect';
 import FilterBar from './FilterBar';
-import { createTaskManual, getCalendarEventsInRange } from '../api';
+import { createTaskManual, getCalendarEventsInRange, getAppSettings } from '../api';
 import { toLocalISODate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import { getEventLabel } from '../utils/eventType';
+import { openEventInGoogle } from '../utils/openEventInGoogle';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7); // 07:00-22:00
@@ -151,13 +152,22 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
   const [calendarEvents, setCalendarEvents] = useState([]);
+  const [showEventsEnabled, setShowEventsEnabled] = useState(true);
   const taskDetailRef = useRef(null);
+
+  useEffect(() => {
+    getAppSettings().then(s => setShowEventsEnabled(s.calendar_show_events)).catch(console.error);
+  }, []);
 
   // Google Calendar events (display-only) for whatever range is currently
   // visible — the full Monthly grid (including lead/tail days from
   // adjacent months, same as tasks already show there via tasksByDate) or
   // the current week. Refetches whenever the visible range changes.
   useEffect(() => {
+    if (!showEventsEnabled) {
+      setCalendarEvents([]);
+      return;
+    }
     let startISO, endISO;
     if (viewMode === 'monthly') {
       const cells = getCalendarCells(currentMonth);
@@ -170,7 +180,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
       endISO = toLocalISODate(weekEnd);
     }
     getCalendarEventsInRange(startISO, endISO).then(setCalendarEvents).catch(console.error);
-  }, [viewMode, currentMonth, currentWeekStart]);
+  }, [viewMode, currentMonth, currentWeekStart, showEventsEnabled]);
 
   useEffect(() => {
     if (selectedTaskId && taskDetailRef.current) {
@@ -615,7 +625,8 @@ function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpa
                 {events.map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-center gap-2 px-3 py-2 rounded-md border-l-4"
+                    onClick={() => openEventInGoogle(event)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md border-l-4 cursor-pointer hover:brightness-95"
                     style={{
                       backgroundColor: 'var(--calendar-event-bg)',
                       borderLeftColor: 'var(--calendar-event)',
@@ -684,7 +695,8 @@ function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, eventsForD
         {shownEvents.map((event) => (
           <span
             key={event.id}
-            className="block w-full truncate rounded px-1 text-[8px] md:text-[10px] leading-tight"
+            onClick={(e) => { e.stopPropagation(); openEventInGoogle(event); }}
+            className="block w-full truncate rounded px-1 text-[8px] md:text-[10px] leading-tight cursor-pointer hover:brightness-95"
             style={{ backgroundColor: 'var(--calendar-event-bg)', color: 'var(--calendar-event-text)' }}
           >
             {event.start_time ? `${event.start_time} ` : ''}{event.title}
@@ -807,7 +819,6 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, calendarE
                   events={allDayEventsByDate[dayKey] || []}
                   onTaskClick={onTaskClick}
                   onEmptyClick={onEmptyClick}
-                  onSelectDate={onSelectDate}
                 />
               );
             })}
@@ -833,7 +844,6 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, calendarE
                       isTodayCol={dayISO === todayISO}
                       onTaskClick={onTaskClick}
                       onEmptyClick={onEmptyClick}
-                      onSelectDate={onSelectDate}
                     />
                   );
                 })}
@@ -853,7 +863,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, calendarE
   );
 }
 
-function WeeklyHourCell({ day, dayIndex, hour, tasks, events = [], isTodayCol, onTaskClick, onEmptyClick, onSelectDate }) {
+function WeeklyHourCell({ day, dayIndex, hour, tasks, events = [], isTodayCol, onTaskClick, onEmptyClick }) {
   const dropId = `cell:${toLocalISODate(day)}:${hour}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
@@ -880,13 +890,13 @@ function WeeklyHourCell({ day, dayIndex, hour, tasks, events = [], isTodayCol, o
         <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
       ))}
       {events.map((event) => (
-        <EventChip key={event.id} event={event} onClick={() => onSelectDate(day)} />
+        <EventChip key={event.id} event={event} />
       ))}
     </div>
   );
 }
 
-function WeeklyAllDayCell({ day, dayIndex, tasks, events = [], onTaskClick, onEmptyClick, onSelectDate }) {
+function WeeklyAllDayCell({ day, dayIndex, tasks, events = [], onTaskClick, onEmptyClick }) {
   const dropId = `allday:${toLocalISODate(day)}`;
   const { isOver, setNodeRef } = useDroppable({ id: dropId });
 
@@ -910,7 +920,7 @@ function WeeklyAllDayCell({ day, dayIndex, tasks, events = [], onTaskClick, onEm
         <TaskChip key={task.record_id} task={task} onClick={onTaskClick} />
       ))}
       {events.map((event) => (
-        <EventChip key={event.id} event={event} onClick={() => onSelectDate(day)} />
+        <EventChip key={event.id} event={event} />
       ))}
     </div>
   );
@@ -965,12 +975,11 @@ function TaskChip({ task, onClick, isOverlay = false }) {
   );
 }
 
-function EventChip({ event, onClick }) {
+function EventChip({ event }) {
   // Read-only content (no make-task/dismiss/edit here — those stay in
-  // Today/Settings): not draggable, and tapping it never mutates anything.
-  // The one thing a tap DOES do is open the same day-detail popup Monthly
-  // uses (via onClick, wired to onSelectDate by the parent cell) — events
-  // otherwise had no tap action at all in the Weekly grid. Same chip
+  // Today/Settings): not draggable, and tapping it never mutates anything
+  // in-app — it opens the real event in Google Calendar, same as every
+  // other read-only event surface (day popup, Monthly grid). Same chip
   // shape/size as TaskChip (parallel visual treatment), but using the
   // dedicated --calendar-event tokens (a distinct cyan, not any task
   // priority/category color) so events are clearly not tasks while staying
@@ -980,7 +989,7 @@ function EventChip({ event, onClick }) {
     <div
       onClick={(e) => {
         e.stopPropagation();
-        onClick?.(event);
+        openEventInGoogle(event);
       }}
       className="w-full flex-1 min-h-0 flex items-center gap-1 text-left px-2 py-1 rounded text-[10px] md:text-xs overflow-hidden cursor-pointer hover:brightness-95 transition-all"
       style={{ backgroundColor: 'var(--calendar-event-bg)', color: 'var(--calendar-event-text)' }}

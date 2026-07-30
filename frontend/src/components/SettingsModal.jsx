@@ -15,7 +15,6 @@ import {
   disconnectGoogleCalendar,
 } from '../api';
 import { supabase } from '../supabaseClient';
-import GoogleCalendarEventsView from './GoogleCalendarEventsView';
 
 const SETTINGS_CATEGORIES = [
   { id: 'notifications', labelKey: 'settings.category_notifications', icon: BellIcon },
@@ -329,13 +328,13 @@ function CalendarConnectionView() {
   const { t } = useTranslation();
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [statusLoaded, setStatusLoaded] = useState(false);
-  const [showEvents, setShowEvents] = useState(false);
 
   // Independent copy of app settings, scoped to this view — mirrors how the
   // Notifications category manages its own settings state. Only the
-  // calendar_sync_all_enabled field is read/written here; the other fields
-  // just ride along unchanged so a PATCH from this view never clobbers the
-  // notification settings (the /settings endpoint takes the full object).
+  // calendar_sync_all_enabled / calendar_show_events fields are read/written
+  // here; the other fields just ride along unchanged so a PATCH from this
+  // view never clobbers the notification settings (the /settings endpoint
+  // takes the full object).
   const [settings, setSettings] = useState(null);
 
   // Fires automatically on mount (no button needed) — this is what makes
@@ -357,6 +356,18 @@ function CalendarConnectionView() {
   async function handleToggleSyncAll() {
     const previous = settings;
     const updated = { ...settings, calendar_sync_all_enabled: !settings.calendar_sync_all_enabled };
+    setSettings(updated); // optimistic
+    try {
+      await updateAppSettings(updated);
+    } catch (err) {
+      setSettings(previous); // revert on failure
+      console.error('Failed to update settings:', err);
+    }
+  }
+
+  async function handleToggleShowEvents() {
+    const previous = settings;
+    const updated = { ...settings, calendar_show_events: !settings.calendar_show_events };
     setSettings(updated); // optimistic
     try {
       await updateAppSettings(updated);
@@ -436,18 +447,28 @@ function CalendarConnectionView() {
           </div>
 
           <div className="pt-3 border-t border-[var(--border-subtle)]">
-            <button
-              onClick={() => setShowEvents((v) => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] text-sm font-medium text-[var(--text-primary)]"
-            >
-              {t('calendar.view_events')}
-              <ChevronRightIcon className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${showEvents ? 'rotate-90' : ''}`} />
-            </button>
-            {showEvents && (
-              <div className="mt-2">
-                <GoogleCalendarEventsView />
-              </div>
-            )}
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-[var(--text-primary)]">
+                {t('calendar.show_events')}
+              </span>
+              <button
+                onClick={handleToggleShowEvents}
+                disabled={!settings}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  settings?.calendar_show_events ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
+                }`}
+                aria-label={t('calendar.show_events')}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                    settings?.calendar_show_events ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              {t('calendar.show_events_description')}
+            </p>
           </div>
 
           <div className="pt-3 border-t border-[var(--border-subtle)]">

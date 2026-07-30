@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
-import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent } from '../api';
+import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent, getAppSettings } from '../api';
+import { openEventInGoogle } from '../utils/openEventInGoogle';
 
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
@@ -11,12 +12,21 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const [selectedPriority, setSelectedPriority] = useState('All');
   const [overdueExpanded, setOverdueExpanded] = useState(true);
   const [todayEvents, setTodayEvents] = useState([]);
+  const [showEventsEnabled, setShowEventsEnabled] = useState(true);
 
   const today = toLocalISODate(new Date());
 
   useEffect(() => {
+    getAppSettings().then(s => setShowEventsEnabled(s.calendar_show_events)).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (!showEventsEnabled) {
+      setTodayEvents([]);
+      return;
+    }
     getGoogleCalendarEvents(today).then(setTodayEvents).catch(console.error);
-  }, [today]);
+  }, [today, showEventsEnabled]);
 
   async function handleMakeTask(eventId) {
     try {
@@ -87,20 +97,21 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
             {todayEvents.map(event => (
               <div
                 key={event.id}
-                className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--bg-card)] border-l-4 border-[var(--brand-primary)]"
+                onClick={() => openEventInGoogle(event)}
+                className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--bg-card)] border-l-4 border-[var(--brand-primary)] cursor-pointer hover:brightness-95"
               >
                 {event.start_time && (
                   <span className="text-xs text-[var(--text-muted)] tabular-nums">{event.start_time}</span>
                 )}
                 <span className="text-sm text-[var(--text-primary)] truncate flex-1">{event.title}</span>
                 <button
-                  onClick={() => handleMakeTask(event.id)}
+                  onClick={(e) => { e.stopPropagation(); handleMakeTask(event.id); }}
                   className="text-xs px-2 py-1 rounded bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium shrink-0"
                 >
                   {t('calendar.make_task')}
                 </button>
                 <button
-                  onClick={() => handleDismissEvent(event.id)}
+                  onClick={(e) => { e.stopPropagation(); handleDismissEvent(event.id); }}
                   className="text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0 px-1"
                   aria-label={t('calendar.dismiss')}
                 >

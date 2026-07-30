@@ -354,6 +354,7 @@ def pull_calendar_changes(user_id: str) -> int:
                         start_date=ev_date,
                         start_time=ev_time,
                         is_all_day=is_all_day,
+                        html_link=event.get("htmlLink"),
                     )
                     logging.info(f"[calendar pull] stored foreign event {event['id']}: start_date={ev_date} start_time={ev_time}")
 

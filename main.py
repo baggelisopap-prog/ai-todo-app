@@ -414,6 +414,7 @@ async def update_settings(payload: AppSettings, user_id: str = Depends(get_curre
             daily_summary_mode=payload.daily_summary_mode,
             daily_summary_time=payload.daily_summary_time,
             calendar_sync_all_enabled=payload.calendar_sync_all_enabled,
+            calendar_show_events=payload.calendar_show_events,
         )
     except Exception as e:
         logger.exception("Failed to update app settings")

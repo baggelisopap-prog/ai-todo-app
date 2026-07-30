@@ -391,6 +391,7 @@ def get_app_settings(user_id: str) -> AppSettings:
         daily_summary_time=_get(row, "daily_summary_time", "08:00"),
         daily_summary_last_sent_date=_get(row, "daily_summary_last_sent_date", ""),
         calendar_sync_all_enabled=_get(row, "calendar_sync_all_enabled", False),
+        calendar_show_events=_get(row, "calendar_show_events", True),
     )
 
 
@@ -736,7 +737,7 @@ def get_all_connected_calendar_user_ids() -> list[str]:
 # auto-converted into tasks (see google_calendar.pull_calendar_changes).
 
 
-def upsert_google_calendar_event(user_id: str, google_event_id: str, title: str, description: str, start_date: str, start_time: Optional[str], is_all_day: bool) -> None:
+def upsert_google_calendar_event(user_id: str, google_event_id: str, title: str, description: str, start_date: str, start_time: Optional[str], is_all_day: bool, html_link: Optional[str] = None) -> None:
     supabase.table("google_calendar_events").upsert({
         "user_id": user_id,
         "google_event_id": google_event_id,
@@ -745,6 +746,7 @@ def upsert_google_calendar_event(user_id: str, google_event_id: str, title: str,
         "start_date": start_date,
         "start_time": start_time,
         "is_all_day": is_all_day,
+        "html_link": html_link,
         "last_synced_at": datetime.now(timezone.utc).isoformat(),
     }, on_conflict="user_id,google_event_id").execute()
 

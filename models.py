@@ -108,3 +108,4 @@ class AppSettings(BaseModel):
     daily_summary_time: str = "08:00"
     daily_summary_last_sent_date: str = ""
     calendar_sync_all_enabled: bool = False
+    calendar_show_events: bool = True
