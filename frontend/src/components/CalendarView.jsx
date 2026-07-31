@@ -152,11 +152,22 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
   const [calendarEvents, setCalendarEvents] = useState([]);
-  const [showEventsEnabled, setShowEventsEnabled] = useState(true);
+  // null = the setting hasn't loaded yet — deliberately NOT defaulted to
+  // true, since defaulting it would let the effect below fire an events
+  // fetch on mount before we know the real value; if that fetch resolves
+  // AFTER the settings fetch turns it off, its stale response would
+  // overwrite the just-cleared calendarEvents and events would reappear
+  // regardless of the toggle. Gating the fetch on "!== null" avoids that
+  // fetch entirely instead of racing it.
+  const [showEventsEnabled, setShowEventsEnabled] = useState(null);
   const taskDetailRef = useRef(null);
 
   useEffect(() => {
-    getAppSettings().then(s => setShowEventsEnabled(s.calendar_show_events)).catch(console.error);
+    let cancelled = false;
+    getAppSettings()
+      .then(s => { if (!cancelled) setShowEventsEnabled(s.calendar_show_events); })
+      .catch(err => { console.error(err); if (!cancelled) setShowEventsEnabled(true); });
+    return () => { cancelled = true; };
   }, []);
 
   // Google Calendar events (display-only) for whatever range is currently
@@ -164,10 +175,12 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   // adjacent months, same as tasks already show there via tasksByDate) or
   // the current week. Refetches whenever the visible range changes.
   useEffect(() => {
+    if (showEventsEnabled === null) return; // wait until the setting is known
     if (!showEventsEnabled) {
       setCalendarEvents([]);
       return;
     }
+    let cancelled = false;
     let startISO, endISO;
     if (viewMode === 'monthly') {
       const cells = getCalendarCells(currentMonth);
@@ -179,7 +192,10 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
       startISO = toLocalISODate(currentWeekStart);
       endISO = toLocalISODate(weekEnd);
     }
-    getCalendarEventsInRange(startISO, endISO).then(setCalendarEvents).catch(console.error);
+    getCalendarEventsInRange(startISO, endISO)
+      .then(events => { if (!cancelled) setCalendarEvents(events); })
+      .catch(console.error);
+    return () => { cancelled = true; };
   }, [viewMode, currentMonth, currentWeekStart, showEventsEnabled]);
 
   useEffect(() => {
