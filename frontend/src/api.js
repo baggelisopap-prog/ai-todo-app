@@ -271,6 +271,31 @@ export async function getTokenUsage() {
 }
 
 /**
+ * GET /profile — retrieves this user's profile (id, email, display_name).
+ */
+export async function getProfile() {
+  return request('/profile');
+}
+
+/**
+ * PATCH /profile — updates this user's display name. Returns the updated profile.
+ */
+export async function updateProfile(displayName) {
+  return request('/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ display_name: displayName }),
+  });
+}
+
+/**
+ * DELETE /account — permanently deletes this user's account and all their
+ * data (cascades server-side). Returns { status: 'deleted' }.
+ */
+export async function deleteAccount() {
+  return request('/account', { method: 'DELETE' });
+}
+
+/**
  * POST /calendar/connect — sends the Google provider tokens captured right
  * after the Calendar-scope OAuth flow completes, for the backend to store.
  * Returns { status: 'connected' }.

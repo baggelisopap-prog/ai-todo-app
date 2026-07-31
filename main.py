@@ -83,6 +83,10 @@ class CalendarConnectRequest(BaseModel):
     access_token: str
     refresh_token: str
 
+class ProfileUpdateRequest(BaseModel):
+    """Request body for PATCH /profile"""
+    display_name: str
+
 class AgentQueryRequest(BaseModel):
     """Request body for POST /agent/query"""
     question: str
@@ -419,6 +423,41 @@ async def update_settings(payload: AppSettings, user_id: str = Depends(get_curre
     except Exception as e:
         logger.exception("Failed to update app settings")
         raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")
+
+
+@app.get("/profile")
+async def get_profile(user_id: str = Depends(get_current_user_id)):
+    """Returns this user's profile (id, email, display_name) from the profiles table."""
+    try:
+        return repository.get_profile(user_id)
+    except Exception as e:
+        logger.exception("Failed to load profile")
+        raise HTTPException(status_code=500, detail=f"Failed to load profile: {str(e)}")
+
+
+@app.patch("/profile")
+async def update_profile(payload: ProfileUpdateRequest, user_id: str = Depends(get_current_user_id)):
+    """Updates this user's display_name."""
+    try:
+        return repository.update_profile(user_id, payload.display_name)
+    except Exception as e:
+        logger.exception("Failed to update profile")
+        raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
+
+
+@app.delete("/account")
+async def delete_account(user_id: str = Depends(get_current_user_id)):
+    """
+    Permanently deletes this user's auth account via the Supabase admin API.
+    ON DELETE CASCADE on every user_id foreign key cleans up tasks, settings,
+    push subscriptions, calendar connections/events, and token usage logs.
+    """
+    try:
+        repository.delete_user_account(user_id)
+        return {"status": "deleted"}
+    except Exception as e:
+        logger.exception("Failed to delete account")
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
 
 
 @app.post("/calendar/connect")

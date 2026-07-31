@@ -13,22 +13,207 @@ import {
   getTokenUsage,
   getCalendarStatus,
   disconnectGoogleCalendar,
+  getProfile,
+  updateProfile,
+  deleteAccount,
 } from '../api';
 import { supabase } from '../supabaseClient';
 
-const SETTINGS_CATEGORIES = [
-  { id: 'notifications', labelKey: 'settings.category_notifications', icon: BellIcon },
-  { id: 'calendar', labelKey: 'settings.category_calendar', icon: CalendarIcon },
-];
+// Hardcoded owner user_id — same "one door" pattern hostaway_integration.py's
+// get_user_id_for_hostaway_account() uses to gate the Hostaway integration to
+// a single account. Used here purely for frontend visibility (hide the
+// Developer section from everyone else); the /dev/token-usage endpoint
+// itself is unchanged and still scopes data by the caller's own user_id.
+const OWNER_USER_ID = 'fdedc7be-964b-4e75-b4a0-bd16cb6b05e7';
+
+const APP_VERSION = '1.0.0';
+
+function getInitials(displayName, email) {
+  const name = displayName?.trim();
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  if (email) return email[0].toUpperCase();
+  return '?';
+}
 
 export function SettingsModal({ onClose }) {
   const { t } = useTranslation();
-  const [currentCategory, setCurrentCategory] = useState(null); // null = menu, 'notifications'/'developer' = detail
-  const isDevMode = localStorage.getItem('dev_mode') === 'true';
-  const categories = isDevMode
-    ? [...SETTINGS_CATEGORIES, { id: 'developer', labelKey: 'settings.category_developer', icon: CodeIcon }]
-    : SETTINGS_CATEGORIES;
+  const [profile, setProfile] = useState(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
+  useEffect(() => {
+    getProfile()
+      .then(setProfile)
+      .catch(err => console.error('Failed to load profile:', err))
+      .finally(() => setProfileLoaded(true));
+  }, []);
+
+  const isOwner = profile?.id === OWNER_USER_ID;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full md:max-w-md bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 p-4 border-b border-[var(--border-subtle)] flex-shrink-0">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] flex-1">
+            {t('settings.title')}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            aria-label={t('actions.cancel')}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="p-4 space-y-6 overflow-y-auto">
+          <ProfileSection profile={profile} profileLoaded={profileLoaded} onProfileUpdate={setProfile} />
+
+          <SettingsSection title={t('settings.notifications')}>
+            <NotificationsSection />
+          </SettingsSection>
+
+          <SettingsSection title={t('settings.calendar')}>
+            <CalendarConnectionView />
+          </SettingsSection>
+
+          <SettingsSection title={t('settings.language')}>
+            <LanguageSection />
+          </SettingsSection>
+
+          {isOwner && (
+            <SettingsSection title={t('settings.developer')}>
+              <DeveloperUsageView />
+            </SettingsSection>
+          )}
+
+          <SettingsSection title={t('settings.account')}>
+            <AccountSection />
+          </SettingsSection>
+
+          <SettingsSection title={t('settings.about')}>
+            <AboutSection />
+          </SettingsSection>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsSection({ title, children }) {
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-2 px-1">
+        {title}
+      </h3>
+      <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg p-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ProfileSection({ profile, profileLoaded, onProfileUpdate }) {
+  const { t } = useTranslation();
+  const [isEditing, setIsEditing] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (profile) setNameInput(profile.display_name || '');
+  }, [profile]);
+
+  if (!profileLoaded) {
+    return <p className="text-sm text-[var(--text-muted)]">{t('settings.loading')}</p>;
+  }
+  if (!profile) {
+    return <p className="text-sm text-[var(--text-muted)]">{t('settings.load_failed')}</p>;
+  }
+
+  async function handleSave() {
+    const trimmed = nameInput.trim();
+    if (!trimmed) return;
+    setIsSaving(true);
+    try {
+      const updated = await updateProfile(trimmed);
+      onProfileUpdate(updated);
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Failed to update profile:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function handleCancelEdit() {
+    setNameInput(profile.display_name || '');
+    setIsEditing(false);
+  }
+
+  const initials = getInitials(profile.display_name, profile.email);
+
+  return (
+    <div className="flex items-center gap-4 p-4 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)]">
+      <div
+        className="w-14 h-14 rounded-full bg-[var(--brand-primary)] text-white flex items-center justify-center text-lg font-semibold flex-shrink-0"
+        aria-hidden="true"
+      >
+        {initials}
+      </div>
+      <div className="flex-1 min-w-0">
+        {isEditing ? (
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder={t('settings.name_placeholder')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSave();
+                if (e.key === 'Escape') handleCancelEdit();
+              }}
+              className="w-full min-w-0 px-2 py-1 rounded-md border border-[var(--border-medium)] text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-input)] focus:outline-none focus:border-[var(--border-focus)]"
+            />
+            <button
+              onClick={handleSave}
+              disabled={isSaving || !nameInput.trim()}
+              className="text-xs px-2 py-1.5 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium disabled:opacity-50 flex-shrink-0"
+            >
+              {isSaving ? t('actions.saving') : t('settings.save')}
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <p className="text-base font-semibold text-[var(--text-primary)] truncate">
+              {profile.display_name || profile.email}
+            </p>
+            <button
+              onClick={() => setIsEditing(true)}
+              aria-label={t('settings.edit_name')}
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] flex-shrink-0 p-1"
+            >
+              <PencilIcon className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <p className="text-sm text-[var(--text-muted)] truncate mt-0.5">{profile.email}</p>
+      </div>
+    </div>
+  );
+}
+
+function NotificationsSection() {
+  const { t } = useTranslation();
   const [permission, setPermission] = useState(getNotificationPermission());
   const [isRequesting, setIsRequesting] = useState(false);
   const [settings, setSettings] = useState({
@@ -101,225 +286,157 @@ export function SettingsModal({ onClose }) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full md:max-w-md bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] p-4 max-h-[85vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 mb-4">
-          {currentCategory && (
-            <button
-              onClick={() => setCurrentCategory(null)}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1"
-              aria-label={t('settings.back')}
-            >
-              <ChevronLeftIcon className="w-5 h-5" />
-            </button>
-          )}
-          <h2 className="text-lg font-semibold text-[var(--text-primary)] flex-1">
-            {currentCategory === 'notifications' && t('settings.category_notifications')}
-            {currentCategory === 'calendar' && t('settings.category_calendar')}
-            {currentCategory === 'developer' && t('settings.category_developer')}
-            {!currentCategory && t('settings.title')}
-          </h2>
+    <div>
+      {!supported && (
+        <p className="text-sm text-[var(--text-muted)]">
+          {t('settings.notifications_unsupported')}
+        </p>
+      )}
+
+      {supported && permission === 'default' && (
+        <div>
+          <p className="text-sm text-[var(--text-secondary)] mb-3">
+            {t('settings.notifications_intro')}
+          </p>
           <button
-            onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            aria-label={t('actions.cancel')}
+            onClick={handleRequestPermission}
+            disabled={isRequesting}
+            className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium disabled:opacity-50"
           >
-            ✕
+            {isRequesting ? t('settings.requesting') : t('settings.enable_notifications')}
           </button>
         </div>
+      )}
 
-        {!currentCategory && (
-          <div className="space-y-1">
-            {categories.map(category => {
-              const Icon = category.icon;
-              return (
-                <button
-                  key={category.id}
-                  onClick={() => setCurrentCategory(category.id)}
-                  className="w-full flex items-center gap-3 px-3 py-3 rounded-md hover:bg-[var(--bg-hover)] transition-colors text-left"
-                >
-                  <span className="text-[var(--text-secondary)]">
-                    <Icon className="w-5 h-5" />
-                  </span>
-                  <span className="flex-1 text-[var(--text-primary)]">{t(category.labelKey)}</span>
-                  <ChevronRightIcon className="w-4 h-4 text-[var(--text-muted)]" />
-                </button>
-              );
-            })}
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="w-full text-left px-3 py-3 rounded-md hover:bg-[var(--bg-hover)] text-red-600"
-            >
-              {t('auth.sign_out')}
-            </button>
-          </div>
-        )}
+      {supported && permission === 'denied' && (
+        <p className="text-sm text-[var(--text-muted)]">
+          {t('settings.notifications_blocked')}
+        </p>
+      )}
 
-        {currentCategory === 'notifications' && (
+      {supported && permission === 'granted' && (
+        <p className="text-sm text-[var(--text-secondary)]">
+          {t('settings.notifications_enabled')}
+        </p>
+      )}
+
+      {settingsLoaded && (
+        <div className="mt-4 space-y-4">
           <div>
-            {!supported && (
-              <p className="text-sm text-[var(--text-muted)]">
-                {t('settings.notifications_unsupported')}
-              </p>
-            )}
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-[var(--text-primary)]">
+                {t('settings.notifications_toggle_label')}
+              </span>
+              <button
+                onClick={() => handleToggle('notifications_enabled')}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  settings.notifications_enabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
+                }`}
+                aria-label={t('settings.notifications_toggle_label')}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                    settings.notifications_enabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              {t('settings.notifications_toggle_description')}
+            </p>
+          </div>
 
-            {supported && permission === 'default' && (
-              <div>
-                <p className="text-sm text-[var(--text-secondary)] mb-3">
-                  {t('settings.notifications_intro')}
-                </p>
-                <button
-                  onClick={handleRequestPermission}
-                  disabled={isRequesting}
-                  className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium disabled:opacity-50"
-                >
-                  {isRequesting ? t('settings.requesting') : t('settings.enable_notifications')}
-                </button>
-              </div>
-            )}
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-[var(--text-primary)]">
+                {t('settings.send_all_label')}
+              </span>
+              <button
+                onClick={() => handleToggle('send_all_enabled')}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  settings.send_all_enabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
+                }`}
+                aria-label={t('settings.send_all_label')}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                    settings.send_all_enabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              {t('settings.send_all_description')}
+            </p>
+          </div>
 
-            {supported && permission === 'denied' && (
-              <p className="text-sm text-[var(--text-muted)]">
-                {t('settings.notifications_blocked')}
-              </p>
-            )}
+          <div className="pt-4 border-t border-[var(--border-subtle)]">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-[var(--text-primary)]">
+                {t('settings.daily_summary_label')}
+              </span>
+              <button
+                onClick={() => handleToggle('daily_summary_enabled')}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  settings.daily_summary_enabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
+                }`}
+                aria-label={t('settings.daily_summary_label')}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                    settings.daily_summary_enabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              {t('settings.daily_summary_description')}
+            </p>
 
-            {supported && permission === 'granted' && (
-              <p className="text-sm text-[var(--text-secondary)]">
-                {t('settings.notifications_enabled')}
-              </p>
-            )}
-
-            {settingsLoaded && (
-              <div className="mt-4 space-y-4">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-[var(--text-primary)]">
-                      {t('settings.notifications_toggle_label')}
-                    </span>
-                    <button
-                      onClick={() => handleToggle('notifications_enabled')}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
-                        settings.notifications_enabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
-                      }`}
-                      aria-label={t('settings.notifications_toggle_label')}
-                    >
-                      <span
-                        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                          settings.notifications_enabled ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">
-                    {t('settings.notifications_toggle_description')}
-                  </p>
+            {settings.daily_summary_enabled && (
+              <div className="mt-3 space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleModeChange('fixed_time')}
+                    className={`flex-1 px-3 py-2 rounded-md text-sm border transition-colors ${
+                      settings.daily_summary_mode === 'fixed_time'
+                        ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+                        : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    {t('settings.mode_fixed_time')}
+                  </button>
+                  <button
+                    onClick={() => handleModeChange('before_first_task')}
+                    className={`flex-1 px-3 py-2 rounded-md text-sm border transition-colors ${
+                      settings.daily_summary_mode === 'before_first_task'
+                        ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+                        : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    {t('settings.mode_before_first_task')}
+                  </button>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-[var(--text-primary)]">
-                      {t('settings.send_all_label')}
-                    </span>
-                    <button
-                      onClick={() => handleToggle('send_all_enabled')}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
-                        settings.send_all_enabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
-                      }`}
-                      aria-label={t('settings.send_all_label')}
-                    >
-                      <span
-                        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                          settings.send_all_enabled ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">
-                    {t('settings.send_all_description')}
+                {settings.daily_summary_mode === 'fixed_time' && (
+                  <input
+                    type="time"
+                    value={settings.daily_summary_time}
+                    onChange={(e) => handleTimeChange(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] bg-[var(--bg-card)]"
+                  />
+                )}
+
+                {settings.daily_summary_mode === 'before_first_task' && (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {t('settings.before_first_task_description')}
                   </p>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-[var(--text-primary)]">
-                      {t('settings.daily_summary_label')}
-                    </span>
-                    <button
-                      onClick={() => handleToggle('daily_summary_enabled')}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
-                        settings.daily_summary_enabled ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
-                      }`}
-                      aria-label={t('settings.daily_summary_label')}
-                    >
-                      <span
-                        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                          settings.daily_summary_enabled ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">
-                    {t('settings.daily_summary_description')}
-                  </p>
-
-                  {settings.daily_summary_enabled && (
-                    <div className="mt-3 space-y-2">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleModeChange('fixed_time')}
-                          className={`flex-1 px-3 py-2 rounded-md text-sm border transition-colors ${
-                            settings.daily_summary_mode === 'fixed_time'
-                              ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
-                              : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                          }`}
-                        >
-                          {t('settings.mode_fixed_time')}
-                        </button>
-                        <button
-                          onClick={() => handleModeChange('before_first_task')}
-                          className={`flex-1 px-3 py-2 rounded-md text-sm border transition-colors ${
-                            settings.daily_summary_mode === 'before_first_task'
-                              ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
-                              : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                          }`}
-                        >
-                          {t('settings.mode_before_first_task')}
-                        </button>
-                      </div>
-
-                      {settings.daily_summary_mode === 'fixed_time' && (
-                        <input
-                          type="time"
-                          value={settings.daily_summary_time}
-                          onChange={(e) => handleTimeChange(e.target.value)}
-                          className="w-full px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] bg-[var(--bg-card)]"
-                        />
-                      )}
-
-                      {settings.daily_summary_mode === 'before_first_task' && (
-                        <p className="text-xs text-[var(--text-muted)]">
-                          {t('settings.before_first_task_description')}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             )}
           </div>
-        )}
-
-        {currentCategory === 'calendar' && <CalendarConnectionView />}
-
-        {currentCategory === 'developer' && <DeveloperUsageView />}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -330,7 +447,7 @@ function CalendarConnectionView() {
   const [statusLoaded, setStatusLoaded] = useState(false);
 
   // Independent copy of app settings, scoped to this view — mirrors how the
-  // Notifications category manages its own settings state. Only the
+  // Notifications section manages its own settings state. Only the
   // calendar_sync_all_enabled / calendar_show_events fields are read/written
   // here; the other fields just ride along unchanged so a PATCH from this
   // view never clobbers the notification settings (the /settings endpoint
@@ -338,8 +455,7 @@ function CalendarConnectionView() {
   const [settings, setSettings] = useState(null);
 
   // Fires automatically on mount (no button needed) — this is what makes
-  // "Connected" show immediately whenever the user opens this Calendar
-  // settings section.
+  // "Connected" show immediately whenever the user opens the Settings modal.
   useEffect(() => {
     getCalendarStatus()
       .then(s => setCalendarConnected(s.connected))
@@ -474,13 +590,103 @@ function CalendarConnectionView() {
           <div className="pt-3 border-t border-[var(--border-subtle)]">
             <button
               onClick={handleDisconnectCalendar}
-              className="w-full text-left px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] text-red-600 text-sm"
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] text-[var(--danger)] text-sm"
             >
               {t('calendar.disconnect')}
             </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LanguageSection() {
+  const { i18n } = useTranslation();
+  const currentLang = i18n.resolvedLanguage?.startsWith('el') ? 'el' : 'en';
+
+  function handleChange(lang) {
+    i18n.changeLanguage(lang);
+    localStorage.setItem('app_language', lang);
+  }
+
+  return (
+    <div className="flex gap-2">
+      <button
+        onClick={() => handleChange('en')}
+        className={`flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
+          currentLang === 'en'
+            ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+            : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+        }`}
+      >
+        English
+      </button>
+      <button
+        onClick={() => handleChange('el')}
+        className={`flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
+          currentLang === 'el'
+            ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+            : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+        }`}
+      >
+        Ελληνικά
+      </button>
+    </div>
+  );
+}
+
+function AccountSection() {
+  const { t } = useTranslation();
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function handleDeleteAccount() {
+    const confirmed = window.confirm(t('settings.delete_confirm'));
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteAccount();
+      // The account (and all its data) is gone server-side — sign out
+      // locally so App.jsx's session listener drops back to the login
+      // screen. onClose is unnecessary: App.jsx stops rendering the
+      // Settings modal's parent tree entirely once session becomes null.
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Failed to delete account:', err);
+      setIsDeleting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={() => supabase.auth.signOut()}
+        className="w-full text-left px-3 py-2.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-primary)] font-medium text-sm"
+      >
+        {t('settings.sign_out')}
+      </button>
+
+      <div className="pt-2 mt-1 border-t border-[var(--border-subtle)]">
+        <button
+          onClick={handleDeleteAccount}
+          disabled={isDeleting}
+          className="w-full text-left px-3 py-2.5 rounded-md hover:bg-red-50 text-[var(--danger)] font-medium text-sm disabled:opacity-50"
+        >
+          {isDeleting ? t('settings.deleting') : t('settings.delete_account')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AboutSection() {
+  const { t } = useTranslation();
+  return (
+    <div className="text-sm space-y-1">
+      <p className="font-semibold text-[var(--text-primary)]">{t('app.title')}</p>
+      <p className="text-[var(--text-secondary)]">{t('settings.version')} {APP_VERSION}</p>
+      <p className="text-xs text-[var(--text-muted)]">{t('settings.about_tagline')}</p>
     </div>
   );
 }
@@ -503,12 +709,12 @@ function DeveloperUsageView() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-md p-3">
+        <div className="bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-md p-3">
           <div className="text-xs text-[var(--text-muted)] uppercase">{t('settings.today')}</div>
           <div className="text-lg font-semibold text-[var(--text-primary)] mt-1">{usage.today.total_tokens.toLocaleString()} tok</div>
           <div className="text-xs text-[var(--text-secondary)]">${usage.today.estimated_cost_usd.toFixed(4)} • {usage.today.call_count} calls</div>
         </div>
-        <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-md p-3">
+        <div className="bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-md p-3">
           <div className="text-xs text-[var(--text-muted)] uppercase">{t('settings.this_week')}</div>
           <div className="text-lg font-semibold text-[var(--text-primary)] mt-1">{usage.this_week.total_tokens.toLocaleString()} tok</div>
           <div className="text-xs text-[var(--text-secondary)]">${usage.this_week.estimated_cost_usd.toFixed(4)} • {usage.this_week.call_count} calls</div>
@@ -530,47 +736,11 @@ function DeveloperUsageView() {
   );
 }
 
-function BellIcon({ className }) {
+function PencilIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-    </svg>
-  );
-}
-
-function ChevronLeftIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  );
-}
-
-function CalendarIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-}
-
-function CodeIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <polyline points="16 18 22 12 16 6" />
-      <polyline points="8 6 2 12 8 18" />
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </svg>
   );
 }

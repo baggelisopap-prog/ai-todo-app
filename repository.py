@@ -436,6 +436,34 @@ def update_daily_summary_last_sent_date(user_id: str, date_str: str) -> None:
         supabase.table("app_settings").insert({**fields, "user_id": user_id}).execute()
 
 
+# --- Profile ---
+# Thin CRUD over the `profiles` table (id, email, display_name, created_at),
+# auto-populated with one row per user on signup. Used by the Settings
+# "My Profile" section and, incidentally, as the source of the owner-check
+# comparison the frontend uses to gate the Developer section.
+
+
+def get_profile(user_id: str) -> dict:
+    result = supabase.table("profiles").select("*").eq("id", user_id).execute()
+    return result.data[0] if result.data else {"id": user_id, "email": None, "display_name": None}
+
+
+def update_profile(user_id: str, display_name: str) -> dict:
+    result = supabase.table("profiles").update({"display_name": display_name}).eq("id", user_id).execute()
+    return result.data[0]
+
+
+def delete_user_account(user_id: str) -> None:
+    """
+    Deletes the Supabase auth user via the admin API (requires the secret/
+    service-role key this module already uses). ON DELETE CASCADE on every
+    user_id foreign key across tasks, app_settings, push_subscriptions,
+    google_calendar_connections/events, and token_usage_log cleans up all
+    of that user's data automatically — nothing else to do here.
+    """
+    supabase.auth.admin.delete_user(user_id)
+
+
 # --- Multi-user enumeration ---
 
 
