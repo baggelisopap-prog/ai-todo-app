@@ -42,3 +42,4 @@ _Single source of truth for the technical shape. Verify against real code when C
 - `api.js` wraps all backend calls with an authenticated fetch (bearer token from the Supabase session).
 - `App.jsx` holds the Supabase session via `onAuthStateChange`; also captures the Google `provider_token`/`provider_refresh_token` after the calendar-connect OAuth flow (flagged via sessionStorage) and posts them to the backend.
 - Today shows today's Google events inline; Calendar grid shows events as titled chips; a day-detail popup shows tasks + events; events are read-only in-app and tap-to-open in Google Calendar.
+- `frontend/src/components/CollapsibleSection.jsx` — shared accordion-row shell (title button + rotating chevron + hidden/block content, never conditionally unmounted). Used by `SettingsModal.jsx` to make each of its seven sections independently collapsible, all closed by default.

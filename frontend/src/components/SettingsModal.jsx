@@ -18,6 +18,7 @@ import {
   deleteAccount,
 } from '../api';
 import { supabase } from '../supabaseClient';
+import CollapsibleSection from './CollapsibleSection';
 
 // Hardcoded owner user_id — same "one door" pattern hostaway_integration.py's
 // get_user_id_for_hostaway_account() uses to gate the Hostaway integration to
@@ -43,6 +44,14 @@ export function SettingsModal({ onClose }) {
   const { t } = useTranslation();
   const [profile, setProfile] = useState(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
+
+  // Empty object = every section collapsed — the required default. Since
+  // SettingsModal is mounted/unmounted by App.jsx (`{isSettingsOpen && ...}`,
+  // not shown/hidden via an `isOpen` prop on an always-mounted instance),
+  // this useState default already resets sections to all-closed on every
+  // fresh open — no extra effect needed.
+  const [openSections, setOpenSections] = useState({});
+  const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
     getProfile()
@@ -75,48 +84,65 @@ export function SettingsModal({ onClose }) {
           </button>
         </div>
 
-        <div className="p-4 space-y-6 overflow-y-auto">
-          <ProfileSection profile={profile} profileLoaded={profileLoaded} onProfileUpdate={setProfile} />
+        <div className="p-4 space-y-2 overflow-y-auto">
+          <CollapsibleSection
+            title={t('settings.my_profile')}
+            isOpen={!!openSections.profile}
+            onToggle={() => toggleSection('profile')}
+          >
+            <ProfileSection profile={profile} profileLoaded={profileLoaded} onProfileUpdate={setProfile} />
+          </CollapsibleSection>
 
-          <SettingsSection title={t('settings.notifications')}>
+          <CollapsibleSection
+            title={t('settings.notifications')}
+            isOpen={!!openSections.notifications}
+            onToggle={() => toggleSection('notifications')}
+          >
             <NotificationsSection />
-          </SettingsSection>
+          </CollapsibleSection>
 
-          <SettingsSection title={t('settings.calendar')}>
+          <CollapsibleSection
+            title={t('settings.calendar')}
+            isOpen={!!openSections.calendar}
+            onToggle={() => toggleSection('calendar')}
+          >
             <CalendarConnectionView />
-          </SettingsSection>
+          </CollapsibleSection>
 
-          <SettingsSection title={t('settings.language')}>
+          <CollapsibleSection
+            title={t('settings.language')}
+            isOpen={!!openSections.language}
+            onToggle={() => toggleSection('language')}
+          >
             <LanguageSection />
-          </SettingsSection>
+          </CollapsibleSection>
 
           {isOwner && (
-            <SettingsSection title={t('settings.developer')}>
+            <CollapsibleSection
+              title={t('settings.developer')}
+              isOpen={!!openSections.developer}
+              onToggle={() => toggleSection('developer')}
+            >
               <DeveloperUsageView />
-            </SettingsSection>
+            </CollapsibleSection>
           )}
 
-          <SettingsSection title={t('settings.account')}>
+          <CollapsibleSection
+            title={t('settings.account')}
+            isOpen={!!openSections.account}
+            onToggle={() => toggleSection('account')}
+          >
             <AccountSection />
-          </SettingsSection>
+          </CollapsibleSection>
 
-          <SettingsSection title={t('settings.about')}>
+          <CollapsibleSection
+            title={t('settings.about')}
+            isOpen={!!openSections.about}
+            onToggle={() => toggleSection('about')}
+          >
             <AboutSection />
-          </SettingsSection>
+          </CollapsibleSection>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function SettingsSection({ title, children }) {
-  return (
-    <div>
-      <h3 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-2 px-1">
-        {title}
-      </h3>
-      <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg p-4">
-        {children}
       </div>
     </div>
   );
@@ -162,7 +188,7 @@ function ProfileSection({ profile, profileLoaded, onProfileUpdate }) {
   const initials = getInitials(profile.display_name, profile.email);
 
   return (
-    <div className="flex items-center gap-4 p-4 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)]">
+    <div className="flex items-center gap-4">
       <div
         className="w-14 h-14 rounded-full bg-[var(--brand-primary)] text-white flex items-center justify-center text-lg font-semibold flex-shrink-0"
         aria-hidden="true"
