@@ -11,7 +11,7 @@ Columns include: `notifications_enabled`, `send_all_enabled`, `daily_summary_ena
 Columns: `endpoint`, `p256dh`, `auth`, `user_id`, plus id/created_at. Used by `send_push_to_user`.
 
 ### Table: token_usage_log — per-user, per-call AI cost log (single source of truth for usage)
-Columns: `call_type`, `timestamp`, `prompt_tokens`, `output_tokens`, `thinking_tokens`, `total_tokens`, `model`, `user_id`. Usage summaries are computed by summing this table (no cached usage column anywhere — avoids a second source of truth). NOTE historical bug: a missing `model` column once broke ALL logging (a write with an unknown field is rejected wholesale) — keep the schema and the write in sync.
+Columns: `call_type`, `timestamp` (TEXT, ISO string — NOT timestamptz; date functions such as date_trunc require an explicit ::timestamptz cast), `prompt_tokens`, `output_tokens`, `thinking_tokens`, `total_tokens`, `model`, `user_id`. Usage summaries are computed by summing this table (no cached usage column anywhere — avoids a second source of truth). NOTE historical bug: a missing `model` column once broke ALL logging (a write with an unknown field is rejected wholesale) — keep the schema and the write in sync.
 
 ### Table: profiles — per-user profile, 1:1 with auth.users
 Columns: `id` (UUID PK, FK → auth.users ON DELETE CASCADE), `email` (TEXT), `display_name` (TEXT), `created_at`. Auto-created on signup by trigger `on_auth_user_created` → `handle_new_user()` (pulls `raw_user_meta_data->>'full_name'` for Google signups). Owner row backfilled. This is the correct place for future per-user settings (e.g. a `preferred_language` or `monthly_token_quota` column) — NOT auth.users.

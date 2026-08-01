@@ -1,5 +1,5 @@
 PROJECT STATUS SNAPSHOT —
-_Last updated: 2026-08-01. This is the cold-start entry point: read this first for "where are we"._
+_Last updated: 2026-08-01 (agent writes Phase 1 verified shipped; token-cost baseline recorded). This is the cold-start entry point: read this first for "where are we"._
 
 ## What this project is
 AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categorizes and prioritizes them with Gemini, sends push reminders, syncs two-way with Google Calendar, has an AI agent that answers questions about your tasks AND can propose task changes (complete/update/create) via confirmation cards — see below. Backs a real Airbnb/Hostaway short-let business (Hostaway guest messages become tasks automatically). Multi-user and production-deployed.
@@ -11,12 +11,13 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 - **Per-user AI token usage tracking** (token_usage_log is per-user; Developer dashboard sums it, owner-gated).
 - **Google Calendar Phase 1** (per-user OAuth connect + backend-managed token refresh) and **Phase 2** (two-way sync via the existing scheduler): push tasks→Google, pull app-created events back; foreign (non-app) events stored separately with a "Make it a task" flow; events shown in Today + Monthly/Weekly calendar grid (as titled chips) + day-detail popup; per-task calendar toggle + global "sync all" + "show events" toggle; origin-aware deletion; completion marks the Google event with a "✓ " title prefix; tapping an event opens it in Google Calendar. (Corrected: there is no "Last synced" status UI and token refresh is reactive-at-expiry, not a proactive 5-min-buffer refresh — verified against the code; see DATABASE_SCHEMA.md/ARCHITECTURE.md corrections.)
 - **Full Settings redesign** (My Profile + organized sections + delete-account): **shipped**, not pending. `GET/PATCH /profile` and `DELETE /account` exist in `main.py`; `SettingsModal.jsx` has all sections (My Profile, Notifications, Google Calendar, Language EN/EL, owner-gated Developer, Account with sign-out + confirm-gated delete, About). Verified against the running code. Each section is now independently collapsible (shared `CollapsibleSection` component), all closed by default when the modal opens, collapsed content hidden-not-unmounted so in-progress edits survive a collapse.
+- **Agent write capabilities Phase 1** (propose-then-confirm for complete/update/create tasks): shipped on both backend and frontend — `propose_*` tools that record intent (never execute), `/agent/confirm-action` endpoint that executes with server-side re-validation + user_id scoping, one confirmation card per proposed action in the chat UI (individually confirmed, no bulk confirm, Cancel is local-only, cards are ephemeral, created tasks land in the Inbox). Manually verified end-to-end while logged in against live Supabase data.
 
 ## In progress / most recent 🚧
-- **Agent write capabilities Phase 1** (propose-then-confirm for complete/update/create tasks): implemented on both backend and frontend — `propose_*` tools that record intent (never execute), `/agent/confirm-action` endpoint that executes with server-side re-validation + user_id scoping, one confirmation card per proposed action in the chat UI (individually confirmed, no bulk confirm, Cancel is local-only, cards are ephemeral, created tasks land in the Inbox). Verified statically and via unauthenticated smoke test; NOT yet verified by an actual logged-in click-through. This is the CURRENT_TASK to resume.
+**Agent token-cost investigation**: a baseline was taken from existing token_usage_log rows before any code was written (84 agent_query calls). Average call is ~4,264 tokens; the fixed per-round prefix is ~1,830 tokens; input is ~90% of tokens and ~77% of cost; thinking tokens are zero. Cost scales with the NUMBER OF TOOL ROUNDS, not with task count. Per-round instrumentation is being added next to identify which rounds occur and why; no optimization is committed to until then.
 
 ## Next / not started
-See BACKLOG.md. Nearest: manually verify agent writes Phase 1 end-to-end (logged in); then agent writes Phase 2 (delete + calendar ops), monitoring, admin dashboard, Android packaging.
+See BACKLOG.md. Nearest: agent writes Phase 2 (delete + calendar ops), monitoring, admin dashboard, Android packaging.
 
 ## How to resume
 Cold-start search returns this file + CURRENT_TASK.md. Read CURRENT_TASK.md for the active piece. For any concrete fact (schema, endpoint, env var), search the specific doc; never guess.
