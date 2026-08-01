@@ -43,7 +43,7 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 GEMINI_AGENT_MODEL = "gemini-3.1-flash-lite-preview"
-MAX_TOOL_ROUNDS = 6
+MAX_TOOL_ROUNDS = 4
 
 
 class _SummedUsage:
@@ -70,7 +70,11 @@ def ask_agent(question: str, user_id: str) -> dict:
     here. Raises RuntimeError on any failure so callers only need to handle
     one failure mode.
     """
-    system_instruction = agent_tools.build_system_instruction()
+    # One clock read for the entire request — see build_time_context's docstring.
+    # Feeds the system instruction, search_tasks, and the header below, so a
+    # request that straddles midnight can never see two different "today"s.
+    today_iso, now_hhmm, time_header = agent_tools.build_time_context()
+    system_instruction = agent_tools.build_system_instruction(today_iso, now_hhmm)
 
     try:
         cached_tasks = repository.get_tasks_for_user(user_id=user_id)
@@ -80,7 +84,7 @@ def ask_agent(question: str, user_id: str) -> dict:
 
     proposed_actions = []
 
-    search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks)
+    search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks, today_iso)
     propose_complete_task, propose_update_task, propose_create_task = agent_tools.build_write_proposal_tools(
         proposed_actions, cached_tasks
     )
@@ -97,7 +101,7 @@ def ask_agent(question: str, user_id: str) -> dict:
     }
 
     contents = [
-        types.Content(role="user", parts=[types.Part.from_text(text=question)])
+        types.Content(role="user", parts=[types.Part.from_text(text=f"{time_header}\n\nQuestion: {question}")])
     ]
 
     total_prompt_tokens = 0
@@ -197,5 +201,43 @@ def ask_agent(question: str, user_id: str) -> dict:
 
         contents.append(types.Content(role="user", parts=function_response_parts))
 
-    _log_run_summary("max_rounds", MAX_TOOL_ROUNDS)
-    raise RuntimeError("Agent exceeded maximum tool-call rounds without a final answer")
+    # Graceful degradation: previously this was `raise RuntimeError(...)`, i.e. the
+    # user saw an error after the most expensive possible run. One final tool-less
+    # call forces an answer from whatever was already found instead.
+    logging.warning(f"[agent] max rounds ({MAX_TOOL_ROUNDS}) hit — forcing tool-less answer")
+    contents.append(types.Content(role="user", parts=[types.Part.from_text(
+        text=("You have used all available tool calls. Answer NOW using only what you "
+              "have already found. If you found nothing, say so plainly and suggest "
+              "what the user could clarify (e.g. a specific date). Do not call tools.")
+    )]))
+
+    try:
+        final = client.models.generate_content(
+            model=GEMINI_AGENT_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(system_instruction=system_instruction),
+        )
+    except Exception as e:
+        raise RuntimeError(f"Agent exceeded max rounds and final answer failed: {e}")
+
+    if final.usage_metadata:
+        total_prompt_tokens += final.usage_metadata.prompt_token_count or 0
+        total_output_tokens += final.usage_metadata.candidates_token_count or 0
+        total_tokens_sum += final.usage_metadata.total_token_count or 0
+
+    if not final.text:
+        raise RuntimeError("Agent exceeded maximum tool-call rounds without a final answer")
+
+    # Same token_tracker shape as the normal success path above — one call_type
+    # ("agent_query"), one log_token_usage call per run, never two: this recovery
+    # return is the only exit taken once the loop above is exhausted, so there is
+    # no risk of double-logging the same run.
+    if token_tracker:
+        summed = _SummedUsage(total_prompt_tokens, total_output_tokens, total_tokens_sum)
+        token_tracker.log_token_usage("agent_query", summed, model=GEMINI_AGENT_MODEL, user_id=user_id)
+
+    logging.warning(
+        f"[agent][SUMMARY] outcome=max_rounds_recovered rounds={MAX_TOOL_ROUNDS + 1} "
+        f"prompt={total_prompt_tokens} output={total_output_tokens} total={total_tokens_sum}"
+    )
+    return {"answer": final.text, "proposed_actions": proposed_actions}

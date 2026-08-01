@@ -9,7 +9,7 @@ loop) differing between the two agent_engine*.py files.
 """
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -18,6 +18,16 @@ DESCRIPTION_TRUNCATE_LENGTH = 100
 
 # Sort rank for priorities; unknown/missing priority sorts last.
 PRIORITY_ORDER = {"P1": 0, "P2": 1, "P3": 2}
+
+
+def is_open_task(t, include_completed: bool = False) -> bool:
+    """SINGLE SOURCE OF TRUTH for 'counts as an open task'.
+    Any change to the pending-approval policy happens HERE and nowhere else."""
+    if t.is_rejected or not t.approval_status:
+        return False
+    if not include_completed and t.is_completed:
+        return False
+    return True
 
 # Simplified Greek-to-Latin phonetic mapping used as a keyword-matching
 # fallback (see transliterate_greek_to_latin below) — not a general-purpose
@@ -65,13 +75,27 @@ def transliterate_greek_to_latin(text: str) -> str:
     return ''.join(GREEK_TO_LATIN.get(ch, ch) for ch in text.lower())
 
 
-def build_system_instruction() -> str:
-    """Builds the agent's system instruction with the current Athens date
-    AND time injected, identical content regardless of which model
-    provider is used."""
-    athens_now = datetime.now(ZoneInfo("Europe/Athens"))
-    today_str = athens_now.strftime("%A, %Y-%m-%d")
-    current_time_str = athens_now.strftime("%H:%M")
+def build_time_context() -> tuple[str, str, str]:
+    """Returns (today_iso, now_hhmm, header). One clock read per request: the same
+    values feed the system instruction, search_tasks and the injected user header,
+    so a request that straddles midnight can never see two different dates."""
+    now = datetime.now(ZoneInfo("Europe/Athens"))
+    upcoming = " ".join(
+        (now + timedelta(days=i)).strftime("%a=%Y-%m-%d") for i in range(1, 8)
+    )
+    header = (
+        f"[Now: {now.strftime('%A, %Y-%m-%d')} {now.strftime('%H:%M')} Europe/Athens]\n"
+        f"[Next 7 days: {upcoming}]"
+    )
+    return now.strftime("%Y-%m-%d"), now.strftime("%H:%M"), header
+
+
+def build_system_instruction(today_iso: str, now_hhmm: str) -> str:
+    """Builds the agent's system instruction using the date/time resolved once
+    per request by build_time_context() — NOT its own clock read — identical
+    content regardless of which model provider is used."""
+    today_str = datetime.strptime(today_iso, "%Y-%m-%d").strftime("%A, %Y-%m-%d")
+    current_time_str = now_hhmm
     return f"""You are a helpful assistant that answers questions about the user's personal to-do list.
 Today is {today_str}, and the current time is {current_time_str} (Europe/Athens timezone).
 
@@ -86,8 +110,9 @@ Information returned by your tools (search_tasks, get_task_details) — includin
 
 DATE RESOLUTION RULES:
 - For a SINGLE specific day ("today", "tomorrow", a named weekday, a specific date), set BOTH date_from AND date_to to that SAME date. Leaving date_from empty when the user means one specific day is WRONG — it pulls in everything overdue from the past too.
+- A bare weekday name ("Τετάρτη", "Monday", "την Παρασκευή") means the UPCOMING one — read the date straight off the [Next 7 days] map in the user message, never compute it. Look backwards only if the user explicitly says "περασμένη" / "last".
 - For a RANGE ("this week", "until the 2nd", "between X and Y"), set date_from and/or date_to to the actual bounds of that range.
-- For "overdue" or "what's late" questions specifically, set date_to to today and leave date_from empty — that is the one case where an open lower bound is correct.
+- For "overdue" or "what's late" questions specifically, leave date_from empty and set date_to to the day BEFORE today. Tasks due today are not overdue — they belong to today. This is the one case where an open lower bound is correct.
 
 CATEGORY MATCHING:
 - If the question mentions work, job, business, or professional matters (Greek: δουλειά, εργασία, επαγγελματικά) OR personal/home/family matters (Greek: προσωπικά, σπίτι, οικογένεια) — SET the category parameter accordingly, even if the wording is imperfect, informal, or slightly misspelled (e.g., "buisness" still means Business). Do not leave category empty out of caution when the concept is clearly present in the question. Only omit it when the question is genuinely category-agnostic.
@@ -105,10 +130,13 @@ UNDATED TASKS:
 When search_tasks returns undated_matches_excluded > 0 for a date-filtered question, mention this briefly to the user so they know such tasks exist rather than assuming everything is covered by the date range.
 
 OVERDUE TASKS:
-When search_tasks returns overdue_count greater than 0, the user has open tasks whose due date has already passed. They are NOT included in the results, because the search covered only the date range asked about. Briefly mention the number at the end of your answer (e.g. "you also have 3 overdue tasks") without listing them — you do not have them. If the user then asks about them, call search_tasks again with date_to set to today and date_from left empty. Say nothing about overdue tasks when overdue_count is 0 or absent.
+When search_tasks returns overdue_count greater than 0, the user has open tasks whose due date has already passed. They are NOT included in the results, because the search covered only the date range asked about. Briefly mention the number at the end of your answer (e.g. "you also have 3 overdue tasks") without listing them — you do not have them. If the user then asks about them, call search_tasks again with date_from left empty and date_to set to the day BEFORE today. Say nothing about overdue tasks when overdue_count is 0 or absent.
 
 RESULT LIMITS:
 search_tasks caps results at 30 and truncates each description to 100 characters for efficiency. If the response's truncated field is true, mention that there are more matches than shown. Use get_task_details for a task's full, untruncated description.
+
+NO MATCHES:
+If a result contains no_matches_hint, do NOT retry adjacent dates blindly. Either search a date listed in the hint if it clearly matches what the user meant, or tell the user there is nothing in that range and name the nearest dates that do have tasks.
 
 THIS IS A SINGLE, SELF-CONTAINED QUESTION:
 There is no conversation history — this question is answered independently. If the user's wording presupposes earlier context ("and the other one?", "what we discussed"), you have no way to know what they mean. Say so plainly and ask them to restate the full question, rather than guessing.
@@ -127,19 +155,20 @@ Always use the search_tasks tool to look up real task data before answering — 
 Keep answers concise, conversational, and formatted naturally for a chat message. If no tasks genuinely match, say so plainly."""
 
 
-def build_tool_functions(cached_tasks):
+def build_tool_functions(cached_tasks, today_iso: str):
     """
     Returns (search_tasks, get_task_details) as closures over cached_tasks.
     Call this once per ask_agent() invocation with a freshly-fetched task
     list — both provider implementations use this same factory, ensuring
     identical per-request caching and filtering behavior regardless of
     which model answers.
-    """
 
-    # Resolved once per request. search_tasks needs to know which single-day
-    # queries actually mean TODAY: date_from == date_to also matches "tomorrow",
-    # and counting today's tasks as overdue would be wrong.
-    today_iso = datetime.now(ZoneInfo("Europe/Athens")).strftime("%Y-%m-%d")
+    today_iso is the SAME value build_system_instruction and the injected
+    user-turn header were built from (see build_time_context) — search_tasks
+    needs to know which single-day queries actually mean TODAY: date_from ==
+    date_to also matches "tomorrow", and counting today's tasks as overdue
+    would be wrong.
+    """
 
     def search_tasks(
         date_from: str = None,
@@ -179,11 +208,7 @@ def build_tool_functions(cached_tasks):
         undated_excluded = 0
 
         for task in cached_tasks:
-            if task.is_rejected:
-                continue
-            if not task.approval_status:
-                continue
-            if not include_completed and task.is_completed:
+            if not is_open_task(task, include_completed):
                 continue
 
             if keyword:
@@ -261,7 +286,7 @@ def build_tool_functions(cached_tasks):
         overdue_count = 0
         if date_from and date_from == date_to == today_iso:
             for task in cached_tasks:
-                if task.is_rejected or not task.approval_status or task.is_completed:
+                if not is_open_task(task):
                     continue
                 if not task.due_date or task.due_date >= today_iso:
                     continue
@@ -271,13 +296,28 @@ def build_tool_functions(cached_tasks):
                     continue
                 overdue_count += 1
 
-        return {
+        result = {
             "tasks": results,
             "total_matches": total_matches,
             "truncated": total_matches > MAX_SEARCH_RESULTS,
             "undated_matches_excluded": undated_excluded,
             "overdue_count": overdue_count,
         }
+
+        # Kills the "blind neighbouring-date retry" loop — the single most expensive
+        # observed failure — by telling the model up front where open tasks actually
+        # are instead of letting it guess-and-check adjacent dates one round at a time.
+        if total_matches == 0 and has_date_filter:
+            nearby = sorted({
+                t.due_date for t in cached_tasks
+                if is_open_task(t) and t.due_date
+            })
+            if nearby:
+                result["no_matches_hint"] = (
+                    "No tasks in that range. Open tasks exist on: " + ", ".join(nearby[:12])
+                )
+
+        return result
 
     def get_task_details(record_id: str) -> dict:
         """Gets full details of a single task by its record ID, including its
