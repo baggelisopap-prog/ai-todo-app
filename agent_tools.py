@@ -104,6 +104,9 @@ FILTER DISCIPLINE:
 UNDATED TASKS:
 When search_tasks returns undated_matches_excluded > 0 for a date-filtered question, mention this briefly to the user so they know such tasks exist rather than assuming everything is covered by the date range.
 
+OVERDUE TASKS:
+When search_tasks returns overdue_count greater than 0, the user has open tasks whose due date has already passed. They are NOT included in the results, because the search covered only the date range asked about. Briefly mention the number at the end of your answer (e.g. "you also have 3 overdue tasks") without listing them — you do not have them. If the user then asks about them, call search_tasks again with date_to set to today and date_from left empty. Say nothing about overdue tasks when overdue_count is 0 or absent.
+
 RESULT LIMITS:
 search_tasks caps results at 30 and truncates each description to 100 characters for efficiency. If the response's truncated field is true, mention that there are more matches than shown. Use get_task_details for a task's full, untruncated description.
 
@@ -133,6 +136,11 @@ def build_tool_functions(cached_tasks):
     which model answers.
     """
 
+    # Resolved once per request. search_tasks needs to know which single-day
+    # queries actually mean TODAY: date_from == date_to also matches "tomorrow",
+    # and counting today's tasks as overdue would be wrong.
+    today_iso = datetime.now(ZoneInfo("Europe/Athens")).strftime("%Y-%m-%d")
+
     def search_tasks(
         date_from: str = None,
         date_to: str = None,
@@ -154,7 +162,7 @@ def build_tool_functions(cached_tasks):
             include_completed: Whether to include tasks that are already marked completed. Defaults to False.
 
         Returns:
-            A dict with tasks (capped at 30, descriptions truncated to 100 chars), total_matches, truncated, and undated_matches_excluded.
+            A dict with tasks (capped at 30, descriptions truncated to 100 chars), total_matches, truncated, undated_matches_excluded, and overdue_count (number of open tasks whose due date has already passed; only non-zero for questions about today).
         """
         logging.info(f"[agent] search_tasks called: date_from={date_from}, date_to={date_to}, category={category}, priority={priority}, keyword={keyword}, include_completed={include_completed}")
 
@@ -243,11 +251,32 @@ def build_tool_functions(cached_tasks):
 
         logging.info(f"[agent] search_tasks returning {len(results)} of {total_matches} matches, undated_excluded={undated_excluded}")
 
+        # Overdue count for TODAY-scoped questions only. The DATE RESOLUTION rule sets
+        # date_from == date_to for a single day, so a "what do I have today" search
+        # structurally cannot see anything overdue. This surfaces the number without
+        # fetching the tasks (a deliberate cost choice — see DECISIONS.md).
+        # Scoped by category/priority so "my business tasks today" reports only
+        # overdue business tasks, but NOT by keyword (a fuzzy keyword would suppress
+        # the warning almost every time, defeating the point).
+        overdue_count = 0
+        if date_from and date_from == date_to == today_iso:
+            for task in cached_tasks:
+                if task.is_rejected or not task.approval_status or task.is_completed:
+                    continue
+                if not task.due_date or task.due_date >= today_iso:
+                    continue
+                if category and task.category != category:
+                    continue
+                if priority and task.priority != priority:
+                    continue
+                overdue_count += 1
+
         return {
             "tasks": results,
             "total_matches": total_matches,
             "truncated": total_matches > MAX_SEARCH_RESULTS,
             "undated_matches_excluded": undated_excluded,
+            "overdue_count": overdue_count,
         }
 
     def get_task_details(record_id: str) -> dict:

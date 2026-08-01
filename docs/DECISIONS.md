@@ -57,3 +57,7 @@ Per-round and per-run token figures (including thinking and cached counts) go to
 ### Decision: agent search results sort chronologically, not priority-first
 `search_tasks` sorts by (due_date, due_time, priority) before capping. The cap's purpose is "the next N things to do", and a P1 due next week is not more urgent than a P3 due today. Consequence: a high-priority far-future task can fall outside the cap; the `truncated` flag tells the agent to mention that more matches exist.
 Supersedes nothing (there was previously no sort at all — an arbitrary subset was kept).
+
+### Decision: today-scoped searches report an overdue COUNT, not the overdue tasks
+The DATE RESOLUTION rule sets date_from == date_to for a single day, which structurally hides overdue tasks from "what do I have today". search_tasks now returns an overdue_count for that case only, resolved against the real Athens date in the closure (date_from == date_to alone would also match "tomorrow" and miscount today's tasks as overdue). Scoped by category/priority, not keyword.
+Trade-off accepted deliberately: returning the count rather than the tasks costs ~5 tokens instead of ~150, but if the user follows up with "which ones?", that follow-up is a full additional agent run (~6k tokens, since cost scales at roughly 2,900 tokens per round). Chosen on the assumption that follow-ups are rare. Revisit if logs show otherwise. Supersedes nothing — DATE RESOLUTION is unchanged.
