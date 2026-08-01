@@ -223,7 +223,17 @@
     "input_placeholder": "Type a question...",
     "send": "Send",
     "thinking": "Thinking...",
-    "error": "Something went wrong. Please try again."
+    "error": "Something went wrong. Please try again.",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "action_pending": "Working...",
+    "action_done": "Done",
+    "action_failed": "Failed",
+    "action_cancelled": "Cancelled",
+    "proposal_complete": "Complete: {{task_name}}",
+    "proposal_update": "change {{field}}: {{value}}",
+    "proposal_create": "Create new task: {{task_name}}",
+    "create_needs_approval": "Will be added to Inbox for your approval"
   },
   "auth": {
     "log_in": "Log In",

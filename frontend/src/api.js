@@ -252,13 +252,28 @@ export async function updateAppSettings(settings) {
 }
 
 /**
- * POST /agent/query — asks the read-only task Q&A agent a natural-language
- * question. Returns { answer }.
+ * POST /agent/query — asks the task agent a natural-language question.
+ * Returns { answer, proposed_actions }. proposed_actions is a list of
+ * agent-proposed writes (complete/update/create) that the UI renders as
+ * confirmation cards — nothing changes in the app until each one is
+ * confirmed individually via confirmAgentAction below.
  */
 export async function askAgent(question) {
   return request('/agent/query', {
     method: 'POST',
     body: JSON.stringify({ question }),
+  });
+}
+
+/**
+ * POST /agent/confirm-action — executes one agent-proposed action after the
+ * user presses Confirm on its card. Pass the exact action object as received
+ * in proposed_actions. Returns { status, message, task }.
+ */
+export async function confirmAgentAction(action) {
+  return request('/agent/confirm-action', {
+    method: 'POST',
+    body: JSON.stringify(action),
   });
 }
 

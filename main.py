@@ -20,12 +20,13 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings
 from services import TaskService
 from repository import save_push_subscription, get_app_settings, update_app_settings
 from auth import get_current_user_id
 import agent_engine
+import agent_tools
 import google_calendar
 import hostaway_integration
 import repository
@@ -91,9 +92,41 @@ class AgentQueryRequest(BaseModel):
     """Request body for POST /agent/query"""
     question: str
 
+class ProposedAction(BaseModel):
+    """
+    One agent-proposed write, as recorded by agent_tools.py's propose_*
+    tools. Purely descriptive for the frontend to render as a confirmation
+    card — /agent/confirm-action re-validates everything from scratch and
+    never trusts that a client-echoed action is still accurate.
+    """
+    action_id: str
+    type: Literal["complete_task", "update_task", "create_task"]
+    record_id: Optional[str] = None
+    task_name: Optional[str] = None
+    fields: Optional[dict] = None
+
 class AgentQueryResponse(BaseModel):
     """Response body for POST /agent/query"""
     answer: str
+    proposed_actions: list[ProposedAction] = []
+
+class ConfirmActionRequest(BaseModel):
+    """
+    Request body for POST /agent/confirm-action — the exact proposal object
+    the frontend received under proposed_actions in /agent/query's response,
+    echoed back unmodified when the user clicks Confirm on its card.
+    """
+    action_id: Optional[str] = None
+    type: Literal["complete_task", "update_task", "create_task"]
+    record_id: Optional[str] = None
+    task_name: Optional[str] = None
+    fields: Optional[dict] = None
+
+class ConfirmActionResponse(BaseModel):
+    """Response body for POST /agent/confirm-action"""
+    status: str
+    message: str
+    task: Optional[TaskRecord] = None
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -548,14 +581,96 @@ async def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_cur
     if not request.question or not request.question.strip():
         raise HTTPException(status_code=422, detail="question cannot be empty")
     try:
-        answer = agent_engine.ask_agent(request.question.strip(), user_id=user_id)
-        return AgentQueryResponse(answer=answer)
+        result = agent_engine.ask_agent(request.question.strip(), user_id=user_id)
+        return AgentQueryResponse(answer=result["answer"], proposed_actions=result["proposed_actions"])
     except RuntimeError as e:
         logger.error(f"Agent query failed: {e}")
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.exception("Unexpected error in /agent/query")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def _validate_agent_write_fields(fields: dict) -> dict:
+    """
+    Re-validates a proposed field dict server-side before executing an
+    agent-confirmed write. Silently drops any key outside
+    agent_tools.AGENT_WRITABLE_FIELDS (defense against a manipulated
+    proposal echoed back from the client) and raises HTTPException(422) on
+    the first invalid enum value or malformed date/time.
+    """
+    valid_categories = {"Business", "Personal", "Unknown", "Hostaway"}
+    valid_priorities = {"P1", "P2", "P3"}
+
+    cleaned = {k: v for k, v in fields.items() if k in agent_tools.AGENT_WRITABLE_FIELDS}
+
+    if "category" in cleaned and cleaned["category"] not in valid_categories:
+        raise HTTPException(status_code=422, detail=f"Invalid category '{cleaned['category']}'")
+    if "priority" in cleaned and cleaned["priority"] not in valid_priorities:
+        raise HTTPException(status_code=422, detail=f"Invalid priority '{cleaned['priority']}'")
+    if cleaned.get("due_date"):
+        try:
+            datetime.strptime(cleaned["due_date"], "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="due_date must be in YYYY-MM-DD format")
+    if cleaned.get("due_time"):
+        try:
+            datetime.strptime(cleaned["due_time"], "%H:%M")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="due_time must be in HH:MM format")
+    if "task_name" in cleaned:
+        name = (cleaned["task_name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="task_name cannot be empty")
+        if len(name) > 80:
+            raise HTTPException(status_code=422, detail="task_name too long (max 80 characters)")
+        cleaned["task_name"] = name
+
+    return cleaned
+
+
+@app.post("/agent/confirm-action", response_model=ConfirmActionResponse)
+async def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Executes exactly ONE agent-proposed write after the user clicks Confirm
+    on its card in the chat UI. Nothing in agent_tools.py's propose_*
+    functions ever touches the database — this is the only place such a
+    write actually happens, and it re-validates the action from scratch
+    (allowed type, field whitelist, real values) rather than trusting that
+    the client-echoed proposal is still accurate. user_id scoping is
+    inherited from TaskService's existing user-scoped methods (a record_id
+    belonging to a different user simply won't match any row).
+    """
+    try:
+        if request.type == "complete_task":
+            if not request.record_id:
+                raise HTTPException(status_code=422, detail="record_id is required for complete_task")
+            updated = service.update_task(user_id, request.record_id, {"is_completed": True})
+            return ConfirmActionResponse(status="done", message=f"Completed: {updated.task_name}", task=updated)
+
+        elif request.type == "update_task":
+            if not request.record_id:
+                raise HTTPException(status_code=422, detail="record_id is required for update_task")
+            fields = _validate_agent_write_fields(request.fields or {})
+            if not fields:
+                raise HTTPException(status_code=422, detail="No valid fields to update")
+            updated = service.update_task(user_id, request.record_id, fields)
+            return ConfirmActionResponse(status="done", message=f"Updated: {updated.task_name}", task=updated)
+
+        elif request.type == "create_task":
+            fields = _validate_agent_write_fields(request.fields or {})
+            if not fields.get("task_name"):
+                raise HTTPException(status_code=422, detail="task_name is required for create_task")
+            created = service.create_task_manual(user_id, fields, approval_status=False)
+            return ConfirmActionResponse(status="done", message=f"Added to Inbox: {created.task_name}", task=created)
+
+        raise HTTPException(status_code=422, detail=f"Unsupported action type: {request.type}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to execute agent action ({request.type})")
+        raise HTTPException(status_code=500, detail=f"Failed to execute action: {str(e)}")
 
 
 @app.post("/webhooks/hostaway")

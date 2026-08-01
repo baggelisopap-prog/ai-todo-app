@@ -8,6 +8,7 @@ mechanics (Gemini's Automatic Function Calling vs a manual tool-calling
 loop) differing between the two agent_engine*.py files.
 """
 import logging
+import uuid
 from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -105,6 +106,13 @@ search_tasks caps results at 30 and truncates each description to 100 characters
 
 THIS IS A SINGLE, SELF-CONTAINED QUESTION:
 There is no conversation history — this question is answered independently. If the user's wording presupposes earlier context ("and the other one?", "what we discussed"), you have no way to know what they mean. Say so plainly and ask them to restate the full question, rather than guessing.
+
+WRITE ACTIONS (propose, never execute):
+You can propose — but never directly perform — three kinds of changes: completing a task (propose_complete_task), changing fields on an existing task (propose_update_task), or creating a new task (propose_create_task). Calling one of these tools does NOT complete/update/create anything by itself — it only registers a proposal that the user must separately confirm with a button in the UI. After calling a propose_* tool, tell the user you've prepared the change and it is waiting for their confirmation — NEVER say a task "has been completed/updated/created", "is done", or use any other past-tense claim, since nothing has actually happened yet.
+Before calling propose_complete_task or propose_update_task, first identify the exact task via search_tasks (or get_task_details) to get its real record_id — never guess or fabricate a record_id.
+If the request is ambiguous (multiple tasks could match, or it's unclear which field is meant), ask a clarifying question instead of proposing a guess.
+propose_update_task only accepts these fields: due_date, due_time, priority, category, task_name, description. If the user asks to change something else, say that field isn't supported yet.
+A newly created task (propose_create_task) will land in the Inbox for the user's approval, not directly in their task list — mention this when telling them it's ready to confirm.
 
 IMPORTANT: Always respond in the SAME LANGUAGE the user asked their question in.
 
@@ -255,6 +263,151 @@ def build_tool_functions(cached_tasks):
         return {"error": "Task not found"}
 
     return search_tasks, get_task_details
+
+
+# Fields propose_update_task is allowed to touch. Kept as a plain module
+# constant (not just the function signature) so main.py's /agent/confirm-action
+# can import and re-check against the SAME whitelist server-side, rather than
+# trusting that a client-echoed proposal still matches what was proposed.
+AGENT_WRITABLE_FIELDS = {"due_date", "due_time", "priority", "category", "task_name", "description"}
+
+
+def build_write_proposal_tools(proposed_actions: list, available_tasks):
+    """
+    Returns (propose_complete_task, propose_update_task, propose_create_task)
+    as closures over proposed_actions (a list the caller reads after the
+    tool-calling loop ends) and available_tasks (the same per-request cached
+    task list used by build_tool_functions, so record_id/task_name references
+    can be validated before proposing).
+
+    These functions NEVER write to the database — they only validate the
+    intent and append a proposal dict for the frontend to render as a
+    confirmation card. The actual write happens later, only if the user
+    clicks Confirm, via POST /agent/confirm-action (main.py), which
+    re-validates everything server-side rather than trusting this proposal.
+    """
+
+    def _find_task(record_id: str):
+        for task in available_tasks:
+            if task.record_id == record_id:
+                return task
+        return None
+
+    def propose_complete_task(record_id: str) -> dict:
+        """Proposes marking an existing task as completed. Does not complete
+        it — only registers a proposal the user must confirm. Do not call
+        this for a task that is already completed.
+
+        Args:
+            record_id: The task's record ID, as returned by search_tasks or get_task_details.
+        """
+        logging.info(f"[agent] propose_complete_task called: record_id={record_id}")
+        task = _find_task(record_id)
+        if task is None:
+            return {"error": "Task not found"}
+        if task.is_completed:
+            return {"error": "Task is already completed"}
+
+        proposed_actions.append({
+            "action_id": str(uuid.uuid4()),
+            "type": "complete_task",
+            "record_id": record_id,
+            "task_name": task.task_name,
+        })
+        return {"status": "proposed", "task_name": task.task_name}
+
+    def propose_update_task(
+        record_id: str,
+        due_date: str = None,
+        due_time: str = None,
+        priority: Literal["P1", "P2", "P3"] = None,
+        category: Literal["Business", "Personal", "Unknown", "Hostaway"] = None,
+        task_name: str = None,
+        description: str = None,
+    ) -> dict:
+        """Proposes changing one or more fields on an existing task. Does not
+        apply the change — only registers a proposal the user must confirm.
+        Only pass the fields that should actually change; omit the rest.
+
+        Args:
+            record_id: The task's record ID, as returned by search_tasks or get_task_details.
+            due_date: New due date in YYYY-MM-DD format. Omit if unchanged.
+            due_time: New due time in HH:MM 24-hour format. Omit if unchanged.
+            priority: New priority. Omit if unchanged.
+            category: New category. Omit if unchanged.
+            task_name: New task name. Omit if unchanged.
+            description: New description. Omit if unchanged.
+        """
+        logging.info(f"[agent] propose_update_task called: record_id={record_id}")
+        task = _find_task(record_id)
+        if task is None:
+            return {"error": "Task not found"}
+
+        candidate_fields = {
+            "due_date": due_date,
+            "due_time": due_time,
+            "priority": priority,
+            "category": category,
+            "task_name": task_name,
+            "description": description,
+        }
+        fields = {k: v for k, v in candidate_fields.items() if v is not None}
+
+        if not fields:
+            return {"error": "No fields provided to update"}
+
+        proposed_actions.append({
+            "action_id": str(uuid.uuid4()),
+            "type": "update_task",
+            "record_id": record_id,
+            "task_name": task.task_name,
+            "fields": fields,
+        })
+        return {"status": "proposed", "task_name": task.task_name, "fields": fields}
+
+    def propose_create_task(
+        task_name: str,
+        description: str = "",
+        category: Literal["Business", "Personal", "Unknown", "Hostaway"] = "Unknown",
+        priority: Literal["P1", "P2", "P3"] = "P3",
+        due_date: str = None,
+        due_time: str = None,
+    ) -> dict:
+        """Proposes creating a new task. Does not create it — only registers
+        a proposal the user must confirm. The created task will land in the
+        Inbox for approval, not directly in the user's task list.
+
+        Args:
+            task_name: The new task's name (required).
+            description: The new task's description. Defaults to empty.
+            category: The new task's category. Defaults to Unknown.
+            priority: The new task's priority. Defaults to P3.
+            due_date: Due date in YYYY-MM-DD format. Omit if there isn't one.
+            due_time: Due time in HH:MM 24-hour format. Omit if there isn't one.
+        """
+        logging.info(f"[agent] propose_create_task called: task_name={task_name}")
+        if not task_name or not task_name.strip():
+            return {"error": "task_name cannot be empty"}
+
+        fields = {
+            "task_name": task_name.strip(),
+            "description": description or "",
+            "category": category or "Unknown",
+            "priority": priority or "P3",
+            "due_date": due_date,
+            "due_time": due_time,
+        }
+
+        proposed_actions.append({
+            "action_id": str(uuid.uuid4()),
+            "type": "create_task",
+            "record_id": None,
+            "task_name": fields["task_name"],
+            "fields": fields,
+        })
+        return {"status": "proposed", "task_name": fields["task_name"]}
+
+    return propose_complete_task, propose_update_task, propose_create_task
 
 
 # JSON schemas for providers that need explicit tool definitions rather

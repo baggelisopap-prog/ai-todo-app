@@ -57,14 +57,18 @@ class _SummedUsage:
         self.total_token_count = total_tokens
 
 
-def ask_agent(question: str, user_id: str) -> str:
+def ask_agent(question: str, user_id: str) -> dict:
     """
     Sends a natural-language question to the agent via Gemini 3.1 Flash-Lite,
     with Automatic Function Calling DISABLED so we can manually run the
     tool-calling loop and accurately sum token usage across every round.
 
-    Raises RuntimeError on any failure so callers only need to handle one
-    failure mode.
+    Returns {"answer": str, "proposed_actions": list[dict]} — proposed_actions
+    is populated when the agent calls one of the propose_* write tools
+    (agent_tools.build_write_proposal_tools) in the course of answering.
+    Those tools only ever record intent; nothing is written to the database
+    here. Raises RuntimeError on any failure so callers only need to handle
+    one failure mode.
     """
     system_instruction = agent_tools.build_system_instruction()
 
@@ -74,10 +78,22 @@ def ask_agent(question: str, user_id: str) -> str:
         logging.error(f"[agent] Failed to fetch tasks: {e}")
         raise RuntimeError(f"Could not load task data: {e}")
 
+    proposed_actions = []
+
     search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks)
+    propose_complete_task, propose_update_task, propose_create_task = agent_tools.build_write_proposal_tools(
+        proposed_actions, cached_tasks
+    )
+    all_tools = [
+        search_tasks, get_task_details,
+        propose_complete_task, propose_update_task, propose_create_task,
+    ]
     tool_functions = {
         "search_tasks": search_tasks,
         "get_task_details": get_task_details,
+        "propose_complete_task": propose_complete_task,
+        "propose_update_task": propose_update_task,
+        "propose_create_task": propose_create_task,
     }
 
     contents = [
@@ -100,7 +116,7 @@ def ask_agent(question: str, user_id: str) -> str:
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=system_instruction,
-                        tools=[search_tasks, get_task_details],
+                        tools=all_tools,
                         automatic_function_calling=types.AutomaticFunctionCallingConfig(
                             disable=True,
                         ),
@@ -128,7 +144,7 @@ def ask_agent(question: str, user_id: str) -> str:
                 if token_tracker:
                     summed = _SummedUsage(total_prompt_tokens, total_output_tokens, total_tokens_sum)
                     token_tracker.log_token_usage("agent_query", summed, model=GEMINI_AGENT_MODEL, user_id=user_id)
-                return response.text
+                return {"answer": response.text, "proposed_actions": proposed_actions}
             raise RuntimeError("Agent produced no answer")
 
         # Append the model's turn (containing the function call(s)) to the conversation

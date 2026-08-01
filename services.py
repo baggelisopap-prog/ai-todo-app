@@ -233,11 +233,17 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from image to database.")
         return saved_tasks
 
-    def create_task_manual(self, user_id: str, fields: dict) -> TaskRecord:
+    def create_task_manual(self, user_id: str, fields: dict, approval_status: bool = True) -> TaskRecord:
         """
         Manually create a task. Fills in AI-suggested fields as duplicates
         of user's choices (since there's no AI here) and sets defaults for
         approval flags.
+
+        approval_status defaults to True (pre-approved) for the normal
+        manual-create path (POST /tasks). The agent-write confirm flow
+        (POST /agent/confirm-action, main.py) passes False instead, so an
+        agent-created task lands in the Inbox for review rather than
+        appearing directly in the user's list.
         """
         checklist = fields.get("checklist") or []
 
@@ -249,7 +255,7 @@ class TaskService:
             due_date=fields.get("due_date"),
             due_time=fields.get("due_time"),
             checklist=checklist,
-            approval_status=True,  # Manual = pre-approved
+            approval_status=approval_status,
             is_completed=False,
             is_rejected=False,
             notify_enabled=fields.get("notify_enabled", False),

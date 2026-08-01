@@ -155,6 +155,20 @@ function App() {
     setToast({ message: t('toast.added_one'), variant: 'success' });
   }
 
+  // After an agent-proposed action is confirmed (AgentChatModal), the
+  // backend already returns the fully updated/created task — no need for a
+  // fresh GET /tasks, just fold it into state the same way handleUpdateTask
+  // and handleTaskCreated already do for their own flows.
+  function handleAgentActionConfirmed(task) {
+    setTasks((current) => {
+      const exists = current.some((t) => t.record_id === task.record_id);
+      if (exists) {
+        return current.map((t) => (t.record_id === task.record_id ? task : t));
+      }
+      return [...current, task];
+    });
+  }
+
   function handleToggleExpand(recordId) {
     setExpandedTaskId((current) => {
       if (recordId === null) return null;
@@ -267,7 +281,9 @@ function App() {
         <SettingsModal onClose={() => setIsSettingsOpen(false)} />
       )}
 
-      {isAgentOpen && <AgentChatModal onClose={() => setIsAgentOpen(false)} />}
+      {isAgentOpen && (
+        <AgentChatModal onClose={() => setIsAgentOpen(false)} onTaskConfirmed={handleAgentActionConfirmed} />
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ PROJECT STATUS SNAPSHOT —
 _Last updated: 2026-08-01. This is the cold-start entry point: read this first for "where are we"._
 
 ## What this project is
-AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categorizes and prioritizes them with Gemini, sends push reminders, syncs two-way with Google Calendar, has an AI agent that answers questions about your tasks (read-only for now — proposing task changes is designed but not yet built, see below). Backs a real Airbnb/Hostaway short-let business (Hostaway guest messages become tasks automatically). Multi-user and production-deployed.
+AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categorizes and prioritizes them with Gemini, sends push reminders, syncs two-way with Google Calendar, has an AI agent that answers questions about your tasks AND can propose task changes (complete/update/create) via confirmation cards — see below. Backs a real Airbnb/Hostaway short-let business (Hostaway guest messages become tasks automatically). Multi-user and production-deployed.
 
 ## Shipped and live ✅
 - **Supabase migration complete** (moved fully off Airtable): schema, data migration (71 tasks + settings + subs + token logs), backend rewrite, auth, multi-user isolation.
@@ -13,10 +13,10 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 - **Full Settings redesign** (My Profile + organized sections + delete-account): **shipped**, not pending. `GET/PATCH /profile` and `DELETE /account` exist in `main.py`; `SettingsModal.jsx` has all sections (My Profile, Notifications, Google Calendar, Language EN/EL, owner-gated Developer, Account with sign-out + confirm-gated delete, About). Verified against the running code. Each section is now independently collapsible (shared `CollapsibleSection` component), all closed by default when the modal opens, collapsed content hidden-not-unmounted so in-progress edits survive a collapse.
 
 ## In progress / most recent 🚧
-- **Agent write capabilities Phase 1** (propose-then-confirm for complete/update/create tasks): spec written (propose_* tools that record intent, `/agent/confirm-action` endpoint that executes with server-side re-validation + user_id scoping, confirmation-button cards in the chat UI). Verified against the code: NOT implemented at all yet — no propose tools, no confirm-action endpoint, `ask_agent` still returns a bare string. This is the CURRENT_TASK to resume.
+- **Agent write capabilities Phase 1** (propose-then-confirm for complete/update/create tasks): implemented on both backend and frontend — `propose_*` tools that record intent (never execute), `/agent/confirm-action` endpoint that executes with server-side re-validation + user_id scoping, one confirmation card per proposed action in the chat UI (individually confirmed, no bulk confirm, Cancel is local-only, cards are ephemeral, created tasks land in the Inbox). Verified statically and via unauthenticated smoke test; NOT yet verified by an actual logged-in click-through. This is the CURRENT_TASK to resume.
 
 ## Next / not started
-See BACKLOG.md. Nearest: finish + test agent writes Phase 1; then agent writes Phase 2 (delete + calendar ops), monitoring, admin dashboard, Android packaging.
+See BACKLOG.md. Nearest: manually verify agent writes Phase 1 end-to-end (logged in); then agent writes Phase 2 (delete + calendar ops), monitoring, admin dashboard, Android packaging.
 
 ## How to resume
 Cold-start search returns this file + CURRENT_TASK.md. Read CURRENT_TASK.md for the active piece. For any concrete fact (schema, endpoint, env var), search the specific doc; never guess.

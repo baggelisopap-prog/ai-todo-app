@@ -223,7 +223,17 @@
     "input_placeholder": "Πληκτρολογήστε μια ερώτηση...",
     "send": "Αποστολή",
     "thinking": "Σκέφτομαι...",
-    "error": "Κάτι πήγε στραβά. Δοκιμάστε ξανά."
+    "error": "Κάτι πήγε στραβά. Δοκιμάστε ξανά.",
+    "confirm": "Επιβεβαίωση",
+    "cancel": "Ακύρωση",
+    "action_pending": "Επεξεργασία...",
+    "action_done": "Ολοκληρώθηκε",
+    "action_failed": "Απέτυχε",
+    "action_cancelled": "Ακυρώθηκε",
+    "proposal_complete": "Ολοκλήρωση: {{task_name}}",
+    "proposal_update": "αλλαγή {{field}}: {{value}}",
+    "proposal_create": "Δημιουργία νέας εργασίας: {{task_name}}",
+    "create_needs_approval": "Θα μπει στο Inbox για έγκριση"
   },
   "auth": {
     "log_in": "Σύνδεση",
