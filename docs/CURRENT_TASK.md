@@ -5,7 +5,7 @@ _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" fi
 Establish why agent calls cost what they cost, from real per-round data, before committing to any optimization. A read-only query over existing token_usage_log rows already established: average call ~4,264 tokens, fixed per-round prefix ~1,830 tokens, cost grouping cleanly by round count (~1.8k / ~3.8k / ~5.9k / ~9.5k), thinking tokens zero, input ~90% of tokens. What is NOT yet known is which tools are called in each round and why some calls take four rounds. This task adds behaviour-neutral per-round instrumentation and fixes three confirmed correctness bugs.
 
 ## Status
-Not started.
+Implemented, awaiting baseline measurement. `agent_engine.py` now logs a `[agent][round N]` line per round (prompt/output/thinking/cached/total tokens + which tools were called) and a `[agent][SUMMARY]` line on every exit path (`ok`/`no_answer`/`max_rounds`/`api_failure`). Log-only — `token_usage_log` writes via `token_tracker.log_token_usage()` are byte-for-byte unchanged. The `agent_tools.py` bug fixes have not been done yet.
 
 ## Files touched
 agent_engine.py (instrumentation), agent_tools.py (bug fixes).

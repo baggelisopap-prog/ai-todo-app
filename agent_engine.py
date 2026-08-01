@@ -103,6 +103,16 @@ def ask_agent(question: str, user_id: str) -> dict:
     total_prompt_tokens = 0
     total_output_tokens = 0
     total_tokens_sum = 0
+    total_thinking_tokens = 0
+    total_cached_tokens = 0
+
+    def _log_run_summary(outcome: str, rounds_used: int):
+        logging.info(
+            f"[agent][SUMMARY] outcome={outcome} rounds={rounds_used} "
+            f"prompt={total_prompt_tokens} output={total_output_tokens} "
+            f"thinking={total_thinking_tokens} cached={total_cached_tokens} "
+            f"total={total_tokens_sum}"
+        )
 
     for round_num in range(MAX_TOOL_ROUNDS):
         response = None
@@ -130,21 +140,41 @@ def ask_agent(question: str, user_id: str) -> dict:
                     time.sleep(2 ** attempt)
 
         if response is None:
+            _log_run_summary("api_failure", round_num + 1)
             raise RuntimeError(f"Agent query failed after {max_retries} attempts: {last_error}")
 
+        round_prompt = round_output = round_total = 0
+        round_thinking = round_cached = 0
         if response.usage_metadata:
-            total_prompt_tokens += response.usage_metadata.prompt_token_count or 0
-            total_output_tokens += response.usage_metadata.candidates_token_count or 0
-            total_tokens_sum += response.usage_metadata.total_token_count or 0
+            um = response.usage_metadata
+            round_prompt = um.prompt_token_count or 0
+            round_output = um.candidates_token_count or 0
+            round_total = um.total_token_count or 0
+            # getattr: these attributes may be absent on some SDK versions
+            round_thinking = getattr(um, "thoughts_token_count", 0) or 0
+            round_cached = getattr(um, "cached_content_token_count", 0) or 0
+            total_prompt_tokens += round_prompt
+            total_output_tokens += round_output
+            total_tokens_sum += round_total
+            total_thinking_tokens += round_thinking
+            total_cached_tokens += round_cached
 
         function_calls = response.function_calls
+        called_tools = [fc.name for fc in function_calls] if function_calls else []
+        logging.info(
+            f"[agent][round {round_num + 1}] prompt={round_prompt} "
+            f"output={round_output} thinking={round_thinking} "
+            f"cached={round_cached} total={round_total} tools={called_tools}"
+        )
 
         if not function_calls:
             if response.text:
                 if token_tracker:
                     summed = _SummedUsage(total_prompt_tokens, total_output_tokens, total_tokens_sum)
                     token_tracker.log_token_usage("agent_query", summed, model=GEMINI_AGENT_MODEL, user_id=user_id)
+                _log_run_summary("ok", round_num + 1)
                 return {"answer": response.text, "proposed_actions": proposed_actions}
+            _log_run_summary("no_answer", round_num + 1)
             raise RuntimeError("Agent produced no answer")
 
         # Append the model's turn (containing the function call(s)) to the conversation
@@ -167,4 +197,5 @@ def ask_agent(question: str, user_id: str) -> dict:
 
         contents.append(types.Content(role="user", parts=function_response_parts))
 
+    _log_run_summary("max_rounds", MAX_TOOL_ROUNDS)
     raise RuntimeError("Agent exceeded maximum tool-call rounds without a final answer")
