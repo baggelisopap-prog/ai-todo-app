@@ -16,6 +16,9 @@ from zoneinfo import ZoneInfo
 MAX_SEARCH_RESULTS = 30
 DESCRIPTION_TRUNCATE_LENGTH = 100
 
+# Sort rank for priorities; unknown/missing priority sorts last.
+PRIORITY_ORDER = {"P1": 0, "P2": 1, "P3": 2}
+
 # Simplified Greek-to-Latin phonetic mapping used as a keyword-matching
 # fallback (see transliterate_greek_to_latin below) — not a general-purpose
 # transliteration standard, just good enough to bridge script mismatches
@@ -134,7 +137,7 @@ def build_tool_functions(cached_tasks):
         date_from: str = None,
         date_to: str = None,
         category: Literal["Business", "Personal", "Unknown", "Hostaway"] = None,
-        priority: str = None,
+        priority: Literal["P1", "P2", "P3"] = None,
         keyword: str = None,
         include_completed: bool = False,
     ) -> dict:
@@ -209,6 +212,16 @@ def build_tool_functions(cached_tasks):
 
             matching.append(task)
 
+        # Chronological first: the cap is meant to keep "the next N things to do",
+        # and a P1 next week is not more urgent than a P3 today. The "9999-12-31"
+        # fallback is load-bearing, NOT dead: undated tasks are only excluded when a
+        # date filter is present, so an unfiltered search legitimately contains them
+        # and they must sort last.
+        matching.sort(key=lambda t: (
+            t.due_date or "9999-12-31",
+            t.due_time or "99:99",
+            PRIORITY_ORDER.get(t.priority, 3),
+        ))
         total_matches = len(matching)
         capped = matching[:MAX_SEARCH_RESULTS]
 
@@ -243,7 +256,7 @@ def build_tool_functions(cached_tasks):
         search_tasks when the user wants more detail on a specific task.
 
         Args:
-            record_id: The Airtable record ID of the task, as returned by search_tasks.
+            record_id: The task's record ID, as returned by search_tasks.
         """
         logging.info(f"[agent] get_task_details called: record_id={record_id}")
 
@@ -443,7 +456,7 @@ GET_TASK_DETAILS_SCHEMA = {
         "parameters": {
             "type": "object",
             "properties": {
-                "record_id": {"type": "string", "description": "The Airtable record ID of the task, as returned by search_tasks."},
+                "record_id": {"type": "string", "description": "The task's record ID, as returned by search_tasks."},
             },
             "required": ["record_id"],
         },

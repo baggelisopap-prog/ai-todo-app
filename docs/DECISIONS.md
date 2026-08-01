@@ -53,3 +53,7 @@ Two constraints on any future work, from the same review: (a) the tool result is
 
 ### Decision: agent instrumentation is log-only; token_usage_log writes are unchanged
 Per-round and per-run token figures (including thinking and cached counts) go to the application log only. They are deliberately NOT passed to `token_tracker.log_token_usage()`. Rationale: a write to `token_usage_log` containing a field with no matching column is rejected wholesale and silently breaks ALL token logging (documented in DATABASE_SCHEMA.md) — and this change exists precisely to make measurement reliable. Persisting thinking/cached counts is a separate task requiring a migration first.
+
+### Decision: agent search results sort chronologically, not priority-first
+`search_tasks` sorts by (due_date, due_time, priority) before capping. The cap's purpose is "the next N things to do", and a P1 due next week is not more urgent than a P3 due today. Consequence: a high-priority far-future task can fall outside the cap; the `truncated` flag tells the agent to mention that more matches exist.
+Supersedes nothing (there was previously no sort at all — an arbitrary subset was kept).

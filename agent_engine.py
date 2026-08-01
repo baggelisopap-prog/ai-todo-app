@@ -188,7 +188,7 @@ def ask_agent(question: str, user_id: str) -> dict:
                 result = {"error": f"Unknown function: {fc.name}"}
             else:
                 try:
-                    result = func(**fc.args)
+                    result = func(**(fc.args or {}))
                 except Exception as e:
                     result = {"error": str(e)}
             function_response_parts.append(
