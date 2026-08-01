@@ -84,7 +84,7 @@ def ask_agent(question: str, user_id: str) -> dict:
 
     proposed_actions = []
 
-    search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks, today_iso)
+    search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks)
     propose_complete_task, propose_update_task, propose_create_task = agent_tools.build_write_proposal_tools(
         proposed_actions, cached_tasks
     )
@@ -100,9 +100,21 @@ def ask_agent(question: str, user_id: str) -> dict:
         "propose_create_task": propose_create_task,
     }
 
-    contents = [
-        types.Content(role="user", parts=[types.Part.from_text(text=f"{time_header}\n\nQuestion: {question}")])
-    ]
+    # Pre-loaded so day-scope questions (today/overdue) resolve in ONE round instead
+    # of two — injected ALWAYS, never gated on pattern-matching the question: a false
+    # negative costs a whole round (~3,350 tokens), an unnecessary injection costs a
+    # few hundred, and fragile Greek/English regexes are not worth maintaining.
+    day_view = agent_tools.build_day_view(cached_tasks, today_iso, now_hhmm)
+    logging.info(f"[agent] day_view injected: {len(day_view.splitlines()) - 1} rows")
+
+    contents = [types.Content(role="user", parts=[types.Part.from_text(
+        text=(
+            f"{time_header}\n\n"
+            f"[PRE-LOADED — overdue and today's open tasks, already sorted, COMPLETE "
+            f"for THESE TWO SCOPES ONLY:]\n{day_view}\n\n"
+            f"Question: {question}"
+        )
+    )])]
 
     total_prompt_tokens = 0
     total_output_tokens = 0
