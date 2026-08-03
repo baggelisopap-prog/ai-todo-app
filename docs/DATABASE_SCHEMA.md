@@ -23,9 +23,12 @@ Columns actually read/written by `repository.py`/`google_calendar.py`: `user_id`
 ### Table: google_calendar_events — per-user store of foreign (non-app) Google events
 Columns: `user_id`, `google_event_id` (TEXT), `title`, `description`, `start_date` (TEXT), `start_time` (TEXT, null for all-day), `is_all_day` (bool), `converted_to_task_id` (UUID FK → tasks ON DELETE SET NULL), `dismissed` (bool default false — soft-hide), `html_link` (TEXT, opens the event in Google Calendar), `last_synced_at` (TIMESTAMPTZ), with `UNIQUE(user_id, google_event_id)` (which also creates an implicit index). These are events NOT created by the app; shown in a separate view, never auto-turned into tasks.
 
+### Table: agent_messages — per-user agent conversation log (bounded memory source)
+Columns: `id` (UUID PK), `user_id` (UUID FK → auth.users ON DELETE CASCADE), `conversation_id` (UUID, NOT a FK — conversations are not a table, just a grouping key the client is handed back and echoes on the next call), `role` (TEXT, `'user'` or `'assistant'`), `content` (TEXT — the raw question or final answer text; never a tool result), `refs` (JSONB, array of `{task_name, record_id}`, capped at 5, only ever populated on assistant rows), `created_at` (TIMESTAMPTZ default now()). RLS enabled. Indexes: `user_id`, plus a composite `(user_id, conversation_id, created_at desc)` matching `repository.get_recent_agent_messages`'s actual read pattern. Retention: rows older than 30 days are deleted by a manually-run SQL statement — there is no automatic cleanup job yet (see BACKLOG.md).
+
 ### Triggers / functions
 - `update_updated_at_column()` + trigger `set_updated_at` on `tasks` (auto-sets `updated_at` on every UPDATE — the calendar push logic compares `updated_at` vs `google_last_synced_at`).
 - `handle_new_user()` + trigger `on_auth_user_created` on `auth.users` (auto-creates a `profiles` row).
 
 ### Indexes
-`user_id` index on tasks, push_subscriptions, app_settings, token_usage_log; `user_id` index on google_calendar_connections and google_calendar_events; implicit unique index from `UNIQUE(user_id, google_event_id)`.
+`user_id` index on tasks, push_subscriptions, app_settings, token_usage_log; `user_id` index on google_calendar_connections and google_calendar_events; implicit unique index from `UNIQUE(user_id, google_event_id)`; `agent_messages`: `user_id` index plus a composite `(user_id, conversation_id, created_at desc)` index.

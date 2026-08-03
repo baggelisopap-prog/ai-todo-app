@@ -253,15 +253,22 @@ export async function updateAppSettings(settings) {
 
 /**
  * POST /agent/query — asks the task agent a natural-language question.
- * Returns { answer, proposed_actions }. proposed_actions is a list of
- * agent-proposed writes (complete/update/create) that the UI renders as
- * confirmation cards — nothing changes in the app until each one is
- * confirmed individually via confirmAgentAction below.
+ * Pass the conversation_id returned by a previous call to continue that
+ * conversation (lets the agent resolve follow-ups like "it"/"that one");
+ * omit it (or pass null) to start a fresh one — the backend mints a new id.
+ * Returns { answer, proposed_actions, conversation_id }. proposed_actions is
+ * a list of agent-proposed writes (complete/update/create) that the UI
+ * renders as confirmation cards — nothing changes in the app until each one
+ * is confirmed individually via confirmAgentAction below.
  */
-export async function askAgent(question) {
+export async function askAgent(question, conversationId) {
+  const body = { question };
+  if (conversationId) {
+    body.conversation_id = conversationId;
+  }
   return request('/agent/query', {
     method: 'POST',
-    body: JSON.stringify({ question }),
+    body: JSON.stringify(body),
   });
 }
 

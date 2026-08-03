@@ -21,6 +21,7 @@ implementations via agent_tools.py — see that module's docstring.
 import os
 import logging
 import time
+import uuid
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -57,19 +58,39 @@ class _SummedUsage:
         self.total_token_count = total_tokens
 
 
-def ask_agent(question: str, user_id: str) -> dict:
+def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
     """
     Sends a natural-language question to the agent via Gemini 3.1 Flash-Lite,
     with Automatic Function Calling DISABLED so we can manually run the
     tool-calling loop and accurately sum token usage across every round.
 
-    Returns {"answer": str, "proposed_actions": list[dict]} — proposed_actions
-    is populated when the agent calls one of the propose_* write tools
-    (agent_tools.build_write_proposal_tools) in the course of answering.
-    Those tools only ever record intent; nothing is written to the database
-    here. Raises RuntimeError on any failure so callers only need to handle
-    one failure mode.
+    Bounded, server-reconstructed conversation memory: the caller never
+    sends history, only conversation_id. This function loads the last
+    HISTORY_MAX_PAIRS*2 messages itself (repository.get_recent_agent_messages)
+    and replays them ahead of the current turn purely so the model can
+    resolve references like "it" — every limit (message count, per-message
+    length, refs count) is enforced here and in agent_tools, never trusted
+    from the client.
+
+    Returns {"answer": str, "proposed_actions": list[dict], "conversation_id": str}
+    — proposed_actions is populated when the agent calls one of the
+    propose_* write tools (agent_tools.build_write_proposal_tools) in the
+    course of answering. Those tools only ever record intent; nothing is
+    written to the database here. Raises RuntimeError on any failure so
+    callers only need to handle one failure mode.
     """
+    if not conversation_id:
+        conversation_id = str(uuid.uuid4())
+
+    # A history read must never block the answer — fall back to no history.
+    try:
+        history = repository.get_recent_agent_messages(
+            user_id, conversation_id, limit=agent_tools.HISTORY_MAX_PAIRS * 2
+        )
+    except Exception as e:
+        logging.error(f"[agent] Failed to load conversation history: {e}")
+        history = []
+
     # One clock read for the entire request — see build_time_context's docstring.
     # Feeds the system instruction, search_tasks, and the header below, so a
     # request that straddles midnight can never see two different "today"s.
@@ -83,6 +104,11 @@ def ask_agent(question: str, user_id: str) -> dict:
         raise RuntimeError(f"Could not load task data: {e}")
 
     proposed_actions = []
+    # Distinct tasks surfaced by search_tasks/get_task_details THIS run, keyed
+    # by record_id — the day view is deliberately excluded (it's re-injected
+    # fresh every request, so it never needs to be remembered). Turned into
+    # refs on the persisted assistant message below.
+    seen_tasks: dict[str, str] = {}
 
     search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks)
     propose_complete_task, propose_update_task, propose_create_task = agent_tools.build_write_proposal_tools(
@@ -107,14 +133,21 @@ def ask_agent(question: str, user_id: str) -> dict:
     day_view = agent_tools.build_day_view(cached_tasks, today_iso, now_hhmm)
     logging.info(f"[agent] day_view injected: {len(day_view.splitlines()) - 1} rows")
 
-    contents = [types.Content(role="user", parts=[types.Part.from_text(
+    # History is replayed FIRST, as the raw stored question/answer text — it
+    # must never carry its own (now-stale) time header or day view. Those
+    # attach ONLY to the current, last user turn below: two versions of
+    # "today" in one prompt is exactly the hallucination surface this avoids.
+    history_contents = agent_tools.build_history_contents(history)
+
+    current_turn = types.Content(role="user", parts=[types.Part.from_text(
         text=(
             f"{time_header}\n\n"
             f"[PRE-LOADED — overdue and today's open tasks, already sorted, COMPLETE "
             f"for THESE TWO SCOPES ONLY:]\n{day_view}\n\n"
             f"Question: {question}"
         )
-    )])]
+    )])
+    contents = history_contents + [current_turn]
 
     total_prompt_tokens = 0
     total_output_tokens = 0
@@ -125,10 +158,36 @@ def ask_agent(question: str, user_id: str) -> dict:
     def _log_run_summary(outcome: str, rounds_used: int):
         logging.info(
             f"[agent][SUMMARY] outcome={outcome} rounds={rounds_used} "
+            f"history={len(history)} "
             f"prompt={total_prompt_tokens} output={total_output_tokens} "
             f"thinking={total_thinking_tokens} cached={total_cached_tokens} "
             f"total={total_tokens_sum}"
         )
+
+    def _finish(answer: str) -> dict:
+        """
+        Common tail for every successful exit: computes this run's refs from
+        seen_tasks, persists the raw question and the answer (each wrapped
+        so a write failure never breaks the response the user already has),
+        and returns the result dict including conversation_id.
+        """
+        if len(seen_tasks) <= agent_tools.HISTORY_MAX_REFS:
+            refs = [{"task_name": name, "record_id": rid} for rid, name in seen_tasks.items()]
+        else:
+            refs = []
+
+        logging.info(f"[agent] history: {len(history)} messages replayed, {len(refs)} refs stored")
+
+        try:
+            repository.save_agent_message(user_id, conversation_id, "user", question)
+        except Exception as e:
+            logging.error(f"[agent] Failed to save user message to history: {e}")
+        try:
+            repository.save_agent_message(user_id, conversation_id, "assistant", answer, refs)
+        except Exception as e:
+            logging.error(f"[agent] Failed to save assistant message to history: {e}")
+
+        return {"answer": answer, "proposed_actions": proposed_actions, "conversation_id": conversation_id}
 
     for round_num in range(MAX_TOOL_ROUNDS):
         response = None
@@ -189,7 +248,7 @@ def ask_agent(question: str, user_id: str) -> dict:
                     summed = _SummedUsage(total_prompt_tokens, total_output_tokens, total_tokens_sum)
                     token_tracker.log_token_usage("agent_query", summed, model=GEMINI_AGENT_MODEL, user_id=user_id)
                 _log_run_summary("ok", round_num + 1)
-                return {"answer": response.text, "proposed_actions": proposed_actions}
+                return _finish(response.text)
             _log_run_summary("no_answer", round_num + 1)
             raise RuntimeError("Agent produced no answer")
 
@@ -210,6 +269,16 @@ def ask_agent(question: str, user_id: str) -> dict:
             function_response_parts.append(
                 types.Part.from_function_response(name=fc.name, response=result)
             )
+
+            # Track distinct tasks surfaced by search/detail calls this run for refs —
+            # NOT the day view, which is re-injected fresh every request (see seen_tasks above).
+            if fc.name == "search_tasks" and isinstance(result, dict):
+                for t in result.get("tasks", []):
+                    rid = t.get("record_id")
+                    if rid:
+                        seen_tasks[rid] = t.get("task_name")
+            elif fc.name == "get_task_details" and isinstance(result, dict) and result.get("record_id"):
+                seen_tasks[result["record_id"]] = result.get("task_name")
 
         contents.append(types.Content(role="user", parts=function_response_parts))
 
@@ -250,6 +319,7 @@ def ask_agent(question: str, user_id: str) -> dict:
 
     logging.warning(
         f"[agent][SUMMARY] outcome=max_rounds_recovered rounds={MAX_TOOL_ROUNDS + 1} "
+        f"history={len(history)} "
         f"prompt={total_prompt_tokens} output={total_output_tokens} total={total_tokens_sum}"
     )
-    return {"answer": final.text, "proposed_actions": proposed_actions}
+    return _finish(final.text)

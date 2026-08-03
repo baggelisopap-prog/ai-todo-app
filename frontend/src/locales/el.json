@@ -233,7 +233,12 @@
     "proposal_complete": "Ολοκλήρωση: {{task_name}}",
     "proposal_update": "αλλαγή {{field}}: {{value}}",
     "proposal_create": "Δημιουργία νέας εργασίας: {{task_name}}",
-    "create_needs_approval": "Θα μπει στο Inbox για έγκριση"
+    "create_needs_approval": "Θα μπει στο Inbox για έγκριση",
+    "new_conversation": "Νέα συνομιλία",
+    "suggestion_today": "Τι έχω σήμερα;",
+    "suggestion_week": "Πώς είναι η εβδομάδα μου;",
+    "suggestion_overdue": "Τι έχει καθυστερήσει;",
+    "suggestion_add_task": "Πρόσθεσε μια εργασία"
   },
   "auth": {
     "log_in": "Σύνδεση",

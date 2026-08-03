@@ -903,6 +903,56 @@ def get_task_calendar_fields(user_id: str, record_id: str) -> Optional[dict]:
     return result.data[0]
 
 
+# --- Agent conversation memory ---
+# Bounded, server-reconstructed short-term memory for the Q&A agent
+# (agent_engine.py). The client never sends history, only a conversation_id
+# — the backend loads the last N messages itself and enforces every limit.
+# Every read/write here is scoped by user_id, same as the rest of this file:
+# app-code filtering is the primary security boundary, RLS is defense-in-depth.
+
+
+def save_agent_message(
+    user_id: str, conversation_id: str, role: str, content: str, refs: Optional[list] = None
+) -> None:
+    """
+    Inserts one row into agent_messages. role is 'user' or 'assistant'; refs
+    (JSONB) defaults to an empty list and is only ever populated on
+    assistant messages that referenced concrete task records during their
+    tool calls this run.
+    """
+    supabase.table("agent_messages").insert({
+        "user_id": user_id,
+        "conversation_id": conversation_id,
+        "role": role,
+        "content": content,
+        "refs": refs or [],
+    }).execute()
+
+
+def get_recent_agent_messages(user_id: str, conversation_id: str, limit: int) -> list[dict]:
+    """
+    Returns up to `limit` most recent agent_messages rows for
+    (user_id, conversation_id), REVERSED into oldest-to-newest order so
+    callers can append them directly to a prompt's `contents` in
+    chronological order. Returns [] on any failure — a history read must
+    never block the agent from answering.
+    """
+    try:
+        response = (
+            supabase.table("agent_messages")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("conversation_id", conversation_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return list(reversed(response.data))
+    except Exception as e:
+        logger.warning(f"Failed to retrieve agent message history for conversation {conversation_id}: {e}")
+        return []
+
+
 def get_all_token_usage_logs(user_id: str) -> list[dict]:
     """Returns all rows from token_usage_log belonging to user_id, as a list of dicts with keys:
     call_type, timestamp, prompt_tokens, output_tokens, thinking_tokens, total_tokens, model.

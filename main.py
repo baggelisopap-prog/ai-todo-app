@@ -91,6 +91,7 @@ class ProfileUpdateRequest(BaseModel):
 class AgentQueryRequest(BaseModel):
     """Request body for POST /agent/query"""
     question: str
+    conversation_id: Optional[str] = None
 
 class ProposedAction(BaseModel):
     """
@@ -109,6 +110,7 @@ class AgentQueryResponse(BaseModel):
     """Response body for POST /agent/query"""
     answer: str
     proposed_actions: list[ProposedAction] = []
+    conversation_id: str
 
 class ConfirmActionRequest(BaseModel):
     """
@@ -577,12 +579,25 @@ async def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_cur
     Answers a natural-language question about the user's tasks via the
     read-only AI agent in agent_engine.py. Isolated from the task
     extraction/CRUD system — only reads task data, never writes it.
+
+    conversation_id is optional — omit it to start a fresh conversation, or
+    pass back the value returned from a previous call to continue one, so
+    the agent can resolve follow-ups like "it"/"that one". It is NOT trusted
+    as an authorisation token: every DB read/write ask_agent performs is
+    filtered by the authenticated user_id, so a conversation_id belonging to
+    another user simply matches no rows.
     """
     if not request.question or not request.question.strip():
         raise HTTPException(status_code=422, detail="question cannot be empty")
     try:
-        result = agent_engine.ask_agent(request.question.strip(), user_id=user_id)
-        return AgentQueryResponse(answer=result["answer"], proposed_actions=result["proposed_actions"])
+        result = agent_engine.ask_agent(
+            request.question.strip(), user_id=user_id, conversation_id=request.conversation_id
+        )
+        return AgentQueryResponse(
+            answer=result["answer"],
+            proposed_actions=result["proposed_actions"],
+            conversation_id=result["conversation_id"],
+        )
     except RuntimeError as e:
         logger.error(f"Agent query failed: {e}")
         raise HTTPException(status_code=503, detail=str(e))

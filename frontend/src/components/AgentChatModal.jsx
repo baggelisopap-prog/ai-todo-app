@@ -24,6 +24,16 @@ const CATEGORY_VALUE_KEYS = {
   Hostaway: 'browse.filter_hostaway',
 };
 
+// Starter suggestion chips shown only while the conversation is empty —
+// translation keys, not hardcoded strings, so both EN and EL render
+// naturally (see locales/en.json and locales/el.json).
+const SUGGESTION_KEYS = [
+  'agent.suggestion_today',
+  'agent.suggestion_week',
+  'agent.suggestion_overdue',
+  'agent.suggestion_add_task',
+];
+
 function fieldLabel(t, field) {
   const key = FIELD_LABEL_KEYS[field];
   return key ? t(key) : field;
@@ -129,6 +139,10 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // The conversation lives exactly as long as the modal is open (or until
+  // "New conversation" is tapped) — see resetConversation below. The
+  // backend reconstructs history from this id; nothing else is ever sent.
+  const [conversationId, setConversationId] = useState(null);
   const messagesEndRef = useRef(null);
   const inFlightActionIds = useRef(new Set());
 
@@ -136,8 +150,7 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  async function handleSend() {
-    const question = input.trim();
+  async function sendMessage(question) {
     if (!question || isLoading) return;
 
     setMessages(prev => [...prev, { role: 'user', text: question }]);
@@ -145,7 +158,8 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
     setIsLoading(true);
 
     try {
-      const result = await askAgent(question);
+      const result = await askAgent(question, conversationId);
+      setConversationId(result.conversation_id);
       const actions = (result.proposed_actions || []).map(action => ({ ...action, status: 'idle' }));
       setMessages(prev => [...prev, { role: 'agent', text: result.answer, actions }]);
     } catch {
@@ -155,11 +169,34 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
     }
   }
 
+  function handleSend() {
+    sendMessage(input.trim());
+  }
+
+  function handleSuggestionClick(question) {
+    setInput(question);
+    sendMessage(question);
+  }
+
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  }
+
+  // Shared by the X close button and "New conversation": un-confirmed
+  // proposal cards are ephemeral (kept only in `messages`) and are never
+  // restored, so clearing messages here is enough to drop them too.
+  function resetConversation() {
+    setConversationId(null);
+    setMessages([]);
+    setInput('');
+  }
+
+  function handleClose() {
+    resetConversation();
+    onClose();
   }
 
   // Updates a single action's local card state by action_id, wherever it
@@ -213,7 +250,7 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
   return (
     <div
       className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-4"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="w-full md:max-w-lg h-[80vh] md:h-[600px] bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] flex flex-col"
@@ -221,9 +258,19 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
       >
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('agent.title')}</h2>
-          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]" aria-label={t('actions.cancel')}>
-            ✕
-          </button>
+          <div className="flex items-center gap-3">
+            {messages.length > 0 && (
+              <button
+                onClick={resetConversation}
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                {t('agent.new_conversation')}
+              </button>
+            )}
+            <button onClick={handleClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]" aria-label={t('actions.cancel')}>
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -281,23 +328,40 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="p-3 border-t border-[var(--border-subtle)] flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={t('agent.input_placeholder')}
-            disabled={isLoading}
-            className="flex-1 px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] bg-[var(--bg-card)] disabled:opacity-50"
-          />
-          <button
-            onClick={handleSend}
-            disabled={isLoading || !input.trim()}
-            className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium disabled:opacity-50"
-          >
-            {t('agent.send')}
-          </button>
+        <div className="border-t border-[var(--border-subtle)]">
+          {messages.length === 0 && (
+            <div className="px-3 pt-3 flex flex-wrap gap-2">
+              {SUGGESTION_KEYS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleSuggestionClick(t(key))}
+                  disabled={isLoading}
+                  className="px-3 py-1.5 rounded-full text-sm bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50"
+                >
+                  {t(key)}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="p-3 flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={t('agent.input_placeholder')}
+              disabled={isLoading}
+              className="flex-1 px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] bg-[var(--bg-card)] disabled:opacity-50"
+            />
+            <button
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium disabled:opacity-50"
+            >
+              {t('agent.send')}
+            </button>
+          </div>
         </div>
       </div>
     </div>
