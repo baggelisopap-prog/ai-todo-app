@@ -26,12 +26,14 @@ const CATEGORY_VALUE_KEYS = {
 
 // Starter suggestion chips shown only while the conversation is empty —
 // translation keys, not hardcoded strings, so both EN and EL render
-// naturally (see locales/en.json and locales/el.json).
+// naturally (see locales/en.json and locales/el.json). Read-only questions
+// only, deliberately no "add a task" chip: creating a task through the
+// agent costs a proposal round for what the add-task form does for free
+// (see DECISIONS.md).
 const SUGGESTION_KEYS = [
   'agent.suggestion_today',
-  'agent.suggestion_week',
   'agent.suggestion_overdue',
-  'agent.suggestion_add_task',
+  'agent.suggestion_week',
 ];
 
 function fieldLabel(t, field) {

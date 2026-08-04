@@ -7,10 +7,12 @@ same system instruction — with only the provider-specific calling
 mechanics (Gemini's Automatic Function Calling vs a manual tool-calling
 loop) differing between the two agent_engine*.py files.
 """
+import hashlib
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
 MAX_SEARCH_RESULTS = 30
@@ -90,6 +92,34 @@ def transliterate_greek_to_latin(text: str) -> str:
     already-Latin text like "test" stays "test" unchanged.
     """
     return ''.join(GREEK_TO_LATIN.get(ch, ch) for ch in text.lower())
+
+
+# Matches a manual-test tag prefix like "#t3 <question>": '#' + 1-20 chars of
+# [A-Za-z0-9_-] + required whitespace. Lets a test run be labeled straight from
+# the chat box with no UI change — see strip_test_label below.
+_TEST_LABEL_RE = re.compile(r'^#([A-Za-z0-9_-]{1,20})\s+(.*)$', re.DOTALL)
+
+
+def strip_test_label(question: str) -> tuple[str, Optional[str]]:
+    """
+    Recognizes and strips a "#label " prefix used to tag a manual test run
+    (e.g. "#t3 τι έχω αύριο;" -> ("τι έχω αύριο;", "t3")). The model must
+    NEVER see the label — callers must use the returned clean question
+    everywhere downstream (prompt, history, persistence). Returns
+    (question, None) unchanged if there is no such prefix.
+    """
+    match = _TEST_LABEL_RE.match(question)
+    if not match:
+        return question, None
+    label, rest = match.group(1), match.group(2)
+    return rest, label
+
+
+def system_instruction_sha(text: str) -> str:
+    """First 12 hex chars of the system instruction's sha256 — a short
+    fingerprint identifying which prompt version produced a given agent_runs
+    row across deploys."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
 def build_time_context() -> tuple[str, str, str]:
@@ -177,37 +207,36 @@ def _truncate_history_text(text: str, max_chars: int) -> str:
     return text[:max_chars] + "…"
 
 
-def build_history_contents(messages: list[dict]) -> list[dict]:
+def build_history_contents(runs: list[dict]) -> list[dict]:
     """
-    Maps stored agent_messages rows (oldest -> newest, as returned by
-    repository.get_recent_agent_messages) into google-genai content dicts,
-    ready to prepend to `contents` before the current user turn.
+    Maps agent_runs rows (oldest -> newest, as returned by
+    repository.get_recent_agent_runs) into google-genai content dicts, ready
+    to prepend to `contents` before the current user turn.
 
-    Each message's content is independently truncated to
-    HISTORY_MSG_MAX_CHARS. Assistant messages that carry refs get ONE
-    compact `[refs: name=id; ...]` line appended after truncation, so a
-    later turn can resolve "it"/"that one" to a real record_id without a
-    fresh DB read of history.
+    Each run becomes TWO content dicts, in order: the stored question as a
+    "user" turn, then the stored answer as a "model" turn. Each is
+    independently truncated to HISTORY_MSG_MAX_CHARS. A run's refs, if any,
+    get ONE compact `[refs: name=id; ...]` line appended to the answer after
+    truncation, so a later turn can resolve "it"/"that one" to a real
+    record_id without a fresh DB read of history.
     """
-    if not messages:
+    if not runs:
         return []
 
     contents = []
-    for msg in messages:
-        role = msg.get("role")
-        text = _truncate_history_text(msg.get("content") or "", HISTORY_MSG_MAX_CHARS)
+    for run in runs:
+        question = _truncate_history_text(run.get("question") or "", HISTORY_MSG_MAX_CHARS)
+        contents.append({"role": "user", "parts": [{"text": question}]})
 
-        if role == "assistant":
-            refs = msg.get("refs") or []
-            if refs:
-                capped_refs = refs[:HISTORY_MAX_REFS]
-                refs_line = "; ".join(
-                    f"{r.get('task_name')}={r.get('record_id')}" for r in capped_refs
-                )
-                text = f"{text}\n[refs: {refs_line}]"
-            contents.append({"role": "model", "parts": [{"text": text}]})
-        else:
-            contents.append({"role": "user", "parts": [{"text": text}]})
+        answer = _truncate_history_text(run.get("answer") or "", HISTORY_MSG_MAX_CHARS)
+        refs = run.get("refs") or []
+        if refs:
+            capped_refs = refs[:HISTORY_MAX_REFS]
+            refs_line = "; ".join(
+                f"{r.get('task_name')}={r.get('record_id')}" for r in capped_refs
+            )
+            answer = f"{answer}\n[refs: {refs_line}]"
+        contents.append({"role": "model", "parts": [{"text": answer}]})
 
     return contents
 

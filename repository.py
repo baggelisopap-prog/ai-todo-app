@@ -903,54 +903,69 @@ def get_task_calendar_fields(user_id: str, record_id: str) -> Optional[dict]:
     return result.data[0]
 
 
-# --- Agent conversation memory ---
-# Bounded, server-reconstructed short-term memory for the Q&A agent
-# (agent_engine.py). The client never sends history, only a conversation_id
-# — the backend loads the last N messages itself and enforces every limit.
-# Every read/write here is scoped by user_id, same as the rest of this file:
-# app-code filtering is the primary security boundary, RLS is defense-in-depth.
+# --- Agent conversation memory + run diagnostics (one table, agent_runs) ---
+# A row in agent_runs IS one question/answer pair, so the same table serves
+# BOTH the developer debug archive (log_agent_run, every column) and the Q&A
+# agent's bounded short-term memory (get_recent_agent_runs, question/answer/
+# refs only). There is no separate messages table — see DECISIONS.md.
+# The client never sends history, only a conversation_id — the backend loads
+# the last N runs itself and enforces every limit. Every read/write here is
+# scoped by user_id, same as the rest of this file: app-code filtering is the
+# primary security boundary, RLS is defense-in-depth.
 
 
-def save_agent_message(
-    user_id: str, conversation_id: str, role: str, content: str, refs: Optional[list] = None
-) -> None:
+def get_recent_agent_runs(user_id: str, conversation_id: str, limit: int) -> list[dict]:
     """
-    Inserts one row into agent_messages. role is 'user' or 'assistant'; refs
-    (JSONB) defaults to an empty list and is only ever populated on
-    assistant messages that referenced concrete task records during their
-    tool calls this run.
-    """
-    supabase.table("agent_messages").insert({
-        "user_id": user_id,
-        "conversation_id": conversation_id,
-        "role": role,
-        "content": content,
-        "refs": refs or [],
-    }).execute()
-
-
-def get_recent_agent_messages(user_id: str, conversation_id: str, limit: int) -> list[dict]:
-    """
-    Returns up to `limit` most recent agent_messages rows for
-    (user_id, conversation_id), REVERSED into oldest-to-newest order so
-    callers can append them directly to a prompt's `contents` in
-    chronological order. Returns [] on any failure — a history read must
-    never block the agent from answering.
+    Returns up to `limit` most recent agent_runs rows for
+    (user_id, conversation_id) that have a non-null answer, REVERSED into
+    oldest-to-newest order so callers can append them directly to a
+    prompt's `contents` in chronological order. Returns [] on any failure —
+    a history read must never block the agent from answering.
     """
     try:
         response = (
-            supabase.table("agent_messages")
-            .select("*")
+            supabase.table("agent_runs")
+            .select("id, question, answer, refs")
             .eq("user_id", user_id)
             .eq("conversation_id", conversation_id)
+            .not_.is_("answer", "null")
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
         )
         return list(reversed(response.data))
     except Exception as e:
-        logger.warning(f"Failed to retrieve agent message history for conversation {conversation_id}: {e}")
+        logger.warning(f"Failed to retrieve agent run history for conversation {conversation_id}: {e}")
         return []
+
+
+# NEVER a source of usage/cost figures; token_usage_log remains the single
+# source of truth for that (see DECISIONS.md). Whitelisted explicitly, not
+# splatted, for the same reason documented on token_usage_log above: a write
+# containing one unrecognized field is rejected wholesale by Supabase and
+# would silently break ALL run logging.
+_AGENT_RUN_COLUMNS = [
+    "test_label", "raw_question", "question", "conversation_id",
+    "first_turn_text", "system_instruction_sha", "day_view_rows",
+    "history_messages", "rounds_detail", "rounds", "model",
+    "prompt_tokens", "output_tokens", "thinking_tokens", "cached_tokens",
+    "total_tokens", "outcome", "proposed_actions", "refs", "answer",
+    "latency_ms", "error",
+]
+
+
+def log_agent_run(user_id: str, payload: dict) -> None:
+    """
+    Inserts one diagnostic row into agent_runs, owned by user_id. This is a
+    debugging/verification aid, never a response-blocking operation: any
+    failure is swallowed and logged, never raised.
+    """
+    try:
+        fields = {col: payload.get(col) for col in _AGENT_RUN_COLUMNS}
+        fields["user_id"] = user_id
+        supabase.table("agent_runs").insert(fields).execute()
+    except Exception as e:
+        logger.warning(f"Failed to log agent run for user {user_id}: {e}")
 
 
 def get_all_token_usage_logs(user_id: str) -> list[dict]:

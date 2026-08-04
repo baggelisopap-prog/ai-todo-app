@@ -236,9 +236,8 @@
     "create_needs_approval": "Θα μπει στο Inbox για έγκριση",
     "new_conversation": "Νέα συνομιλία",
     "suggestion_today": "Τι έχω σήμερα;",
-    "suggestion_week": "Πώς είναι η εβδομάδα μου;",
     "suggestion_overdue": "Τι έχει καθυστερήσει;",
-    "suggestion_add_task": "Πρόσθεσε μια εργασία"
+    "suggestion_week": "Πώς είναι η εβδομάδα μου;"
   },
   "auth": {
     "log_in": "Σύνδεση",
