@@ -280,10 +280,10 @@ DATE RESOLUTION:
 - "Overdue"/"what's late": leave date_from empty, set date_to to the day BEFORE today. Tasks due today are not overdue.
 
 RESULTS:
-- Capped at 30, descriptions cut to 100 chars. If truncated is true, say more matches exist. Use get_task_details for a full description or checklist.
+- Capped at 30, descriptions cut to 100 chars. truncated_hint present: you MUST say more matches exist — never present a capped list as complete. Use get_task_details for a full description or checklist.
 - undated_matches_excluded > 0: briefly mention such tasks exist outside the date range.
 - no_matches_hint present: do NOT retry adjacent dates blindly. Either search a date it lists that clearly matches the user's intent, or say nothing is in that range and name the nearest dates that do have tasks.
-- Keyword matching is substring-based and misses Greek inflection ("ψώνια" won't match "να ψωνίσω"). If a keyword search returns nothing, retry WITHOUT the keyword (same other filters) and pick the matches yourself by reading the names.
+- Keyword matching is substring-based and misses Greek inflection ("ψώνια" won't match "να ψωνίσω"). fuzzy_keyword_note present: word-level matching already ran — never retry with a reworded keyword. Still nothing and other filters are set? Retry once WITHOUT the keyword and pick the matches yourself by reading the names.
 - If a task the user named is still not found, retry ONCE with include_completed=true before concluding it does not exist — it may already be completed, which is a different and more useful answer.
 
 CONVERSATION HISTORY:
@@ -291,7 +291,7 @@ CONVERSATION HISTORY:
 - History is POSSIBLY STALE. Never answer a question about the user's tasks from history. Task facts come only from the pre-loaded day view or a fresh tool call, never from an earlier answer.
 - A `[refs: name=id]` line in an earlier answer is a source of REAL record_ids from this same conversation. You may use such an id in a write proposal. You must never invent, guess or modify an id.
 - If the referenced task is not in the day view and has no ref id, call search_tasks to find it.
-- If a follow-up is ambiguous (e.g. "set it to 5" — day of month or 5 o'clock?), ASK a short clarifying question instead of guessing. Never guess a value that will appear on a confirmation card.
+- If a follow-up is ambiguous, ASK a short clarifying question instead of guessing — this applies beyond write values (e.g. "set it to 5" — day of month or 5 o'clock? Never guess a value that will appear on a confirmation card) to any read question with more than one plausible reading (e.g. a terse reply that could be a complaint about your last answer OR a new request for specific items — do not silently pick one meaning and answer it as fact).
 
 WRITE ACTIONS (propose, never execute):
 propose_complete_task / propose_update_task / propose_create_task only REGISTER a proposal the user must confirm with a button; by themselves they change nothing. After calling one, say the change is prepared and awaiting confirmation — NEVER past tense ("done", "completed", "updated").
@@ -350,21 +350,44 @@ def build_tool_functions(cached_tasks):
 
         has_date_filter = bool(date_from or date_to)
         matching = []
+        # Tasks matching only SOME word of a multi-word keyword. Used only if the
+        # exact phrase matched nothing at all — see the fallback after the loop.
+        fuzzy_matching = []
         undated_excluded = 0
+
+        # Hoisted out of the loop: these depend on the keyword, not on the task.
+        keyword_lower = keyword.lower() if keyword else ""
+        keyword_latin = transliterate_greek_to_latin(keyword_lower)
+        # Words of 4+ chars only — shorter ones are Greek/English function words
+        # ("στη", "και", "the") that match almost every task and would make the
+        # fallback below useless.
+        keyword_tokens = [
+            (tok, transliterate_greek_to_latin(tok))
+            for tok in keyword_lower.split()
+            if len(tok) >= 4
+        ]
 
         for task in cached_tasks:
             if not is_open_task(task, include_completed):
                 continue
 
             if keyword:
-                keyword_lower = keyword.lower()
                 task_haystack = f"{task.task_name} {task.description or ''}".lower()
+                task_haystack_latin = transliterate_greek_to_latin(task_haystack)
                 keyword_matches = (
                     keyword_lower in task_haystack
-                    or transliterate_greek_to_latin(keyword_lower) in transliterate_greek_to_latin(task_haystack)
+                    or keyword_latin in task_haystack_latin
+                )
+                # The keyword is matched as ONE literal substring, so any multi-word
+                # keyword ("δοκιμαστικα τεστ task") is near-guaranteed to match nothing
+                # even when every word of it appears. Tracked per task here so the
+                # fallback after the loop can rescue exactly that case.
+                token_matches = keyword_matches or any(
+                    tok in task_haystack or tok_latin in task_haystack_latin
+                    for tok, tok_latin in keyword_tokens
                 )
             else:
-                keyword_matches = True
+                keyword_matches = token_matches = True
 
             matches_non_date_criteria = (
                 (not category or task.category == category)
@@ -385,17 +408,35 @@ def build_tool_functions(cached_tasks):
                 continue
             if priority and task.priority != priority:
                 continue
-            if keyword and not keyword_matches:
+            if keyword and not token_matches:
                 continue
 
-            matching.append(task)
+            if keyword_matches:
+                matching.append(task)
+            else:
+                fuzzy_matching.append(task)
+
+        # Nothing matched the keyword as a whole phrase, but some tasks matched a
+        # word of it: use those rather than reporting "no such task". Done HERE, in
+        # one pass over already-loaded data, because the alternative is the model
+        # burning a round (~3,300 tokens) per guessed re-spelling — observed doing
+        # exactly that, three times, before giving up.
+        used_fuzzy = bool(keyword and not matching and fuzzy_matching)
+        if used_fuzzy:
+            matching = fuzzy_matching
 
         # Chronological first: the cap is meant to keep "the next N things to do",
         # and a P1 next week is not more urgent than a P3 today. The "9999-12-31"
         # fallback is load-bearing, NOT dead: undated tasks are only excluded when a
         # date filter is present, so an unfiltered search legitimately contains them
         # and they must sort last.
+        # is_completed leads the key ONLY to protect the cap: with
+        # include_completed=True, long-done tasks are the OLDEST and so sort first,
+        # and were observed consuming 12 of the 30 slots and pushing genuinely open
+        # tasks out of the result entirely. Open work is never less relevant than
+        # finished work. No effect at all when include_completed is False.
         matching.sort(key=lambda t: (
+            bool(t.is_completed),
             t.due_date or "9999-12-31",
             t.due_time or "99:99",
             PRIORITY_ORDER.get(t.priority, 3),
@@ -419,7 +460,10 @@ def build_tool_functions(cached_tasks):
                 "is_completed": task.is_completed,
             })
 
-        logging.info(f"[agent] search_tasks returning {len(results)} of {total_matches} matches, undated_excluded={undated_excluded}")
+        logging.info(
+            f"[agent] search_tasks returning {len(results)} of {total_matches} matches, "
+            f"undated_excluded={undated_excluded}, fuzzy={used_fuzzy}"
+        )
 
         result = {
             "tasks": results,
@@ -427,6 +471,25 @@ def build_tool_functions(cached_tasks):
             "truncated": total_matches > MAX_SEARCH_RESULTS,
             "undated_matches_excluded": undated_excluded,
         }
+
+        if used_fuzzy:
+            result["fuzzy_keyword_note"] = (
+                f"No task contains the exact phrase '{keyword}'. These matched a word of it "
+                f"instead, so check the names before relying on them. Do NOT search again with "
+                f"a reworded keyword — this already covers that."
+            )
+
+        # The "truncated" boolean alone was observed being silently dropped — the
+        # instruction to mention it lives ~40 lines away in the system instruction,
+        # disconnected from the data at the moment the model reads it. A same-call,
+        # numbers-filled reminder next to the flag itself survives far more reliably
+        # than a general rule the model has to recall unprompted. Same fix shape as
+        # no_matches_hint below.
+        if result["truncated"]:
+            result["truncated_hint"] = (
+                f"Only the first {MAX_SEARCH_RESULTS} of {total_matches} matches are shown. "
+                f"You MUST tell the user more exist — never present this list as complete."
+            )
 
         # Kills the "blind neighbouring-date retry" loop — the single most expensive
         # observed failure — by telling the model up front where open tasks actually
