@@ -175,7 +175,11 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         # Feeds the system instruction, search_tasks, and the header below, so a
         # request that straddles midnight can never see two different "today"s.
         today_iso, now_hhmm, time_header = agent_tools.build_time_context()
-        system_instruction = agent_tools.build_system_instruction(today_iso, now_hhmm)
+        # No arguments: the instruction is deliberately CONSTANT so that
+        # system_instruction + tools form a byte-identical, cacheable prefix
+        # across requests. today_iso/now_hhmm reach the model via time_header
+        # and the day view instead — see build_system_instruction's docstring.
+        system_instruction = agent_tools.build_system_instruction()
         run["system_instruction_sha"] = agent_tools.system_instruction_sha(system_instruction)
 
         try:
