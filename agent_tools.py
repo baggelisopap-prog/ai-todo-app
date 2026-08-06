@@ -302,12 +302,22 @@ FILTERS — every argument must trace to a word the user actually said.
 A filter you added yourself silently hides tasks and turns a wrong answer into a confident one. Omitting one only widens the result, which the user can see and correct. So when in doubt, leave it out.
 Only these count as evidence: category — δουλειά/εργασία/επαγγελματικά (even misspelled, "buisness") → Business; προσωπικά/σπίτι/οικογένεια → Personal; guest messages or rental property → Hostaway. priority — "P1", "επείγον", "urgent", "σημαντικό". dates — an actual time reference. keyword — a specific thing they named.
 
-Study these; they are the whole rule:
-  "τι έχω αύριο;"                    -> date_from=<tomorrow>, date_to=<tomorrow>          (nothing else — no category was said)
-  "τι πρέπει να ψωνίσω;"             -> keyword="ψώνια"                                    (NOT Personal, NOT P3, NOT today — none were said)
-  "τα επαγγελματικά μου"             -> category="Business"                                (no date: none was said, so ALL open business tasks)
-  "σημείωσε το X ως ολοκληρωμένο"    -> keyword="X"                                        (a name lookup is keyword ONLY, never a date or category you guessed)
-  "επείγοντα επαγγελματικά σήμερα"   -> category="Business", priority="P1", date_from=date_to=<today>   (all three WERE said — pass them together in one call)
+Decide EVERY parameter, every time, and write null for each one the user did not say. "Not mentioned" is a value you set on purpose — never a field you fill in because it looks plausible. Copy the shape of these exactly:
+
+  "τι έχω αύριο;"
+      keyword=null      category=null       priority=null   date_from=<tomorrow>  date_to=<tomorrow>  undated_only=false
+  "τι πρέπει να ψωνίσω;"
+      keyword="ψώνια"   category=null       priority=null   date_from=null        date_to=null        undated_only=false
+  "τα επαγγελματικά μου"
+      keyword=null      category="Business" priority=null   date_from=null        date_to=null        undated_only=false
+  "σημείωσε το X ως ολοκληρωμένο"
+      keyword="X"       category=null       priority=null   date_from=null        date_to=null        undated_only=false
+  "τι έχω χωρίς προθεσμία;"
+      keyword=null      category=null       priority=null   date_from=null        date_to=null        undated_only=true
+  "επείγοντα επαγγελματικά σήμερα"
+      keyword=null      category="Business" priority="P1"   date_from=<today>     date_to=<today>     undated_only=false
+
+A date range is the one most often filled in without being asked for. If the question contains no time reference at all, date_from and date_to are BOTH null — a question with no date is a question about all open tasks, not about this week.
 
 If you search more than once, say which result set your answer uses.
 
@@ -344,6 +354,28 @@ For tasks due TODAY, compare due_time against {current_time_str}: earlier has al
 Always answer in the SAME LANGUAGE as the question. For any scope the day view does not cover, use search_tasks before answering — never invent task data. Keep answers concise and conversational. If nothing matches, say so plainly."""
 
 
+def render_task_rows(tasks) -> list[dict]:
+    """Task objects -> the row dicts search_tasks returns to the model. Shared
+    so the relaxed-filter results below are rendered identically to the primary
+    ones — the model must not be able to tell them apart by shape."""
+    rows = []
+    for task in tasks:
+        desc = task.description or ''
+        if len(desc) > DESCRIPTION_TRUNCATE_LENGTH:
+            desc = desc[:DESCRIPTION_TRUNCATE_LENGTH] + '...'
+        rows.append({
+            "record_id": task.record_id,
+            "task_name": task.task_name,
+            "description": desc,
+            "category": task.category,
+            "priority": task.priority,
+            "due_date": task.due_date,
+            "due_time": task.due_time,
+            "is_completed": task.is_completed,
+        })
+    return rows
+
+
 def build_tool_functions(cached_tasks):
     """
     Returns (search_tasks, get_task_details) as closures over cached_tasks.
@@ -360,6 +392,7 @@ def build_tool_functions(cached_tasks):
         priority: Literal["P1", "P2", "P3"] = None,
         keyword: str = None,
         include_completed: bool = False,
+        undated_only: bool = False,
     ) -> dict:
         """Searches the user's tasks with optional filters. Use this to answer
         any question about what tasks exist, their dates, categories, or
@@ -370,13 +403,22 @@ def build_tool_functions(cached_tasks):
             date_to: Latest due_date to include, in YYYY-MM-DD format. Omit entirely for no upper bound.
             category: Filter by category. Omit for all categories.
             priority: Filter by priority. Omit for all priorities.
+            undated_only: Return ONLY tasks that have no due date at all ("what has no deadline?"). Ignores date_from/date_to. Defaults to False.
             keyword: Free-text search matched (case-insensitive) against the task name and description. Omit for no keyword filter.
             include_completed: Whether to include tasks that are already marked completed. Defaults to False.
 
         Returns:
             A dict with tasks (capped at 30, descriptions truncated to 100 chars), total_matches, truncated, and undated_matches_excluded.
         """
-        logging.info(f"[agent] search_tasks called: date_from={date_from}, date_to={date_to}, category={category}, priority={priority}, keyword={keyword}, include_completed={include_completed}")
+        logging.info(f"[agent] search_tasks called: date_from={date_from}, date_to={date_to}, category={category}, priority={priority}, keyword={keyword}, include_completed={include_completed}, undated_only={undated_only}")
+
+        # "What has no deadline?" had no way to be expressed, so the model went
+        # looking for it category by category — 5 rounds and 28k tokens for a
+        # one-line answer (observed). A date range cannot express "no date", so
+        # asking for both at once is a contradiction; undated_only wins and the
+        # range is dropped rather than silently returning nothing.
+        if undated_only:
+            date_from = date_to = None
 
         valid_categories = ["Business", "Personal", "Unknown", "Hostaway"]
         if category and category not in valid_categories:
@@ -412,6 +454,8 @@ def build_tool_functions(cached_tasks):
 
             for task in cached_tasks:
                 if not is_open_task(task, with_completed):
+                    continue
+                if undated_only and task.due_date:
                     continue
 
                 if keyword:
@@ -511,23 +555,7 @@ def build_tool_functions(cached_tasks):
             PRIORITY_ORDER.get(t.priority, 3),
         ))
         total_matches = len(matching)
-        capped = matching[:MAX_SEARCH_RESULTS]
-
-        results = []
-        for task in capped:
-            desc = task.description or ''
-            if len(desc) > DESCRIPTION_TRUNCATE_LENGTH:
-                desc = desc[:DESCRIPTION_TRUNCATE_LENGTH] + '...'
-            results.append({
-                "record_id": task.record_id,
-                "task_name": task.task_name,
-                "description": desc,
-                "category": task.category,
-                "priority": task.priority,
-                "due_date": task.due_date,
-                "due_time": task.due_time,
-                "is_completed": task.is_completed,
-            })
+        results = render_task_rows(matching[:MAX_SEARCH_RESULTS])
 
         logging.info(
             f"[agent] search_tasks returning {len(results)} of {total_matches} matches, "
@@ -603,11 +631,11 @@ def build_tool_functions(cached_tasks):
         }
         if total_matches == 0 and sum(active_filters.values()) > 1:
 
-            def _count_with(active: set) -> int:
-                """Counts matches applying ONLY the named filters. Deliberately NOT
-                a recursive search_tasks call: that would re-enter this same block
-                and fan out combinatorially for a number we throw away."""
-                n = 0
+            def _match_with(active: set) -> list:
+                """Matches applying ONLY the named filters. Deliberately NOT a
+                recursive search_tasks call: that would re-enter this same block
+                and fan out combinatorially."""
+                found = []
                 for task in cached_tasks:
                     if not is_open_task(task, include_completed):
                         continue
@@ -628,8 +656,14 @@ def build_tool_functions(cached_tasks):
                             or bool(keyword_stems & stem_words(hay))
                         ):
                             continue
-                    n += 1
-                return n
+                    found.append(task)
+                found.sort(key=lambda t: (
+                    bool(t.is_completed),
+                    t.due_date or "9999-12-31",
+                    t.due_time or "99:99",
+                    PRIORITY_ORDER.get(t.priority, 3),
+                ))
+                return found
 
             # Dropping filters ONE at a time is not enough: in the observed failure
             # two invented filters (a priority and a date) each independently
@@ -642,24 +676,34 @@ def build_tool_functions(cached_tasks):
                 candidates.append(("with the keyword alone", {"keyword"}))
             candidates.append(("with no filters at all", set()))
 
-            seen, relaxations = set(), []
+            seen, relaxations, best = set(), [], None
             for label, subset in candidates:
                 key = frozenset(subset)
                 if key in seen:
                     continue
                 seen.add(key)
-                widened = _count_with(subset)
+                widened = _match_with(subset)
                 if widened:
-                    relaxations.append(f"{label}: {widened}")
+                    relaxations.append(f"{label}: {len(widened)}")
+                    # Candidates run narrowest-first, so the first hit is the
+                    # smallest relaxation that finds anything.
+                    if best is None:
+                        best = (label, widened)
 
-            if relaxations:
+            if best:
+                best_label, best_tasks = best
+                # The rows are RETURNED, not just described. Describing them made
+                # the model run a second search to fetch what this call already
+                # had in hand — measured at 3-4 rounds where the equivalent
+                # fallbacks that return rows (completed, word-level) take 2.
+                result["relaxed_matches"] = render_task_rows(best_tasks[:MAX_SEARCH_RESULTS])
                 result["over_filtered_hint"] = (
-                    "0 matches with all filters applied. The same search " + "; ".join(relaxations)
-                    + ". A filter that did not come from the user's own words is the likely cause "
-                    "— drop it and search again. Never report 'you have none' when a filter you "
-                    "added yourself produced the 0."
+                    f"0 matches with all filters applied — but the same search {'; '.join(relaxations)}. "
+                    f"relaxed_matches holds the results {best_label} (already fetched: do NOT search "
+                    f"again). Answer from them: say nothing matched the exact criteria, then give what "
+                    f"these show. Never report 'you have none' when a filter you added produced the 0."
                 )
-                logging.info(f"[agent] over_filtered_hint attached: {relaxations}")
+                logging.info(f"[agent] over_filtered_hint: {relaxations} | returning {len(best_tasks)} rows {best_label}")
 
         return result
 
