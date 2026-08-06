@@ -237,7 +237,17 @@
     "new_conversation": "New conversation",
     "suggestion_today": "What do I have today?",
     "suggestion_overdue": "What's overdue?",
-    "suggestion_week": "What's my week look like?"
+    "suggestion_week": "What's my week look like?",
+    "searched_label": "Searched",
+    "searched_results": "{{count}} found",
+    "searched_all_open": "all open tasks",
+    "searched_filter_keyword": "matching \"{{value}}\"",
+    "searched_filter_category": "in {{value}}",
+    "searched_filter_priority": "priority {{value}}",
+    "searched_filter_from": "from {{value}}",
+    "searched_filter_to": "until {{value}}",
+    "searched_filter_on": "on {{value}}",
+    "searched_filter_completed": "including completed"
   },
   "auth": {
     "log_in": "Log In",

@@ -106,11 +106,23 @@ class ProposedAction(BaseModel):
     task_name: Optional[str] = None
     fields: Optional[dict] = None
 
+class AgentSearch(BaseModel):
+    """
+    One search_tasks call the agent made while answering, with the filters it
+    chose. Shown to the user under the answer: the agent has been observed
+    narrowing a search with a category or date the user never mentioned and
+    then reporting "you have none" over it. Only the user knows what they
+    meant, so the filters are theirs to see.
+    """
+    filters: dict = {}
+    total_matches: int = 0
+
 class AgentQueryResponse(BaseModel):
     """Response body for POST /agent/query"""
     answer: str
     proposed_actions: list[ProposedAction] = []
     conversation_id: str
+    searches: list[AgentSearch] = []
 
 class ConfirmActionRequest(BaseModel):
     """
@@ -597,6 +609,7 @@ async def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_cur
             answer=result["answer"],
             proposed_actions=result["proposed_actions"],
             conversation_id=result["conversation_id"],
+            searches=result.get("searches", []),
         )
     except RuntimeError as e:
         logger.error(f"Agent query failed: {e}")

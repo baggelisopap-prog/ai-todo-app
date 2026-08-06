@@ -237,7 +237,17 @@
     "new_conversation": "Νέα συνομιλία",
     "suggestion_today": "Τι έχω σήμερα;",
     "suggestion_overdue": "Τι έχει καθυστερήσει;",
-    "suggestion_week": "Πώς είναι η εβδομάδα μου;"
+    "suggestion_week": "Πώς είναι η εβδομάδα μου;",
+    "searched_label": "Έψαξα",
+    "searched_results": "{{count}} βρέθηκαν",
+    "searched_all_open": "όλα τα ανοιχτά",
+    "searched_filter_keyword": "με «{{value}}»",
+    "searched_filter_category": "σε {{value}}",
+    "searched_filter_priority": "προτεραιότητα {{value}}",
+    "searched_filter_from": "από {{value}}",
+    "searched_filter_to": "έως {{value}}",
+    "searched_filter_on": "στις {{value}}",
+    "searched_filter_completed": "μαζί με ολοκληρωμένα"
   },
   "auth": {
     "log_in": "Σύνδεση",

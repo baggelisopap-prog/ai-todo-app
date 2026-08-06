@@ -190,6 +190,12 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         # fresh every request, so it never needs to be remembered). Turned into
         # this run's refs, stored on the agent_runs row (see _finish below).
         seen_tasks: dict[str, str] = {}
+        # The filters the agent actually searched with, returned to the client and
+        # shown under its answer. The agent was observed narrowing a search with a
+        # category or date the user never mentioned and then reporting "you have
+        # none" over it; the tool-level hints try to stop that, but a filter the
+        # USER can see is the backstop, because only the user knows what they meant.
+        searches_run: list[dict] = []
 
         search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks)
         propose_complete_task, propose_update_task, propose_create_task = agent_tools.build_write_proposal_tools(
@@ -262,7 +268,12 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
             run["refs"] = refs
             run["proposed_actions"] = proposed_actions
 
-            return {"answer": answer, "proposed_actions": proposed_actions, "conversation_id": conversation_id}
+            return {
+                "answer": answer,
+                "proposed_actions": proposed_actions,
+                "conversation_id": conversation_id,
+                "searches": searches_run,
+            }
 
         for round_num in range(MAX_TOOL_ROUNDS):
             response = None
@@ -375,6 +386,12 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
                         rid = t.get("record_id")
                         if rid:
                             seen_tasks[rid] = t.get("task_name")
+                    # Only the filters actually passed — an omitted filter is not a
+                    # constraint and listing it as one would be its own lie.
+                    searches_run.append({
+                        "filters": {k: v for k, v in (fc.args or {}).items() if v not in (None, "", False)},
+                        "total_matches": result.get("total_matches", 0),
+                    })
                 elif fc.name == "get_task_details" and isinstance(result, dict) and result.get("record_id"):
                     seen_tasks[result["record_id"]] = result.get("task_name")
 
