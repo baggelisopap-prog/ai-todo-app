@@ -127,12 +127,20 @@ def build_time_context() -> tuple[str, str, str]:
     values feed the system instruction, search_tasks and the injected user header,
     so a request that straddles midnight can never see two different dates."""
     now = datetime.now(ZoneInfo("Europe/Athens"))
+    # range(0, 8) — TODAY is included deliberately. It used to start at tomorrow,
+    # and "what business tasks do I have this week?" was then answered from a range
+    # beginning tomorrow, silently dropping two tasks due today (observed).
     upcoming = " ".join(
-        (now + timedelta(days=i)).strftime("%a=%Y-%m-%d") for i in range(1, 8)
+        (now + timedelta(days=i)).strftime("%a=%Y-%m-%d") for i in range(0, 8)
     )
+    # Yesterday is supplied rather than left for the model to derive: "overdue"
+    # needs date_to = the day before today, and calendar arithmetic done by the
+    # model is exactly what build_time_context exists to prevent.
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
     header = (
         f"[Now: {now.strftime('%A, %Y-%m-%d')} {now.strftime('%H:%M')} Europe/Athens]\n"
-        f"[Next 7 days: {upcoming}]"
+        f"[Yesterday: {yesterday}]\n"
+        f"[Today + next 7 days: {upcoming}]"
     )
     return now.strftime("%Y-%m-%d"), now.strftime("%H:%M"), header
 
@@ -260,7 +268,7 @@ PRE-LOADED DAY VIEW:
 The user turn contains ALL open tasks that are overdue or due today, pre-sorted, with passed/upcoming already computed. It is COMPLETE for those two scopes — if a section says (none), there genuinely are none; say so instead of searching.
 - Fully answered by today and/or overdue? Answer from it and do NOT call search_tasks.
 - ANY other scope (tomorrow, this week, a weekday, a specific date, a category or keyword filter, completed or undated tasks) REQUIRES search_tasks. Never extrapolate the day view to another date — it says nothing about any other day.
-- A PENDING APPROVAL section lists tasks awaiting the user's Inbox approval that are due today or late. Report them separately as awaiting approval; never propose a write on one.
+- A PENDING APPROVAL section lists tasks awaiting the user's Inbox approval that are due today or late. Report them separately as awaiting approval.
 - A "(+N more ...)" line means N further items exist — say so; never present the listed ones as complete.
 
 FILTERS — pass only what the user actually said:
@@ -274,30 +282,29 @@ Every search_tasks argument must come from the user's own words. An invented fil
 
 DATE RESOLUTION:
 - A SINGLE day ("today", "tomorrow", a weekday, a date): set date_from AND date_to to that SAME date.
-- A bare weekday ("Τετάρτη", "Monday", "την Παρασκευή") means the UPCOMING one — read it off the [Next 7 days] map in the user message, never compute it. Look backwards only for "περασμένη"/"last".
-- The [Next 7 days] map is a LOOKUP TABLE, never a search range. Do not search its span unless the user asked for the coming week.
-- A RANGE ("this week", "between X and Y"): set the actual bounds.
-- "Overdue"/"what's late": leave date_from empty, set date_to to the day BEFORE today. Tasks due today are not overdue.
+- A bare weekday ("Τετάρτη", "Monday", "την Παρασκευή") means the UPCOMING one — read it off the [Today + next 7 days] map in the user message, never compute it. Look backwards only for "περασμένη"/"last".
+- That map is a LOOKUP TABLE, never a search range. Do not search its span unless the user asked for the coming week.
+- A RANGE ("this week", "αυτές τις μέρες", "between X and Y"): set the actual bounds. Unless the user excluded today, a range that includes the present starts at TODAY, not tomorrow.
+- "Overdue"/"what's late": leave date_from empty, set date_to to the [Yesterday] date given in the user message. Tasks due today are not overdue.
 
-RESULTS:
-- Capped at 30, descriptions cut to 100 chars. truncated_hint present: you MUST say more matches exist — never present a capped list as complete. Use get_task_details for a full description or checklist.
-- undated_matches_excluded > 0: briefly mention such tasks exist outside the date range.
-- no_matches_hint present: do NOT retry adjacent dates blindly. Either search a date it lists that clearly matches the user's intent, or say nothing is in that range and name the nearest dates that do have tasks.
-- Keyword matching is substring-based and misses Greek inflection ("ψώνια" won't match "να ψωνίσω"). fuzzy_keyword_note present: word-level matching already ran — never retry with a reworded keyword. Still nothing and other filters are set? Retry once WITHOUT the keyword and pick the matches yourself by reading the names.
-- If a task the user named is still not found, retry ONCE with include_completed=true before concluding it does not exist — it may already be completed, which is a different and more useful answer.
+RESULTS — a result may carry a *_hint / *_note field. Each states what to do; follow it and say so in your answer. They are computed from THIS call's data, so they override any general expectation you have.
+- Capped at 30, descriptions cut to 100 chars. Use get_task_details for a full description or checklist.
+- The search already retries internally (word-level matching, and completed tasks) before returning nothing. So an empty result means it genuinely does not exist — never re-run the same search reworded.
+- Still empty and other filters are set? Retry once WITHOUT the keyword and pick the matches yourself by reading the names.
 
 CONVERSATION HISTORY:
 - Earlier turns in this conversation may be present before the current question. They exist for ONE purpose: resolving references such as "it", "that one", "the second one", "change it to Friday".
 - History is POSSIBLY STALE. Never answer a question about the user's tasks from history. Task facts come only from the pre-loaded day view or a fresh tool call, never from an earlier answer.
-- A `[refs: name=id]` line in an earlier answer is a source of REAL record_ids from this same conversation. You may use such an id in a write proposal. You must never invent, guess or modify an id.
+- A `[refs: name=id]` line in an earlier answer is a source of REAL record_ids from this same conversation. You may use such an id in a write proposal.
+- Resolve "it"/"that one" from the CONVERSATION, never from whichever task in the day view looks most salient — the day view is unrelated background that happens to sit next to the question. Name the task you resolved to in your answer, so a wrong guess is visible before it is confirmed.
 - If the referenced task is not in the day view and has no ref id, call search_tasks to find it.
 - If a follow-up is ambiguous, ASK a short clarifying question instead of guessing — this applies beyond write values (e.g. "set it to 5" — day of month or 5 o'clock? Never guess a value that will appear on a confirmation card) to any read question with more than one plausible reading (e.g. a terse reply that could be a complaint about your last answer OR a new request for specific items — do not silently pick one meaning and answer it as fact).
 
 WRITE ACTIONS (propose, never execute):
 propose_complete_task / propose_update_task / propose_create_task only REGISTER a proposal the user must confirm with a button; by themselves they change nothing. After calling one, say the change is prepared and awaiting confirmation — NEVER past tense ("done", "completed", "updated").
-- Never invent, guess or modify a record_id. Use only ids appearing verbatim in a tool result or in the PRE-LOADED day view. If the task is in neither, find it with search_tasks first.
+- Pass ONLY the fields that actually change. Re-sending a field at its current value adds a line to the user's confirmation card that hides the real change.
 - Ambiguous request (several tasks match, unclear field)? Ask, don't guess.
-- propose_update_task accepts only: due_date, due_time, priority, category, task_name, description. Anything else isn't supported yet.
+- A field you need that the tool has no parameter for isn't supported yet — say so plainly.
 - A created task lands in the Inbox for approval, not directly in the list — say so.
 
 TIME AWARENESS:
@@ -349,11 +356,6 @@ def build_tool_functions(cached_tasks):
             raise ValueError(f"Invalid priority '{priority}'. Must be one of: {', '.join(valid_priorities)}")
 
         has_date_filter = bool(date_from or date_to)
-        matching = []
-        # Tasks matching only SOME word of a multi-word keyword. Used only if the
-        # exact phrase matched nothing at all — see the fallback after the loop.
-        fuzzy_matching = []
-        undated_excluded = 0
 
         # Hoisted out of the loop: these depend on the keyword, not on the task.
         keyword_lower = keyword.lower() if keyword else ""
@@ -367,54 +369,67 @@ def build_tool_functions(cached_tasks):
             if len(tok) >= 4
         ]
 
-        for task in cached_tasks:
-            if not is_open_task(task, include_completed):
-                continue
+        def _scan(with_completed: bool):
+            """One filtering pass over cached_tasks, returning
+            (exact_matches, word_level_matches, undated_excluded).
 
-            if keyword:
-                task_haystack = f"{task.task_name} {task.description or ''}".lower()
-                task_haystack_latin = transliterate_greek_to_latin(task_haystack)
-                keyword_matches = (
-                    keyword_lower in task_haystack
-                    or keyword_latin in task_haystack_latin
+            Factored out of the body so the completed-task fallback below can
+            re-run it over the SAME already-loaded list. A second in-memory pass
+            costs microseconds; making the MODEL re-search costs a whole round."""
+            exact, word_level, undated = [], [], 0
+
+            for task in cached_tasks:
+                if not is_open_task(task, with_completed):
+                    continue
+
+                if keyword:
+                    task_haystack = f"{task.task_name} {task.description or ''}".lower()
+                    task_haystack_latin = transliterate_greek_to_latin(task_haystack)
+                    keyword_matches = (
+                        keyword_lower in task_haystack
+                        or keyword_latin in task_haystack_latin
+                    )
+                    # The keyword is matched as ONE literal substring, so any multi-word
+                    # keyword ("δοκιμαστικα τεστ task") is near-guaranteed to match nothing
+                    # even when every word of it appears. Tracked per task here so the
+                    # fallback after the loop can rescue exactly that case.
+                    token_matches = keyword_matches or any(
+                        tok in task_haystack or tok_latin in task_haystack_latin
+                        for tok, tok_latin in keyword_tokens
+                    )
+                else:
+                    keyword_matches = token_matches = True
+
+                matches_non_date_criteria = (
+                    (not category or task.category == category)
+                    and (not priority or task.priority == priority)
+                    and keyword_matches
                 )
-                # The keyword is matched as ONE literal substring, so any multi-word
-                # keyword ("δοκιμαστικα τεστ task") is near-guaranteed to match nothing
-                # even when every word of it appears. Tracked per task here so the
-                # fallback after the loop can rescue exactly that case.
-                token_matches = keyword_matches or any(
-                    tok in task_haystack or tok_latin in task_haystack_latin
-                    for tok, tok_latin in keyword_tokens
-                )
-            else:
-                keyword_matches = token_matches = True
 
-            matches_non_date_criteria = (
-                (not category or task.category == category)
-                and (not priority or task.priority == priority)
-                and keyword_matches
-            )
+                if has_date_filter and not task.due_date:
+                    if matches_non_date_criteria:
+                        undated += 1
+                    continue
 
-            if has_date_filter and not task.due_date:
-                if matches_non_date_criteria:
-                    undated_excluded += 1
-                continue
+                if date_from and (not task.due_date or task.due_date < date_from):
+                    continue
+                if date_to and (not task.due_date or task.due_date > date_to):
+                    continue
+                if category and task.category != category:
+                    continue
+                if priority and task.priority != priority:
+                    continue
+                if keyword and not token_matches:
+                    continue
 
-            if date_from and (not task.due_date or task.due_date < date_from):
-                continue
-            if date_to and (not task.due_date or task.due_date > date_to):
-                continue
-            if category and task.category != category:
-                continue
-            if priority and task.priority != priority:
-                continue
-            if keyword and not token_matches:
-                continue
+                if keyword_matches:
+                    exact.append(task)
+                else:
+                    word_level.append(task)
 
-            if keyword_matches:
-                matching.append(task)
-            else:
-                fuzzy_matching.append(task)
+            return exact, word_level, undated
+
+        matching, fuzzy_matching, undated_excluded = _scan(include_completed)
 
         # Nothing matched the keyword as a whole phrase, but some tasks matched a
         # word of it: use those rather than reporting "no such task". Done HERE, in
@@ -424,6 +439,20 @@ def build_tool_functions(cached_tasks):
         used_fuzzy = bool(keyword and not matching and fuzzy_matching)
         if used_fuzzy:
             matching = fuzzy_matching
+
+        # A NAMED task missing from the open list is usually not missing at all —
+        # it is already completed, which is a different and more useful answer. The
+        # system instruction used to ask the MODEL to retry with include_completed,
+        # which cost a full round every single time (observed in testing). The retry
+        # happens here instead, for free, in the same call.
+        completed_only = False
+        if keyword and not matching and not include_completed:
+            done_exact, done_word_level, _ = _scan(True)
+            done_matches = done_exact or done_word_level
+            if done_matches:
+                matching = done_matches
+                completed_only = True
+                used_fuzzy = not done_exact
 
         # Chronological first: the cap is meant to keep "the next N things to do",
         # and a P1 next week is not more urgent than a P3 today. The "9999-12-31"
@@ -479,6 +508,13 @@ def build_tool_functions(cached_tasks):
                 f"a reworded keyword — this already covers that."
             )
 
+        if completed_only:
+            result["completed_only_note"] = (
+                f"No OPEN task matches '{keyword}', but {total_matches} already-completed one(s) "
+                f"do — listed here. Tell the user it is already COMPLETED, not that it does not "
+                f"exist. Do NOT search again with include_completed — this already did."
+            )
+
         # The "truncated" boolean alone was observed being silently dropped — the
         # instruction to mention it lives ~40 lines away in the system instruction,
         # disconnected from the data at the moment the model reads it. A same-call,
@@ -489,6 +525,14 @@ def build_tool_functions(cached_tasks):
             result["truncated_hint"] = (
                 f"Only the first {MAX_SEARCH_RESULTS} of {total_matches} matches are shown. "
                 f"You MUST tell the user more exist — never present this list as complete."
+            )
+
+        # Same reasoning as truncated_hint: undated_matches_excluded was a bare
+        # number whose "mention it" rule lived far away in the system instruction.
+        if undated_excluded:
+            result["undated_hint"] = (
+                f"{undated_excluded} task(s) match every other filter but have NO due date, so "
+                f"the date range excluded them. Mention that such tasks exist."
             )
 
         # Kills the "blind neighbouring-date retry" loop — the single most expensive
@@ -563,6 +607,16 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
                 return task
         return None
 
+    # "Never propose a write on a task awaiting Inbox approval" used to exist ONLY
+    # as one line of prose in the system instruction — nothing in the code or in
+    # /agent/confirm-action enforced it. Since the model demonstrably drops
+    # individual instruction lines, that made an approval-bypass one dropped line
+    # away. It is a real precondition, so it lives with the other preconditions.
+    _PENDING_ERROR = (
+        "That task is still awaiting approval in the Inbox. It must be approved "
+        "there first — tell the user, and do not propose changes to it."
+    )
+
     def propose_complete_task(record_id: str) -> dict:
         """Proposes marking an existing task as completed. Does not complete
         it — only registers a proposal the user must confirm. Do not call
@@ -575,6 +629,8 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
         task = _find_task(record_id)
         if task is None:
             return {"error": "Task not found"}
+        if is_pending_task(task):
+            return {"error": _PENDING_ERROR}
         if task.is_completed:
             return {"error": "Task is already completed"}
 
@@ -612,6 +668,8 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
         task = _find_task(record_id)
         if task is None:
             return {"error": "Task not found"}
+        if is_pending_task(task):
+            return {"error": _PENDING_ERROR}
 
         candidate_fields = {
             "due_date": due_date,
@@ -621,10 +679,17 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
             "task_name": task_name,
             "description": description,
         }
-        fields = {k: v for k, v in candidate_fields.items() if v is not None}
+        # Dropping no-ops is not cosmetic: every field here becomes a line on the
+        # confirmation card the user reads before approving a write. The model was
+        # observed re-sending all six fields at their CURRENT values to change one
+        # date, which renders as six "changes" and buries the only real one.
+        fields = {
+            k: v for k, v in candidate_fields.items()
+            if v is not None and v != getattr(task, k, None)
+        }
 
         if not fields:
-            return {"error": "No fields provided to update"}
+            return {"error": "No fields provided to update, or every value given already matches the task"}
 
         proposed_actions.append({
             "action_id": str(uuid.uuid4()),
