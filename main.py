@@ -189,7 +189,7 @@ async def health_check():
     return HealthResponse(status="ok", service="ai-todo-app")
 
 @app.post("/extract", response_model=ExtractResponse, status_code=status.HTTP_201_CREATED)
-async def extract_and_save_tasks(request: ExtractRequest, user_id: str = Depends(get_current_user_id)):
+def extract_and_save_tasks(request: ExtractRequest, user_id: str = Depends(get_current_user_id)):
     """
     Extract tasks from natural language text and save them to the database.
     Returns the saved tasks with their assigned record_ids.
@@ -314,7 +314,7 @@ async def extract_image(image: UploadFile = File(...), context: str = Form(None)
 
 
 @app.get("/tasks", response_model=TasksListResponse, status_code=status.HTTP_200_OK)
-async def list_tasks(user_id: str = Depends(get_current_user_id)):
+def list_tasks(user_id: str = Depends(get_current_user_id)):
     """Retrieve all tasks from the database."""
     try:
         tasks = service.get_all_tasks(user_id)
@@ -327,7 +327,7 @@ async def list_tasks(user_id: str = Depends(get_current_user_id)):
         )
 
 @app.post("/tasks", response_model=TaskRecord, status_code=status.HTTP_201_CREATED)
-async def create_task_manual(request: CreateTaskRequest, user_id: str = Depends(get_current_user_id)):
+def create_task_manual(request: CreateTaskRequest, user_id: str = Depends(get_current_user_id)):
     """
     Create a task manually without AI extraction. Used when the user
     knows exactly what they want (e.g., clicking a specific time slot).
@@ -349,7 +349,7 @@ async def create_task_manual(request: CreateTaskRequest, user_id: str = Depends(
         )
 
 @app.patch("/tasks/{record_id}", response_model=TaskRecord, status_code=status.HTTP_200_OK)
-async def update_task(record_id: str, request: UpdateTaskRequest, user_id: str = Depends(get_current_user_id)):
+def update_task(record_id: str, request: UpdateTaskRequest, user_id: str = Depends(get_current_user_id)):
     """
     Update specific fields on an existing task.
     Only fields included in the request body will be updated.
@@ -376,7 +376,7 @@ async def update_task(record_id: str, request: UpdateTaskRequest, user_id: str =
         )
 
 @app.delete("/tasks/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_task(record_id: str, user_id: str = Depends(get_current_user_id)):
+def delete_task(record_id: str, user_id: str = Depends(get_current_user_id)):
     """
     Permanently delete a task. Returns 204 No Content on success.
     This is a HARD delete — the record is gone from Airtable.
@@ -393,7 +393,7 @@ async def delete_task(record_id: str, user_id: str = Depends(get_current_user_id
 
 
 @app.post("/push/subscribe", status_code=status.HTTP_201_CREATED)
-async def subscribe_push(subscription: PushSubscriptionRequest, user_id: str = Depends(get_current_user_id)):
+def subscribe_push(subscription: PushSubscriptionRequest, user_id: str = Depends(get_current_user_id)):
     """
     Registers (or updates) a browser's push subscription so the backend
     can send it Web Push notifications even when the app is closed.
@@ -407,7 +407,7 @@ async def subscribe_push(subscription: PushSubscriptionRequest, user_id: str = D
 
 
 @app.post("/push/send-test")
-async def send_test_push(user_id: str = Depends(get_current_user_id)):
+def send_test_push(user_id: str = Depends(get_current_user_id)):
     """
     Sends a real Web Push notification to every subscription belonging to
     the calling user. Proves the backend can push on demand — actual
@@ -428,7 +428,7 @@ async def send_test_push(user_id: str = Depends(get_current_user_id)):
 
 
 @app.get("/notifications/run-scheduler")
-async def run_scheduler(secret: str):
+def run_scheduler(secret: str):
     """
     Triggered externally (e.g. a free cron service) every ~5 minutes.
     Checks for tasks due soon and sends their advance reminder pushes.
@@ -444,7 +444,7 @@ async def run_scheduler(secret: str):
 
 
 @app.get("/settings", response_model=AppSettings)
-async def get_settings(user_id: str = Depends(get_current_user_id)):
+def get_settings(user_id: str = Depends(get_current_user_id)):
     """Returns the current app-wide settings (notifications, send-all scope, daily summary)."""
     try:
         return get_app_settings(user_id)
@@ -454,7 +454,7 @@ async def get_settings(user_id: str = Depends(get_current_user_id)):
 
 
 @app.patch("/settings", response_model=AppSettings)
-async def update_settings(payload: AppSettings, user_id: str = Depends(get_current_user_id)):
+def update_settings(payload: AppSettings, user_id: str = Depends(get_current_user_id)):
     """Updates the notifications master toggle, send-all scope, and daily summary settings."""
     try:
         return update_app_settings(
@@ -473,7 +473,7 @@ async def update_settings(payload: AppSettings, user_id: str = Depends(get_curre
 
 
 @app.get("/profile")
-async def get_profile(user_id: str = Depends(get_current_user_id)):
+def get_profile(user_id: str = Depends(get_current_user_id)):
     """Returns this user's profile (id, email, display_name) from the profiles table."""
     try:
         return repository.get_profile(user_id)
@@ -483,7 +483,7 @@ async def get_profile(user_id: str = Depends(get_current_user_id)):
 
 
 @app.patch("/profile")
-async def update_profile(payload: ProfileUpdateRequest, user_id: str = Depends(get_current_user_id)):
+def update_profile(payload: ProfileUpdateRequest, user_id: str = Depends(get_current_user_id)):
     """Updates this user's display_name."""
     try:
         return repository.update_profile(user_id, payload.display_name)
@@ -493,7 +493,7 @@ async def update_profile(payload: ProfileUpdateRequest, user_id: str = Depends(g
 
 
 @app.delete("/account")
-async def delete_account(user_id: str = Depends(get_current_user_id)):
+def delete_account(user_id: str = Depends(get_current_user_id)):
     """
     Permanently deletes this user's auth account via the Supabase admin API.
     ON DELETE CASCADE on every user_id foreign key cleans up tasks, settings,
@@ -508,7 +508,7 @@ async def delete_account(user_id: str = Depends(get_current_user_id)):
 
 
 @app.post("/calendar/connect")
-async def connect_calendar(payload: CalendarConnectRequest, user_id: str = Depends(get_current_user_id)):
+def connect_calendar(payload: CalendarConnectRequest, user_id: str = Depends(get_current_user_id)):
     """
     Stores the Google provider tokens captured by the frontend right after
     the Calendar-scope OAuth flow completes. This is a ONE-TIME capture —
@@ -521,21 +521,21 @@ async def connect_calendar(payload: CalendarConnectRequest, user_id: str = Depen
 
 
 @app.get("/calendar/status")
-async def calendar_status(user_id: str = Depends(get_current_user_id)):
+def calendar_status(user_id: str = Depends(get_current_user_id)):
     """Returns whether this user has a stored Google Calendar connection."""
     connection = repository.get_google_calendar_connection(user_id)
     return {"connected": connection is not None}
 
 
 @app.post("/calendar/disconnect")
-async def disconnect_calendar(user_id: str = Depends(get_current_user_id)):
+def disconnect_calendar(user_id: str = Depends(get_current_user_id)):
     """Deletes this user's stored Google Calendar connection."""
     repository.disconnect_google_calendar(user_id)
     return {"status": "disconnected"}
 
 
 @app.get("/calendar/test")
-async def test_calendar(user_id: str = Depends(get_current_user_id)):
+def test_calendar(user_id: str = Depends(get_current_user_id)):
     """
     Verifies the stored connection actually works by calling the Google
     Calendar API on the user's behalf. Phase 1's success criterion — no
@@ -549,7 +549,7 @@ async def test_calendar(user_id: str = Depends(get_current_user_id)):
 
 
 @app.get("/calendar/events")
-async def get_calendar_events(
+def get_calendar_events(
     date: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -569,7 +569,7 @@ async def get_calendar_events(
 
 
 @app.post("/calendar/events/{event_record_id}/convert")
-async def convert_calendar_event(event_record_id: str, user_id: str = Depends(get_current_user_id)):
+def convert_calendar_event(event_record_id: str, user_id: str = Depends(get_current_user_id)):
     """Explicit, user-initiated conversion of a stored foreign calendar event into a real task."""
     try:
         task = repository.convert_calendar_event_to_task(user_id, event_record_id)
@@ -579,14 +579,14 @@ async def convert_calendar_event(event_record_id: str, user_id: str = Depends(ge
 
 
 @app.post("/calendar/events/{event_record_id}/dismiss")
-async def dismiss_calendar_event(event_record_id: str, user_id: str = Depends(get_current_user_id)):
+def dismiss_calendar_event(event_record_id: str, user_id: str = Depends(get_current_user_id)):
     """User-initiated hide of a foreign calendar event — does not touch Google Calendar, just stops showing it here."""
     repository.dismiss_calendar_event(user_id, event_record_id)
     return {"status": "dismissed"}
 
 
 @app.post("/agent/query", response_model=AgentQueryResponse)
-async def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_current_user_id)):
+def agent_query(request: AgentQueryRequest, user_id: str = Depends(get_current_user_id)):
     """
     Answers a natural-language question about the user's tasks via the
     read-only AI agent in agent_engine.py. Isolated from the task
@@ -678,7 +678,7 @@ def _reject_if_pending_approval(user_id: str, record_id: str) -> None:
 
 
 @app.post("/agent/confirm-action", response_model=ConfirmActionResponse)
-async def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(get_current_user_id)):
+def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(get_current_user_id)):
     """
     Executes exactly ONE agent-proposed write after the user clicks Confirm
     on its card in the chat UI. Nothing in agent_tools.py's propose_*
@@ -824,6 +824,6 @@ async def hostaway_webhook(request: Request):
 
 
 @app.get("/dev/token-usage")
-async def dev_token_usage(user_id: str = Depends(get_current_user_id)):
+def dev_token_usage(user_id: str = Depends(get_current_user_id)):
     """Developer-only: not linked from main navigation. Now gated behind login like every other user-facing endpoint."""
     return token_tracker.get_usage_summary(user_id)
