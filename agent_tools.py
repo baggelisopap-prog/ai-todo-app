@@ -276,6 +276,40 @@ def build_history_contents(runs: list[dict]) -> list[dict]:
     return contents
 
 
+def build_conversation_refs_block(runs: list[dict]) -> str:
+    """One compact block naming every task this conversation has already
+    surfaced, for injection into the CURRENT user turn. Returns "" when the
+    conversation has no refs yet (i.e. the first turn).
+
+    These same ids already ride along at the tail of each replayed answer as a
+    [refs: ...] line, and the model was measured ignoring them. Asked "άλλαξέ το
+    για την Παρασκευή" immediately after discussing a dentist appointment, it
+    proposed the write against the FIRST ROW OF THE DAY VIEW instead — and once
+    the write tools began refusing that (see _unjustified_target), it listed
+    day-view tasks as the candidates and still never considered the appointment
+    at all. Buried at the end of an earlier turn, the refs are simply not where
+    the model looks. This puts them where the day view already proved things get
+    read: the current user turn, immediately beside the question.
+
+    Newest first, capped: a long conversation must not grow this without bound.
+    """
+    seen, pairs = set(), []
+    for past_run in reversed(runs):          # newest first
+        for r in (past_run.get("refs") or []):
+            rid, name = r.get("record_id"), r.get("task_name")
+            if rid and rid not in seen:
+                seen.add(rid)
+                pairs.append(f"{name} = {rid}")
+    if not pairs:
+        return ""
+    lines = "\n".join(pairs[:HISTORY_MAX_REFS])
+    return (
+        "[TASKS ALREADY DISCUSSED IN THIS CONVERSATION — if the question says "
+        '"it", "that one", "the appointment" or similar, it refers to ONE OF '
+        "THESE, not to anything in the day view below:]\n" + lines
+    )
+
+
 def build_system_instruction() -> str:
     """Builds the agent's system instruction. Takes NO arguments and returns a
     CONSTANT string on purpose.
@@ -317,12 +351,8 @@ Decide EVERY parameter, every time, and write null for each one the user did not
 
   "τι έχω αύριο;"
       keyword=null      category=null       priority=null   date_from=<tomorrow>  date_to=<tomorrow>  undated_only=false
-  "τι πρέπει να ψωνίσω;"
-      keyword="ψώνια"   category=null       priority=null   date_from=null        date_to=null        undated_only=false
   "τα επαγγελματικά μου"
       keyword=null      category="Business" priority=null   date_from=null        date_to=null        undated_only=false
-  "σημείωσε το X ως ολοκληρωμένο"
-      keyword="X"       category=null       priority=null   date_from=null        date_to=null        undated_only=false
   "τι έχω χωρίς προθεσμία;"
       keyword=null      category=null       priority=null   date_from=null        date_to=null        undated_only=true
   "επείγοντα επαγγελματικά σήμερα"
@@ -334,15 +364,12 @@ If you search more than once, say which result set your answer uses.
 
 DATE RESOLUTION:
 - A SINGLE day ("today", "tomorrow", a weekday, a date): set date_from AND date_to to that SAME date.
-- A bare weekday ("Τετάρτη", "Monday", "την Παρασκευή") means the UPCOMING one — read it off the [Today + next 7 days] map in the user message, never compute it. Look backwards only for "περασμένη"/"last".
-- That map is a LOOKUP TABLE, never a search range. Do not search its span unless the user asked for the coming week.
+- A bare weekday ("Τετάρτη", "Monday", "την Παρασκευή") means the UPCOMING one — read it off the [Today + next 7 days] map in the user message, never compute it. Look backwards only for "περασμένη"/"last". That map is a LOOKUP TABLE, never a search range: do not search its span unless the user asked for the coming week.
 - A RANGE ("this week", "αυτές τις μέρες", "between X and Y"): set the actual bounds. Unless the user excluded today, a range that includes the present starts at TODAY, not tomorrow.
 - "Overdue"/"what's late": leave date_from empty, set date_to to the [Yesterday] date given in the user message. Tasks due today are not overdue.
 
-RESULTS — a result may carry a *_hint / *_note field. Each states what to do; follow it and say so in your answer. They are computed from THIS call's data, so they override any general expectation you have.
-- Capped at 30, descriptions cut to 100 chars. Use get_task_details for a full description or checklist.
-- The search already retries internally (word-level matching, and completed tasks) before returning nothing. So an empty result means it genuinely does not exist — never re-run the same search reworded.
-- Still empty and other filters are set? Retry once WITHOUT the keyword and pick the matches yourself by reading the names.
+RESULTS — a result may carry a *_hint / *_note field. Each states what to do; follow it and say so in your answer. They are computed from THIS call's data, so they override any general expectation you have. Results are capped at 30 with descriptions cut to 100 chars — use get_task_details for a full description or checklist.
+- The search already retries internally (word-level matching, and completed tasks) before returning nothing. So an empty result means it genuinely does not exist — never re-run the same search reworded. Still empty and other filters are set? Retry once WITHOUT the keyword and pick the matches yourself by reading the names.
 
 CONVERSATION HISTORY:
 - Earlier turns in this conversation may be present before the current question. They exist for ONE purpose: resolving references such as "it", "that one", "the second one", "change it to Friday".
@@ -361,6 +388,8 @@ propose_complete_task / propose_update_task / propose_create_task only REGISTER 
 
 TIME AWARENESS:
 For tasks due TODAY, compare due_time against the current time in the [Now:] line: earlier has already passed, later is still ahead. This does NOT apply to other days (tomorrow 09:00 has not "passed"). Use it for "what's left today", "has X already happened".
+
+record_id values are INTERNAL identifiers. Never print, quote or mention one in your answer — refer to every task by its name.
 
 Always answer in the SAME LANGUAGE as the question. For any scope the day view does not cover, use search_tasks before answering — never invent task data. Keep answers concise and conversational. If nothing matches, say so plainly."""
 
@@ -405,21 +434,20 @@ def build_tool_functions(cached_tasks):
         include_completed: bool = False,
         undated_only: bool = False,
     ) -> dict:
-        """Searches the user's tasks with optional filters. Use this to answer
-        any question about what tasks exist, their dates, categories, or
-        priorities. Call this first for almost any question before answering.
+        """Searches the user's tasks with optional filters. Call this first for
+        almost any question before answering.
 
         Args:
-            date_from: Earliest due_date to include, in YYYY-MM-DD format. Omit entirely for no lower bound.
-            date_to: Latest due_date to include, in YYYY-MM-DD format. Omit entirely for no upper bound.
-            category: Filter by category. Omit for all categories.
-            priority: Filter by priority. Omit for all priorities.
-            undated_only: Return ONLY tasks that have no due date at all ("what has no deadline?"). Ignores date_from/date_to. Defaults to False.
-            keyword: Free-text search matched (case-insensitive) against the task name and description. Omit for no keyword filter.
-            include_completed: Whether to include tasks that are already marked completed. Defaults to False.
+            date_from: Earliest due_date, YYYY-MM-DD. Omit for no lower bound.
+            date_to: Latest due_date, YYYY-MM-DD. Omit for no upper bound.
+            category: Filter by category. Omit for all.
+            priority: Filter by priority. Omit for all.
+            undated_only: Return ONLY tasks with no due date ("what has no deadline?"). Ignores date_from/date_to.
+            keyword: Case-insensitive free text matched against name and description. Omit for none.
+            include_completed: Include already-completed tasks. Defaults to False.
 
         Returns:
-            A dict with tasks (capped at 30, descriptions truncated to 100 chars), total_matches, truncated, and undated_matches_excluded.
+            tasks (max 30, descriptions cut to 100 chars), total_matches, truncated, undated_matches_excluded.
         """
         logging.info(f"[agent] search_tasks called: date_from={date_from}, date_to={date_to}, category={category}, priority={priority}, keyword={keyword}, include_completed={include_completed}, undated_only={undated_only}")
 
@@ -719,9 +747,8 @@ def build_tool_functions(cached_tasks):
         return result
 
     def get_task_details(record_id: str) -> dict:
-        """Gets full details of a single task by its record ID, including its
-        checklist items and full (untruncated) description. Use this after
-        search_tasks when the user wants more detail on a specific task.
+        """Gets one task's full details by record ID, including checklist and
+        untruncated description.
 
         Args:
             record_id: The task's record ID, as returned by search_tasks.
@@ -753,13 +780,17 @@ def build_tool_functions(cached_tasks):
 AGENT_WRITABLE_FIELDS = {"due_date", "due_time", "priority", "category", "task_name", "description"}
 
 
-def build_write_proposal_tools(proposed_actions: list, available_tasks):
+def build_write_proposal_tools(proposed_actions: list, available_tasks,
+                               question: str = None, conversation_refs: set = None):
     """
     Returns (propose_complete_task, propose_update_task, propose_create_task)
     as closures over proposed_actions (a list the caller reads after the
     tool-calling loop ends) and available_tasks (the same per-request cached
     task list used by build_tool_functions, so record_id/task_name references
     can be validated before proposing).
+
+    `question` and `conversation_refs` arm the anaphora guard below; both
+    default to None, which disables it and restores the previous behaviour.
 
     These functions NEVER write to the database — they only validate the
     intent and append a proposal dict for the frontend to render as a
@@ -774,6 +805,39 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
                 return task
         return None
 
+    # Measured failure: asked "when is my dentist appointment?" and then
+    # "change it to Friday", the model proposed the write against the FIRST ROW
+    # OF THE DAY VIEW ("Επισκευή αυτοκινήτου") instead of the appointment it had
+    # just been talking about — 4 times in 6 on the current prompt, 2 in 6 on the
+    # previous one. The [refs:] line carrying the correct record_id was in
+    # context and ignored, and the system instruction already says in so many
+    # words not to do this ("never from whichever task in the day view looks
+    # most salient"), so another line of prose would not have helped. Confirming
+    # such a proposal edits a task the user never mentioned.
+    #
+    # Deliberately NOT an anaphora detector: "το" is also the commonest Greek
+    # article, and this module avoids fragile Greek/English regexes on purpose
+    # (see build_day_view). Instead the target must be JUSTIFIED — either it is
+    # a record_id this conversation already surfaced, or the user named it in
+    # this very turn, decided with the same stem matching search_tasks uses so
+    # Greek inflection is handled. Armed only once the conversation HAS refs,
+    # i.e. on a follow-up turn, so single-turn behaviour is untouched.
+    def _unjustified_target(task) -> Optional[str]:
+        if not conversation_refs or not question:
+            return None
+        if task.record_id in conversation_refs:
+            return None
+        if stem_words(question) & stem_words(task.task_name or ""):
+            return None
+        return (
+            f"'{task.task_name}' is not what the user referred to: they did not name it in "
+            f"this turn, and it is not one of the tasks this conversation has discussed. You "
+            f"are most likely picking a task out of the pre-loaded day view, which is unrelated "
+            f"background. Use a record_id from a [refs: ...] line in an earlier answer, or — if "
+            f"you genuinely cannot tell which task is meant — ask the user, naming the "
+            f"candidates. Do NOT retry with another day-view task."
+        )
+
     # "Never propose a write on a task awaiting Inbox approval" used to exist ONLY
     # as one line of prose in the system instruction — nothing in the code or in
     # /agent/confirm-action enforced it. Since the model demonstrably drops
@@ -785,12 +849,11 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
     )
 
     def propose_complete_task(record_id: str) -> dict:
-        """Proposes marking an existing task as completed. Does not complete
-        it — only registers a proposal the user must confirm. Do not call
-        this for a task that is already completed.
+        """Proposes marking a task completed. Only registers a proposal the user
+        must confirm. Not for already-completed tasks.
 
         Args:
-            record_id: The task's record ID, as returned by search_tasks or get_task_details.
+            record_id: The task's record ID.
         """
         logging.info(f"[agent] propose_complete_task called: record_id={record_id}")
         task = _find_task(record_id)
@@ -798,6 +861,9 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
             return {"error": "Task not found"}
         if is_pending_task(task):
             return {"error": _PENDING_ERROR}
+        unjustified = _unjustified_target(task)
+        if unjustified:
+            return {"error": unjustified}
         if task.is_completed:
             return {"error": "Task is already completed"}
 
@@ -818,17 +884,16 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
         task_name: str = None,
         description: str = None,
     ) -> dict:
-        """Proposes changing one or more fields on an existing task. Does not
-        apply the change — only registers a proposal the user must confirm.
-        Only pass the fields that should actually change; omit the rest.
+        """Proposes changing fields on a task. Only registers a proposal the user
+        must confirm. Pass ONLY the fields that change.
 
         Args:
-            record_id: The task's record ID, as returned by search_tasks or get_task_details.
-            due_date: New due date in YYYY-MM-DD format. Omit if unchanged.
-            due_time: New due time in HH:MM 24-hour format. Omit if unchanged.
+            record_id: The task's record ID.
+            due_date: New due date, YYYY-MM-DD. Omit if unchanged.
+            due_time: New due time, HH:MM. Omit if unchanged.
             priority: New priority. Omit if unchanged.
             category: New category. Omit if unchanged.
-            task_name: New task name. Omit if unchanged.
+            task_name: New name. Omit if unchanged.
             description: New description. Omit if unchanged.
         """
         logging.info(f"[agent] propose_update_task called: record_id={record_id}")
@@ -837,6 +902,9 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
             return {"error": "Task not found"}
         if is_pending_task(task):
             return {"error": _PENDING_ERROR}
+        unjustified = _unjustified_target(task)
+        if unjustified:
+            return {"error": unjustified}
 
         candidate_fields = {
             "due_date": due_date,
@@ -875,17 +943,16 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks):
         due_date: str = None,
         due_time: str = None,
     ) -> dict:
-        """Proposes creating a new task. Does not create it — only registers
-        a proposal the user must confirm. The created task will land in the
-        Inbox for approval, not directly in the user's task list.
+        """Proposes creating a task. Only registers a proposal the user must
+        confirm. The task lands in the Inbox for approval.
 
         Args:
             task_name: The new task's name (required).
-            description: The new task's description. Defaults to empty.
-            category: The new task's category. Defaults to Unknown.
-            priority: The new task's priority. Defaults to P3.
-            due_date: Due date in YYYY-MM-DD format. Omit if there isn't one.
-            due_time: Due time in HH:MM 24-hour format. Omit if there isn't one.
+            description: Description. Defaults to empty.
+            category: Category. Defaults to Unknown.
+            priority: Priority. Defaults to P3.
+            due_date: Due date, YYYY-MM-DD. Omit if none.
+            due_time: Due time, HH:MM. Omit if none.
         """
         logging.info(f"[agent] propose_create_task called: task_name={task_name}")
         if not task_name or not task_name.strip():

@@ -201,9 +201,21 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         # USER can see is the backstop, because only the user knows what they meant.
         searches_run: list[dict] = []
 
+        # Every record_id this conversation has already surfaced, from the refs
+        # stored on earlier runs. Arms the write tools' anaphora guard: on a
+        # follow-up turn a proposal must target either one of these or a task the
+        # user names in the current question — see _unjustified_target.
+        conversation_refs = {
+            r.get("record_id")
+            for past_run in history
+            for r in (past_run.get("refs") or [])
+            if r.get("record_id")
+        }
+
         search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks)
         propose_complete_task, propose_update_task, propose_create_task = agent_tools.build_write_proposal_tools(
-            proposed_actions, cached_tasks
+            proposed_actions, cached_tasks,
+            question=question, conversation_refs=conversation_refs,
         )
         all_tools = [
             search_tasks, get_task_details,
@@ -233,9 +245,14 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         history_contents = agent_tools.build_history_contents(history)
         run["history_messages"] = len(history_contents)
 
+        # Refs go ABOVE the day view deliberately: the measured failure was the
+        # model resolving "it" to a day-view row, so what the conversation is
+        # actually about must be read first — see build_conversation_refs_block.
+        refs_block = agent_tools.build_conversation_refs_block(history)
         current_turn_text = (
             f"{time_header}\n\n"
-            f"[PRE-LOADED — overdue and today's open tasks, already sorted, COMPLETE "
+            + (f"{refs_block}\n\n" if refs_block else "")
+            + f"[PRE-LOADED — overdue and today's open tasks, already sorted, COMPLETE "
             f"for THESE TWO SCOPES ONLY:]\n{day_view}\n\n"
             f"Question: {question}"
         )
