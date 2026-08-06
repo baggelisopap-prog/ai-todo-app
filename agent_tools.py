@@ -80,6 +80,33 @@ GREEK_TO_LATIN = {
 }
 
 
+# Greek inflects by changing the ENDING of a word, never its start: a task named
+# "Ραντεβού οδοντιάτρου" is genuinely invisible to a search for "οδοντίατρος"
+# under substring matching, and no instruction or larger model can fix that —
+# the tool simply never returned it (observed). Comparing a fixed-length prefix
+# of each word is the cheap, deterministic way to bridge that: it keeps enough
+# characters to stay specific while dropping the case ending.
+# Deliberately NOT a real stemmer. The proper fix is Postgres full-text search
+# with its Greek Snowball configuration (the DB is already Postgres via
+# Supabase); this covers the common case without a schema change or a per-query
+# round trip. Revisit if word-level matching proves too loose in the logs.
+STEM_PREFIX_LENGTH = 5
+STEM_MIN_WORD_LENGTH = 6
+
+
+def stem_words(text: str) -> set[str]:
+    """Prefix-stems every sufficiently long word in `text`, accent-folded.
+    Short words are dropped entirely rather than stemmed: cutting a 4-letter
+    word to 5 chars is a no-op, and matching on 5-char prefixes of short common
+    words would match nearly everything."""
+    stems = set()
+    for word in transliterate_greek_to_latin(text).split():
+        cleaned = ''.join(ch for ch in word if ch.isalnum())
+        if len(cleaned) >= STEM_MIN_WORD_LENGTH:
+            stems.add(cleaned[:STEM_PREFIX_LENGTH])
+    return stems
+
+
 def transliterate_greek_to_latin(text: str) -> str:
     """
     Converts Greek characters in text to their Latin phonetic equivalents.
@@ -368,6 +395,7 @@ def build_tool_functions(cached_tasks):
             for tok in keyword_lower.split()
             if len(tok) >= 4
         ]
+        keyword_stems = stem_words(keyword_lower)
 
         def _scan(with_completed: bool):
             """One filtering pass over cached_tasks, returning
@@ -389,13 +417,21 @@ def build_tool_functions(cached_tasks):
                         keyword_lower in task_haystack
                         or keyword_latin in task_haystack_latin
                     )
-                    # The keyword is matched as ONE literal substring, so any multi-word
-                    # keyword ("δοκιμαστικα τεστ task") is near-guaranteed to match nothing
-                    # even when every word of it appears. Tracked per task here so the
-                    # fallback after the loop can rescue exactly that case.
-                    token_matches = keyword_matches or any(
-                        tok in task_haystack or tok_latin in task_haystack_latin
-                        for tok, tok_latin in keyword_tokens
+                    # Two ways an exact substring match fails on a task that clearly
+                    # IS the one meant, both observed in testing:
+                    #   multi-word keyword — "δοκιμαστικα τεστ task" matches nothing
+                    #     as one literal string even though every word of it appears
+                    #   Greek inflection — "οδοντίατρος" never matches "οδοντιάτρου"
+                    # Tracked per task so the fallback after the loop can rescue both.
+                    # Deliberately looser than the exact match: it is ONLY consulted
+                    # when the exact pass found nothing at all.
+                    token_matches = (
+                        keyword_matches
+                        or any(
+                            tok in task_haystack or tok_latin in task_haystack_latin
+                            for tok, tok_latin in keyword_tokens
+                        )
+                        or bool(keyword_stems & stem_words(task_haystack))
                     )
                 else:
                     keyword_matches = token_matches = True
@@ -503,9 +539,10 @@ def build_tool_functions(cached_tasks):
 
         if used_fuzzy:
             result["fuzzy_keyword_note"] = (
-                f"No task contains the exact phrase '{keyword}'. These matched a word of it "
-                f"instead, so check the names before relying on them. Do NOT search again with "
-                f"a reworded keyword — this already covers that."
+                f"No task contains the exact phrase '{keyword}'. These matched a word — or a "
+                f"word-stem, which is how Greek inflection is handled — of it instead, so read "
+                f"the names before relying on them. Do NOT search again with a reworded or "
+                f"differently-inflected keyword: that is exactly what this already did."
             )
 
         if completed_only:
