@@ -298,14 +298,18 @@ The user turn contains ALL open tasks that are overdue or due today, pre-sorted,
 - A PENDING APPROVAL section lists tasks awaiting the user's Inbox approval that are due today or late. Report them separately as awaiting approval.
 - A "(+N more ...)" line means N further items exist — say so; never present the listed ones as complete.
 
-FILTERS — pass only what the user actually said:
-Every search_tasks argument must come from the user's own words. An invented filter silently hides tasks and produces a confident wrong answer. When unsure, leave it out: an over-broad result is recoverable, a silently narrowed one is not.
-- category: only if named or an unmistakable synonym — δουλειά/εργασία/επαγγελματικά → Business; προσωπικά/σπίτι/οικογένεια → Personal; guest messages, rental property or "Hostaway" → Hostaway. Match even if informal or misspelled ("buisness" → Business). If the question is category-agnostic, leave it EMPTY.
-- priority: only if the user said P1/P2/P3, "επείγον", "urgent", "σημαντικό". Never add priority to narrow a broad question.
-- keyword: only if the user named a specific task or thing.
-- date_from/date_to: only if the user gave a time reference. NO time reference at all ("τα επαγγελματικά μου", "τι έχω να κάνω;", "σημείωσε το X ως ολοκληρωμένο") means BOTH date fields EMPTY — that returns everything open, which is what was asked.
-- Looking up a task the user NAMED in order to act on it is a name lookup: pass keyword ONLY. Never attach a date or category you inferred rather than heard.
-- Pass all real constraints together in one call. If you search more than once, be clear which result set your answer uses.
+FILTERS — every argument must trace to a word the user actually said.
+A filter you added yourself silently hides tasks and turns a wrong answer into a confident one. Omitting one only widens the result, which the user can see and correct. So when in doubt, leave it out.
+Only these count as evidence: category — δουλειά/εργασία/επαγγελματικά (even misspelled, "buisness") → Business; προσωπικά/σπίτι/οικογένεια → Personal; guest messages or rental property → Hostaway. priority — "P1", "επείγον", "urgent", "σημαντικό". dates — an actual time reference. keyword — a specific thing they named.
+
+Study these; they are the whole rule:
+  "τι έχω αύριο;"                    -> date_from=<tomorrow>, date_to=<tomorrow>          (nothing else — no category was said)
+  "τι πρέπει να ψωνίσω;"             -> keyword="ψώνια"                                    (NOT Personal, NOT P3, NOT today — none were said)
+  "τα επαγγελματικά μου"             -> category="Business"                                (no date: none was said, so ALL open business tasks)
+  "σημείωσε το X ως ολοκληρωμένο"    -> keyword="X"                                        (a name lookup is keyword ONLY, never a date or category you guessed)
+  "επείγοντα επαγγελματικά σήμερα"   -> category="Business", priority="P1", date_from=date_to=<today>   (all three WERE said — pass them together in one call)
+
+If you search more than once, say which result set your answer uses.
 
 DATE RESOLUTION:
 - A SINGLE day ("today", "tomorrow", a weekday, a date): set date_from AND date_to to that SAME date.
@@ -585,6 +589,77 @@ def build_tool_functions(cached_tasks):
                     "No tasks in that range. Open tasks exist on: " + ", ".join(nearby[:12])
                 )
                 logging.info(f"[agent] no_matches_hint attached: {len(nearby)} dates with open tasks")
+
+        # An empty result with several filters set is the shape an INVENTED filter
+        # takes: the model adds a category or a date nobody asked for, gets nothing,
+        # and reports "you have none" over data it silently narrowed. Re-running the
+        # search with each filter dropped in turn is free here and names the culprit
+        # outright, instead of leaving the model to guess which one to relax.
+        active_filters = {
+            "date range": has_date_filter,
+            "category": bool(category),
+            "priority": bool(priority),
+            "keyword": bool(keyword),
+        }
+        if total_matches == 0 and sum(active_filters.values()) > 1:
+
+            def _count_with(active: set) -> int:
+                """Counts matches applying ONLY the named filters. Deliberately NOT
+                a recursive search_tasks call: that would re-enter this same block
+                and fan out combinatorially for a number we throw away."""
+                n = 0
+                for task in cached_tasks:
+                    if not is_open_task(task, include_completed):
+                        continue
+                    if "date range" in active:
+                        if date_from and (not task.due_date or task.due_date < date_from):
+                            continue
+                        if date_to and (not task.due_date or task.due_date > date_to):
+                            continue
+                    if "category" in active and category and task.category != category:
+                        continue
+                    if "priority" in active and priority and task.priority != priority:
+                        continue
+                    if "keyword" in active and keyword:
+                        hay = f"{task.task_name} {task.description or ''}".lower()
+                        if not (
+                            keyword_lower in hay
+                            or keyword_latin in transliterate_greek_to_latin(hay)
+                            or bool(keyword_stems & stem_words(hay))
+                        ):
+                            continue
+                    n += 1
+                return n
+
+            # Dropping filters ONE at a time is not enough: in the observed failure
+            # two invented filters (a priority and a date) each independently
+            # excluded the real task, so every single-filter relaxation still
+            # returned 0 and the diagnostic stayed silent. Widening all the way down
+            # to the keyword alone is what actually names the problem.
+            set_names = {n for n, on in active_filters.items() if on}
+            candidates = [(f"without {n}", set_names - {n}) for n in sorted(set_names)]
+            if "keyword" in set_names and len(set_names) > 1:
+                candidates.append(("with the keyword alone", {"keyword"}))
+            candidates.append(("with no filters at all", set()))
+
+            seen, relaxations = set(), []
+            for label, subset in candidates:
+                key = frozenset(subset)
+                if key in seen:
+                    continue
+                seen.add(key)
+                widened = _count_with(subset)
+                if widened:
+                    relaxations.append(f"{label}: {widened}")
+
+            if relaxations:
+                result["over_filtered_hint"] = (
+                    "0 matches with all filters applied. The same search " + "; ".join(relaxations)
+                    + ". A filter that did not come from the user's own words is the likely cause "
+                    "— drop it and search again. Never report 'you have none' when a filter you "
+                    "added yourself produced the 0."
+                )
+                logging.info(f"[agent] over_filtered_hint attached: {relaxations}")
 
         return result
 
