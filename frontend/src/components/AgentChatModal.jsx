@@ -48,6 +48,49 @@ function fieldValue(t, field, value) {
   return value;
 }
 
+// Renders the filters the agent actually searched with, as returned under
+// `searches`. This exists because the agent was observed narrowing a search
+// with a category or a date the user never mentioned, and then reporting "you
+// have none" over the result — invisibly. The backend now detects and warns
+// the agent about that case, but only the user knows what they actually meant,
+// so the filters are shown to them as the last line of defence. Same principle
+// as the confirmation cards: make the machine's intent visible before it
+// matters, rather than asking the user to trust it.
+function describeFilters(t, filters) {
+  const parts = [];
+  const { keyword, category, priority, date_from: from, date_to: to, include_completed: done } = filters;
+
+  if (keyword) parts.push(t('agent.searched_filter_keyword', { value: keyword }));
+  if (category) parts.push(t('agent.searched_filter_category', { value: fieldValue(t, 'category', category) }));
+  if (priority) parts.push(t('agent.searched_filter_priority', { value: priority }));
+  // A single-day search is the common case and reads badly as "from X until X".
+  if (from && to && from === to) parts.push(t('agent.searched_filter_on', { value: from }));
+  else {
+    if (from) parts.push(t('agent.searched_filter_from', { value: from }));
+    if (to) parts.push(t('agent.searched_filter_to', { value: to }));
+  }
+  if (done) parts.push(t('agent.searched_filter_completed'));
+
+  return parts.length ? parts.join(', ') : t('agent.searched_all_open');
+}
+
+function SearchTrace({ searches, t }) {
+  if (!searches?.length) return null;
+
+  return (
+    <div className="mt-1.5 space-y-0.5">
+      {searches.map((search, idx) => (
+        <p key={idx} className="text-xs text-[var(--text-muted)]">
+          <span className="opacity-70">{t('agent.searched_label')}:</span>{' '}
+          {describeFilters(t, search.filters || {})}
+          {' · '}
+          {t('agent.searched_results', { count: search.total_matches ?? 0 })}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function ProposalCard({ action, t, onConfirm, onCancel }) {
   const isBusy = action.status === 'pending';
   const isDone = action.status === 'done';
@@ -163,7 +206,10 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
       const result = await askAgent(question, conversationId);
       setConversationId(result.conversation_id);
       const actions = (result.proposed_actions || []).map(action => ({ ...action, status: 'idle' }));
-      setMessages(prev => [...prev, { role: 'agent', text: result.answer, actions }]);
+      setMessages(prev => [
+        ...prev,
+        { role: 'agent', text: result.answer, actions, searches: result.searches || [] },
+      ]);
     } catch {
       setMessages(prev => [...prev, { role: 'agent', text: t('agent.error') }]);
     } finally {
@@ -304,6 +350,8 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
                   msg.text
                 )}
               </div>
+
+              {msg.role === 'agent' && <SearchTrace searches={msg.searches} t={t} />}
 
               {msg.actions?.length > 0 && (
                 <div className="w-full max-w-[80%] mt-2 space-y-2">
