@@ -926,6 +926,32 @@ def build_write_proposal_tools(proposed_actions: list, available_tasks,
         if not fields:
             return {"error": "No fields provided to update, or every value given already matches the task"}
 
+        # Field contamination. Once the guard above stopped the model targeting
+        # the wrong task outright, the next thing observed was it targeting the
+        # RIGHT one and filling the free-text fields with a DIFFERENT task's
+        # values: asked to move the dentist appointment to Friday, it sent
+        # due_date (correct) plus the car repair's description, which a confirmed
+        # card would have written straight over. An exact match against another
+        # task's current free-text value is not a change the user asked for, it
+        # is a copy — enum fields are excluded because equal values there carry
+        # no such signal.
+        for key in ("description", "task_name"):
+            value = fields.get(key)
+            if value is None:
+                continue
+            source = next(
+                (t for t in available_tasks
+                 if t.record_id != record_id and getattr(t, key, None) == value),
+                None,
+            )
+            if source is not None:
+                return {"error": (
+                    f"The {key} you passed is character-for-character the current {key} of a "
+                    f"DIFFERENT task ('{source.task_name}'), so this is a copy, not a change the "
+                    f"user asked for. Re-send with ONLY the fields the user actually asked to "
+                    f"change, and never carry a value across from another task."
+                )}
+
         proposed_actions.append({
             "action_id": str(uuid.uuid4()),
             "type": "update_task",
