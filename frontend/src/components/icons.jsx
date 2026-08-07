@@ -62,6 +62,19 @@ export function ChatIcon({ className = 'w-5 h-5' }) {
   );
 }
 
+/** Marks a control as AI-driven. Used by the per-task edit agent on TaskCard,
+ *  so an otherwise anonymous text field reads as a feature rather than a
+ *  stray input. Filled rather than stroked, to sit apart from the outlined
+ *  action icons around it. */
+export function SparkleIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z" />
+      <path d="M18.5 14l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6z" opacity="0.65" />
+    </svg>
+  );
+}
+
 export function SpinnerIcon({ className = 'w-7 h-7 animate-spin' }) {
   return (
     <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

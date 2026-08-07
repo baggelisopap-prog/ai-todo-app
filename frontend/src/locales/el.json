@@ -115,10 +115,24 @@
     "notification_on": "Υπενθύμιση ενεργή",
     "notification_off": "Ορισμός υπενθύμισης",
     "no_time_for_reminder": "Προσθέστε ώρα σε αυτή την εργασία για να ορίσετε υπενθύμιση",
-    "agent_placeholder": "Πες μου τι να αλλάξω…",
+    "agent_title": "Αλλαγή με AI",
+    "agent_placeholder": "π.χ. βάλ' το Παρασκευή απόγευμα",
     "agent_send": "Εφαρμογή",
+    "agent_thinking": "Το επεξεργάζομαι…",
     "agent_undo": "ΑΝΑΙΡΕΣΗ",
-    "agent_skipped": "δεν έγινε: {{fields}}"
+    "agent_skipped": "δεν έγινε: {{fields}}",
+    "agent_field_completed": "Ολοκληρωμένη",
+    "agent_field_notify": "Υπενθύμιση",
+    "agent_field_calendar": "Ημερολόγιο",
+    "agent_value_empty": "—",
+    "agent_value_yes": "Ναι",
+    "agent_value_no": "Όχι",
+    "agent_value_items": "{{count}} στοιχεία",
+    "agent_sug_tomorrow": "Βάλ' το αύριο",
+    "agent_sug_next_week": "Την επόμενη βδομάδα",
+    "agent_sug_day_later": "Μία μέρα μετά",
+    "agent_sug_morning": "Βάλ' το το πρωί",
+    "agent_sug_hour_earlier": "Μία ώρα νωρίτερα"
   },
   "menu": {
     "open_menu": "Άνοιγμα μενού"

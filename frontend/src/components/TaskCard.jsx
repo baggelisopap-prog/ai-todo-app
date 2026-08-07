@@ -4,6 +4,7 @@ import { deleteTask, agentEditTask } from '../api';
 import { formatDate, roundToNearestHalfHour } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import CustomSelect from './CustomSelect';
+import { SparkleIcon, SpinnerIcon } from './icons';
 
 function categoryColor(category) {
   switch (category) {
@@ -24,6 +25,60 @@ const ACTION_TOAST_KEYS = {
   reject: 'toast.rejected',
   unreject: 'toast.unrejected',
 };
+
+// Field → existing translation key, for rendering what the agent changed.
+// Reuses the labels already on the edit form so the diff names each field the
+// same way the field above it does.
+const AGENT_FIELD_LABELS = {
+  task_name: 'task.name_placeholder',
+  description: 'task.description_label',
+  category: 'task.category_label',
+  priority: 'task.priority_label',
+  due_date: 'task.due_date_label',
+  due_time: 'task.due_time_label',
+  checklist: 'task.checklist_label',
+  is_completed: 'task.agent_field_completed',
+  notify_enabled: 'task.agent_field_notify',
+  calendar_sync_enabled: 'task.agent_field_calendar',
+};
+
+function formatAgentValue(field, value, t) {
+  if (value === null || value === undefined || value === '') return t('task.agent_value_empty');
+  if (field === 'checklist') return t('task.agent_value_items', { count: value.length });
+  if (typeof value === 'boolean') return t(value ? 'task.agent_value_yes' : 'task.agent_value_no');
+  if (field === 'due_date') return formatDate(value);
+  return String(value);
+}
+
+/**
+ * The chips offered under the agent's input while it is empty. Two rules
+ * shaped this list.
+ *
+ * They are derived from THIS task's state, not fixed: offering "set it for
+ * the morning" on a task that already has a time, or a relative nudge on one
+ * with no date to nudge, teaches the wrong thing about what the box accepts.
+ *
+ * And they are ALL date/time. Chips for priority, completion or the reminder
+ * were written and then removed: each would spend a model call and a write on
+ * something the dropdown, the ○ button and the bell already do in one tap for
+ * zero tokens — the same objection DECISIONS.md raises against an "add a
+ * task" chip in the chat agent. Rescheduling is where typing genuinely beats
+ * the form, because "next week" costs a date picker and a bit of mental
+ * arithmetic, so that is what the chips advertise.
+ *
+ * Each chip's label IS the instruction sent, so there is no second string to
+ * keep in step with it.
+ */
+function agentSuggestionKeys(task) {
+  const keys = [];
+  if (task.due_date) {
+    keys.push('task.agent_sug_day_later', 'task.agent_sug_next_week');
+  } else {
+    keys.push('task.agent_sug_tomorrow', 'task.agent_sug_next_week');
+  }
+  keys.push(task.due_time ? 'task.agent_sug_hour_earlier' : 'task.agent_sug_morning');
+  return keys;
+}
 
 /**
  * The expanded card's edit form state, built from a task. Extracted because
@@ -73,6 +128,11 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
   const [isAgentBusy, setIsAgentBusy] = useState(false);
   const [agentNote, setAgentNote] = useState(null);
   const [agentError, setAgentError] = useState(null);
+  // What the last edit actually changed, rendered as a before → after list
+  // under the input. The toast carries the UNDO (it survives the card being
+  // collapsed); this carries the DETAIL, which the toast has no room for and
+  // which disappears with it after 7 seconds while the card stays open.
+  const [agentResult, setAgentResult] = useState(null);
 
   const cardRef = useRef(null);
   const menuRef = useRef(null);
@@ -107,6 +167,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
     setAgentInput('');
     setAgentNote(null);
     setAgentError(null);
+    setAgentResult(null);
   }, [isExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -319,14 +380,17 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
    * the manual form uses, so there is one write path, not two (see
    * main.py's /tasks/{id}/agent-edit and task_agent.py).
    */
-  async function handleAgentEdit(e) {
-    if (e) e.preventDefault();
-    const instruction = agentInput.trim();
+  async function handleAgentEdit(presetInstruction) {
+    // Called both from the input (no argument) and from a suggestion chip,
+    // which passes its own label — the chip's text IS the instruction, so
+    // there is no separate string to keep in step with the label.
+    const instruction = (typeof presetInstruction === 'string' ? presetInstruction : agentInput).trim();
     if (!instruction || isAgentBusy) return;
 
     setIsAgentBusy(true);
     setAgentNote(null);
     setAgentError(null);
+    setAgentResult(null);
     try {
       const plan = await agentEditTask(task.record_id, instruction);
 
@@ -335,7 +399,9 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
         // good. Routed through the existing handleDelete so it gets the same
         // confirmation dialog and the same calendar-outcome toast as deleting
         // from the ⋮ menu, rather than a second delete path to keep in step.
-        setAgentInput('');
+        // The typed text is deliberately NOT cleared: the confirmation can be
+        // declined, and clearing it would leave the user with nothing after
+        // they said no.
         await handleDelete();
         return;
       }
@@ -350,6 +416,14 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
       const updated = await onUpdate(task.record_id, plan.fields);
       setAgentInput('');
       setDraft(draftFromTask(updated));
+      setAgentResult({
+        message: plan.message,
+        changes: Object.keys(plan.fields).map((field) => ({
+          field,
+          before: formatAgentValue(field, plan.before[field], t),
+          after: formatAgentValue(field, plan.fields[field], t),
+        })),
+      });
 
       const dropped = plan.invalid || [];
       onShowToast({
@@ -365,7 +439,11 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
           // the real previous values even if the card was stale.
           onClick: () => {
             onUpdate(task.record_id, plan.before)
-              .then((reverted) => setDraft(draftFromTask(reverted)))
+              .then((reverted) => {
+                setDraft(draftFromTask(reverted));
+                // The change list describes an edit that no longer exists.
+                setAgentResult(null);
+              })
               .catch(() => {});
           },
         },
@@ -711,7 +789,20 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
               the whole reason it is a separate, much smaller agent (see
               task_agent.py). Enter submits; the card's own click handler
               already ignores INPUT/BUTTON, so typing here can't collapse it. */}
-          <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
+          <div
+            data-no-toggle
+            className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-hover)] p-3 space-y-2"
+          >
+            {/* Named and marked. Without this row the field was an unlabelled
+                text box between two form sections, and nothing said it was a
+                feature at all, let alone what it accepted. */}
+            <div className="flex items-center gap-1.5 text-[var(--brand-primary)]">
+              <SparkleIcon className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide">
+                {t('task.agent_title')}
+              </span>
+            </div>
+
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -729,16 +820,65 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
               />
               <button
                 type="button"
-                onClick={handleAgentEdit}
+                onClick={() => handleAgentEdit()}
                 disabled={isAgentBusy || isSaving || isDeleting || !agentInput.trim()}
-                className="px-3 py-2 rounded-md text-sm font-medium bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-hover)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors shrink-0"
+                className="w-10 h-10 flex items-center justify-center rounded-md text-sm font-medium bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-card)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors shrink-0"
                 aria-label={t('task.agent_send')}
               >
-                {isAgentBusy ? '…' : '↵'}
+                {isAgentBusy ? <SpinnerIcon className="w-4 h-4 animate-spin" /> : '↵'}
               </button>
             </div>
+
+            {/* Only while there is nothing typed and nothing to report: these
+                exist to show what the box accepts, and once it has been used
+                that job is done. Each chip is built from THIS task's state —
+                see agentSuggestionKeys. */}
+            {!agentInput && !agentResult && !agentNote && !isAgentBusy && (
+              <div className="flex flex-wrap gap-1.5">
+                {agentSuggestionKeys(task).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleAgentEdit(t(key))}
+                    disabled={isSaving || isDeleting}
+                    className="px-2.5 py-1 rounded-full text-xs bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors"
+                  >
+                    {t(key)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {isAgentBusy && (
+              <p className="text-xs text-[var(--text-muted)] italic">{t('task.agent_thinking')}</p>
+            )}
+
+            {/* What actually changed. The toast holds the UNDO because it
+                outlives the card; this holds the detail, which the toast has
+                no room for and which vanishes with it after 7 seconds. */}
+            {agentResult && (
+              <div className="rounded-md bg-[var(--bg-card)] border border-[var(--border-subtle)] px-3 py-2 space-y-1">
+                <p className="text-xs text-[var(--text-primary)]">{agentResult.message}</p>
+                {agentResult.changes.map((c) => (
+                  <div key={c.field} className="flex items-baseline gap-2 text-[11px]">
+                    <span className="text-[var(--text-muted)] shrink-0">
+                      {t(AGENT_FIELD_LABELS[c.field] || c.field)}
+                    </span>
+                    <span className="text-[var(--text-muted)] line-through">{c.before}</span>
+                    <span className="text-[var(--text-muted)]">→</span>
+                    <span className="text-[var(--text-primary)] font-medium">{c.after}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* The agent asked something back, or found nothing to do. Shown
+                as its own line next to the input the user is about to fix. */}
             {agentNote && (
-              <p className="text-xs text-[var(--text-secondary)]">{agentNote}</p>
+              <p className="text-xs text-[var(--text-secondary)] flex items-start gap-1.5">
+                <SparkleIcon className="w-3 h-3 mt-0.5 shrink-0 text-[var(--brand-primary)]" />
+                <span>{agentNote}</span>
+              </p>
             )}
             {agentError && (
               <p className="text-xs text-[var(--danger)]">

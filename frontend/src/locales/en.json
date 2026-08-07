@@ -115,10 +115,24 @@
     "notification_on": "Reminder on",
     "notification_off": "Set reminder",
     "no_time_for_reminder": "Add a time to this task to set a reminder",
-    "agent_placeholder": "Tell me what to change…",
+    "agent_title": "Edit with AI",
+    "agent_placeholder": "e.g. move it to Friday afternoon",
     "agent_send": "Apply",
+    "agent_thinking": "Working on it…",
     "agent_undo": "UNDO",
-    "agent_skipped": "couldn't do: {{fields}}"
+    "agent_skipped": "couldn't do: {{fields}}",
+    "agent_field_completed": "Completed",
+    "agent_field_notify": "Reminder",
+    "agent_field_calendar": "Calendar",
+    "agent_value_empty": "—",
+    "agent_value_yes": "Yes",
+    "agent_value_no": "No",
+    "agent_value_items": "{{count}} items",
+    "agent_sug_tomorrow": "Move it to tomorrow",
+    "agent_sug_next_week": "Next week",
+    "agent_sug_day_later": "A day later",
+    "agent_sug_morning": "Set it for the morning",
+    "agent_sug_hour_earlier": "An hour earlier"
   },
   "menu": {
     "open_menu": "Open menu"
