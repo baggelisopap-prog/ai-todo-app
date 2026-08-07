@@ -37,6 +37,7 @@ const AGENT_FIELD_LABELS = {
   due_date: 'task.due_date_label',
   due_time: 'task.due_time_label',
   checklist: 'task.checklist_label',
+  approval_status: 'task.agent_field_approved',
   is_completed: 'task.agent_field_completed',
   notify_enabled: 'task.agent_field_notify',
   calendar_sync_enabled: 'task.agent_field_calendar',
@@ -140,6 +141,14 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
   const isPending = !task.approval_status;
   const isCompleted = optimisticCompleted ?? task.is_completed;
   const isRejected = task.is_rejected;
+  // Editing a task that is waiting for approval — by Save or by the inline
+  // agent — approves it: opening it, changing something and confirming IS the
+  // review, and making the user then hunt for the ○ asks them to say yes
+  // twice. Same rule the ○ already applies when completing a pending task.
+  // Rejected tasks are excluded: rejecting only sets is_rejected and leaves
+  // approval_status false, so without this a rejected task would come back
+  // approved-but-still-rejected merely for being edited.
+  const approvesOnEdit = isPending && !isRejected;
   const displayChecklist = optimisticChecklist ?? task.checklist;
   const showDescription = task.description && task.description !== task.task_name;
 
@@ -222,10 +231,14 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
       due_date: draft.due_date || null,
       due_time: draft.due_time || null,
       checklist: draft.checklist,
+      // See approvesOnEdit. The button says so (actions.save_approve) — a
+      // silent approval would be a side effect nobody asked for.
+      ...(approvesOnEdit ? { approval_status: true } : {}),
     };
 
     try {
       await onUpdate(task.record_id, updates);
+      if (approvesOnEdit) onShowToast('toast.approved', 'success');
       onToggleExpand(null);
     } catch (err) {
       setSaveError(err.message);
@@ -413,23 +426,39 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
         return;
       }
 
-      const updated = await onUpdate(task.record_id, plan.fields);
+      // An agent edit approves a pending task exactly as Save does — see
+      // approvesOnEdit. Note WHERE this is added: here, in the UI, not in the
+      // plan the backend returned. task_agent deliberately cannot touch
+      // approval_status (see its TASK_AGENT_WRITABLE_FIELDS) and that stays
+      // true — the model never proposes an approval. What approves the task is
+      // the USER choosing to edit it from its own card, so the decision is the
+      // client's to add, not the model's to make.
+      const approving = approvesOnEdit;
+      const fields = approving ? { ...plan.fields, approval_status: true } : plan.fields;
+      // Undo must put back everything this action changed, the approval
+      // included — otherwise "undo" would quietly leave the task approved and
+      // out of the Inbox after restoring its old values.
+      const before = approving ? { ...plan.before, approval_status: false } : plan.before;
+
+      const updated = await onUpdate(task.record_id, fields);
       setAgentInput('');
       setDraft(draftFromTask(updated));
       setAgentResult({
         message: plan.message,
-        changes: Object.keys(plan.fields).map((field) => ({
+        changes: Object.keys(fields).map((field) => ({
           field,
-          before: formatAgentValue(field, plan.before[field], t),
-          after: formatAgentValue(field, plan.fields[field], t),
+          before: formatAgentValue(field, before[field], t),
+          after: formatAgentValue(field, fields[field], t),
         })),
       });
 
       const dropped = plan.invalid || [];
+      const notes = [
+        approving ? t('task.agent_approved_too') : null,
+        dropped.length ? t('task.agent_skipped', { fields: dropped.join(', ') }) : null,
+      ].filter(Boolean);
       onShowToast({
-        message: dropped.length
-          ? `${plan.message} (${t('task.agent_skipped', { fields: dropped.join(', ') })})`
-          : plan.message,
+        message: notes.length ? `${plan.message} (${notes.join(' · ')})` : plan.message,
         variant: 'success',
         duration: 7000,
         action: {
@@ -438,7 +467,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
           // held, not from this card's rendered state, so an undo restores
           // the real previous values even if the card was stale.
           onClick: () => {
-            onUpdate(task.record_id, plan.before)
+            onUpdate(task.record_id, before)
               .then((reverted) => {
                 setDraft(draftFromTask(reverted));
                 // The change list describes an edit that no longer exists.
@@ -910,7 +939,9 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
               disabled={isSaving || isDeleting || !draft.task_name.trim()}
               className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-hover)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors"
             >
-              {isSaving ? t('actions.saving') : t('actions.save')}
+              {isSaving
+                ? t('actions.saving')
+                : approvesOnEdit ? t('actions.save_approve') : t('actions.save')}
             </button>
             <button
               type="button"

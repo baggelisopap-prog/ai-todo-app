@@ -76,7 +76,8 @@
     "unrejecting": "Restoring...",
     "delete": "Delete",
     "deleting": "Deleting...",
-    "edit": "Edit"
+    "edit": "Edit",
+    "save_approve": "Save & approve"
   },
   "modal": {
     "add_task_title": "New Task",
@@ -121,6 +122,8 @@
     "agent_thinking": "Working on it…",
     "agent_undo": "UNDO",
     "agent_skipped": "couldn't do: {{fields}}",
+    "agent_approved_too": "and approved",
+    "agent_field_approved": "Approval",
     "agent_field_completed": "Completed",
     "agent_field_notify": "Reminder",
     "agent_field_calendar": "Calendar",

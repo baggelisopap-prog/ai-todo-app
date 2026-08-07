@@ -76,7 +76,8 @@
     "unrejecting": "Επαναφορά...",
     "delete": "Διαγραφή",
     "deleting": "Διαγραφή...",
-    "edit": "Επεξεργασία"
+    "edit": "Επεξεργασία",
+    "save_approve": "Αποθήκευση & Έγκριση"
   },
   "modal": {
     "add_task_title": "Νέα Εργασία",
@@ -121,6 +122,8 @@
     "agent_thinking": "Το επεξεργάζομαι…",
     "agent_undo": "ΑΝΑΙΡΕΣΗ",
     "agent_skipped": "δεν έγινε: {{fields}}",
+    "agent_approved_too": "και εγκρίθηκε",
+    "agent_field_approved": "Έγκριση",
     "agent_field_completed": "Ολοκληρωμένη",
     "agent_field_notify": "Υπενθύμιση",
     "agent_field_calendar": "Ημερολόγιο",
