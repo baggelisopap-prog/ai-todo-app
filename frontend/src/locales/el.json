@@ -154,7 +154,9 @@
     "unrejected": "Επαναφέρθηκε",
     "deleted": "Διαγράφηκε",
     "deleted_calendar_kept": "Η εργασία διαγράφηκε. Το event στο Google Calendar παρέμεινε — δημιουργήθηκε εκεί, οπότε η εφαρμογή δεν το σβήνει. Διάγραψέ το από το Google Calendar αν το θέλεις.",
-    "deleted_calendar_failed": "Η εργασία διαγράφηκε, αλλά το event στο Google Calendar δεν μπόρεσε να αφαιρεθεί. Παραμένει στο ημερολόγιό σου."
+    "deleted_calendar_failed": "Η εργασία διαγράφηκε, αλλά το event στο Google Calendar δεν μπόρεσε να αφαιρεθεί. Παραμένει στο ημερολόγιό σου.",
+    "event_converted": "Το event προστέθηκε ως εργασία",
+    "event_convert_failed": "Δεν ήταν δυνατή η μετατροπή του event σε εργασία"
   },
   "inbox": {
     "hint": "Πατήστε ○ για έγκριση"

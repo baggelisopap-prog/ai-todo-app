@@ -14,7 +14,13 @@ import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
 import CustomSelect from './CustomSelect';
 import FilterBar from './FilterBar';
-import { createTaskManual, getCalendarEventsInRange, getAppSettings } from '../api';
+import {
+  createTaskManual,
+  getCalendarEventsInRange,
+  getAppSettings,
+  convertCalendarEventToTask,
+  dismissCalendarEvent,
+} from '../api';
 import { toLocalISODate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import { getEventLabel } from '../utils/eventType';
@@ -269,6 +275,32 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     onTaskCreated(created);
   }
 
+  // Turning a Google event into a task was previously reachable ONLY from the
+  // Today view, so an event on any other date could be seen in the calendar but
+  // not acted on — tapping it just left the app for Google. Both handlers drop
+  // the event from local state on success, the same way TodayView does, so the
+  // day popup updates without a refetch.
+  async function handleMakeTask(eventId) {
+    try {
+      const created = await convertCalendarEventToTask(eventId);
+      setCalendarEvents((current) => current.filter((e) => e.id !== eventId));
+      onTaskCreated(created);
+      onShowToast('toast.event_converted', 'success');
+    } catch (err) {
+      console.error('Failed to convert calendar event:', err);
+      onShowToast('toast.event_convert_failed', 'error');
+    }
+  }
+
+  async function handleDismissEvent(eventId) {
+    try {
+      await dismissCalendarEvent(eventId);
+      setCalendarEvents((current) => current.filter((e) => e.id !== eventId));
+    } catch (err) {
+      console.error('Failed to dismiss calendar event:', err);
+    }
+  }
+
   function handleWeeklyTaskDeleted(recordId) {
     if (selectedTaskId === recordId) setSelectedTaskId(null);
     onTaskDeleted(recordId);
@@ -451,6 +483,8 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
             onTaskUpdate={onTaskUpdate}
             onTaskDeleted={onTaskDeleted}
             onShowToast={onShowToast}
+            onMakeTask={handleMakeTask}
+            onDismissEvent={handleDismissEvent}
             onClose={() => handleSelectDate(null)}
             t={t}
           />
@@ -570,7 +604,7 @@ function MonthlyGrid({
   );
 }
 
-function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onClose, t }) {
+function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onMakeTask, onDismissEvent, onClose, t }) {
   const dayLabel = formatSelectedDayLabel(date);
   // Combined so the header count is never misleadingly "(0)" on a day that
   // has events but no tasks — this is what previously made the popup look
@@ -633,7 +667,11 @@ function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpa
 
           {events.length > 0 && (
             <div>
-              {/* Own labeled section, mirroring the Today view's events header — read-only, no make-task/dismiss here. */}
+              {/* Own labeled section, mirroring the Today view's events header.
+                  Make-task/dismiss live HERE now, not only in Today: this popup is
+                  where a day's events are chosen from, so it has to be where they
+                  can be acted on. Tapping the row itself still opens the real event
+                  in Google; the buttons stopPropagation so they don't. */}
               <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-2">
                 {t('calendar.events_header', { count: events.length })}
               </p>
@@ -652,7 +690,20 @@ function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpa
                     {event.start_time && (
                       <span className="text-xs tabular-nums font-medium flex-shrink-0">{event.start_time}</span>
                     )}
-                    <span className="text-sm truncate">{event.title}</span>
+                    <span className="text-sm truncate flex-1">{event.title}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onMakeTask?.(event.id); }}
+                      className="text-xs px-2 py-1 rounded bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium shrink-0"
+                    >
+                      {t('calendar.make_task')}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDismissEvent?.(event.id); }}
+                      className="text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0 px-1"
+                      aria-label={t('calendar.dismiss')}
+                    >
+                      ×
+                    </button>
                   </div>
                 ))}
               </div>
@@ -709,10 +760,17 @@ function MonthlyDayCell({ cell, isSelected, isTodayCell, tasksForDay, eventsForD
           </span>
         ))}
         {shownEvents.map((event) => (
+          // Deliberately NOT individually clickable. These chips used to
+          // stopPropagation and jump straight to Google, which meant a day with
+          // two events opened one of them at random depending on which few
+          // pixels you hit, and only opened the DAY if you managed to miss both
+          // chips. In a month grid a chip is a preview, not a target: the whole
+          // cell selects the day, and the day popup is where you choose an
+          // event and act on it. Task chips above already behave this way — now
+          // events match them.
           <span
             key={event.id}
-            onClick={(e) => { e.stopPropagation(); openEventInGoogle(event); }}
-            className="block w-full truncate rounded px-1 text-[8px] md:text-[10px] leading-tight cursor-pointer hover:brightness-95"
+            className="block w-full truncate rounded px-1 text-[8px] md:text-[10px] leading-tight pointer-events-none"
             style={{ backgroundColor: 'var(--calendar-event-bg)', color: 'var(--calendar-event-text)' }}
           >
             {event.start_time ? `${event.start_time} ` : ''}{event.title}

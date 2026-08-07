@@ -154,7 +154,9 @@
     "unrejected": "Restored",
     "deleted": "Deleted",
     "deleted_calendar_kept": "Task deleted. Its Google Calendar event was kept — that event was created in Google Calendar, so this app doesn't remove it. Delete it there if you want it gone.",
-    "deleted_calendar_failed": "Task deleted, but its Google Calendar event could not be removed. It's still on your calendar."
+    "deleted_calendar_failed": "Task deleted, but its Google Calendar event could not be removed. It's still on your calendar.",
+    "event_converted": "Event added as a task",
+    "event_convert_failed": "Could not turn that event into a task"
   },
   "inbox": {
     "hint": "Tap ○ to approve"
