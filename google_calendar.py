@@ -152,13 +152,30 @@ def sync_task_to_google_calendar(user_id: str, task: dict) -> Optional[str]:
 
 
 def delete_calendar_event(user_id: str, google_event_id: str) -> None:
-    """Deletes a Google Calendar event. Never raises — logs and moves on."""
+    """Deletes a Google Calendar event. Never raises — logs and moves on.
+
+    The response status IS checked. This was the only Google call in this
+    module that ignored it, so a 401 (expired token), 403 or anything else
+    came back from requests.delete() as a perfectly normal return: the try
+    block completed, the except never ran, nothing was logged, and the app
+    believed the event was gone while it was still sitting on the user's
+    calendar. Observed: tasks deleted in the app whose events survived, with
+    no trace in any log.
+
+    404/410 are treated as success — the event is already not there, which is
+    the outcome this function exists to produce.
+    """
     try:
         access_token = get_valid_access_token(user_id)
-        requests.delete(
+        response = requests.delete(
             f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{google_event_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
+        if response.status_code in (404, 410):
+            logging.info(f"[calendar sync] Event {google_event_id} was already gone ({response.status_code})")
+            return
+        response.raise_for_status()
+        logging.info(f"[calendar sync] Deleted event {google_event_id} for user {user_id}")
     except Exception as e:
         logging.error(f"[calendar sync] Failed to delete event {google_event_id} for user {user_id}: {e}")
 
