@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { deleteTask } from '../api';
+import { deleteTask, agentEditTask } from '../api';
 import { formatDate, roundToNearestHalfHour } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import CustomSelect from './CustomSelect';
@@ -25,6 +25,25 @@ const ACTION_TOAST_KEYS = {
   unreject: 'toast.unrejected',
 };
 
+/**
+ * The expanded card's edit form state, built from a task. Extracted because
+ * it is now needed in two places: when the card opens, and again after the
+ * inline agent edits the task — the open draft still holds the PRE-edit
+ * values at that point, and leaving it would mean the next Save writes them
+ * straight back over what the agent just changed.
+ */
+function draftFromTask(task) {
+  return {
+    task_name: task.task_name,
+    description: task.description || '',
+    category: task.category,
+    priority: task.priority,
+    due_date: task.due_date || '',
+    due_time: task.due_time || '',
+    checklist: [...(task.checklist || [])],
+  };
+}
+
 function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
 
@@ -45,6 +64,15 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
   const [deleteError, setDeleteError] = useState(null);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Natural-language editing of THIS task (see task_agent.py). agentNote holds
+  // the agent's own reply when it did NOT change anything — it asked a
+  // question, or found nothing to do — which belongs next to the input the
+  // user is about to correct, not in a toast that disappears.
+  const [agentInput, setAgentInput] = useState('');
+  const [isAgentBusy, setIsAgentBusy] = useState(false);
+  const [agentNote, setAgentNote] = useState(null);
+  const [agentError, setAgentError] = useState(null);
 
   const cardRef = useRef(null);
   const menuRef = useRef(null);
@@ -70,20 +98,15 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
 
   useEffect(() => {
     if (isExpanded) {
-      setDraft({
-        task_name: task.task_name,
-        description: task.description || '',
-        category: task.category,
-        priority: task.priority,
-        due_date: task.due_date || '',
-        due_time: task.due_time || '',
-        checklist: [...(task.checklist || [])],
-      });
+      setDraft(draftFromTask(task));
       setSaveError(null);
     } else {
       setDraft(null);
       setSaveError(null);
     }
+    setAgentInput('');
+    setAgentNote(null);
+    setAgentError(null);
   }, [isExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -288,6 +311,70 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
   function handleEdit() {
     setIsMenuOpen(false);
     onToggleExpand(task.record_id);
+  }
+
+  /**
+   * Natural-language edit of THIS task. The backend returns a validated PLAN
+   * and writes nothing — the change is applied here through the same onUpdate
+   * the manual form uses, so there is one write path, not two (see
+   * main.py's /tasks/{id}/agent-edit and task_agent.py).
+   */
+  async function handleAgentEdit(e) {
+    if (e) e.preventDefault();
+    const instruction = agentInput.trim();
+    if (!instruction || isAgentBusy) return;
+
+    setIsAgentBusy(true);
+    setAgentNote(null);
+    setAgentError(null);
+    try {
+      const plan = await agentEditTask(task.record_id, instruction);
+
+      if (plan.action === 'delete') {
+        // The one action here that is NOT undoable — the row is gone for
+        // good. Routed through the existing handleDelete so it gets the same
+        // confirmation dialog and the same calendar-outcome toast as deleting
+        // from the ⋮ menu, rather than a second delete path to keep in step.
+        setAgentInput('');
+        await handleDelete();
+        return;
+      }
+
+      if (plan.action === 'unclear' || plan.action === 'none') {
+        // Deliberately keeps what the user typed: they are one word away from
+        // an instruction that works, and clearing it would make them retype.
+        setAgentNote(plan.message);
+        return;
+      }
+
+      const updated = await onUpdate(task.record_id, plan.fields);
+      setAgentInput('');
+      setDraft(draftFromTask(updated));
+
+      const dropped = plan.invalid || [];
+      onShowToast({
+        message: dropped.length
+          ? `${plan.message} (${t('task.agent_skipped', { fields: dropped.join(', ') })})`
+          : plan.message,
+        variant: 'success',
+        duration: 7000,
+        action: {
+          label: t('task.agent_undo'),
+          // `before` is built server-side from what the database actually
+          // held, not from this card's rendered state, so an undo restores
+          // the real previous values even if the card was stale.
+          onClick: () => {
+            onUpdate(task.record_id, plan.before)
+              .then((reverted) => setDraft(draftFromTask(reverted)))
+              .catch(() => {});
+          },
+        },
+      });
+    } catch (err) {
+      setAgentError(err.message);
+    } finally {
+      setIsAgentBusy(false);
+    }
   }
 
   function updateDraft(field, value) {
@@ -617,6 +704,48 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
               </button>
             </div>
           </Field>
+
+          {/* Inline task agent. Sits with the fields it edits rather than in
+              the chat modal: the task is already open and identified, so the
+              agent here never has to work out WHICH task is meant — that is
+              the whole reason it is a separate, much smaller agent (see
+              task_agent.py). Enter submits; the card's own click handler
+              already ignores INPUT/BUTTON, so typing here can't collapse it. */}
+          <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={agentInput}
+                onChange={(e) => setAgentInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAgentEdit();
+                  }
+                }}
+                disabled={isAgentBusy || isSaving || isDeleting}
+                placeholder={t('task.agent_placeholder')}
+                className="flex-1 px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 disabled:opacity-60 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={handleAgentEdit}
+                disabled={isAgentBusy || isSaving || isDeleting || !agentInput.trim()}
+                className="px-3 py-2 rounded-md text-sm font-medium bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-hover)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors shrink-0"
+                aria-label={t('task.agent_send')}
+              >
+                {isAgentBusy ? '…' : '↵'}
+              </button>
+            </div>
+            {agentNote && (
+              <p className="text-xs text-[var(--text-secondary)]">{agentNote}</p>
+            )}
+            {agentError && (
+              <p className="text-xs text-[var(--danger)]">
+                {t('errors.failed_update')}: {agentError}
+              </p>
+            )}
+          </div>
 
           {saveError && (
             <div className="text-xs text-[var(--danger)]">

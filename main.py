@@ -27,6 +27,7 @@ from repository import save_push_subscription, get_app_settings, update_app_sett
 from auth import get_current_user_id
 import agent_engine
 import agent_tools
+import task_agent
 import google_calendar
 import hostaway_integration
 import repository
@@ -100,6 +101,35 @@ class DeleteTaskResponse(BaseModel):
       delete_failed      — the app owned the event but Google refused
     """
     calendar: Literal["none", "deleted", "kept_google_origin", "delete_failed"]
+
+class TaskAgentEditRequest(BaseModel):
+    """Request body for POST /tasks/{record_id}/agent-edit"""
+    instruction: str
+
+class TaskAgentEditResponse(BaseModel):
+    """
+    Response body for POST /tasks/{record_id}/agent-edit — a validated PLAN,
+    not a result. Nothing has been written when this is returned; the client
+    applies it through the ordinary PATCH/DELETE endpoints (see the endpoint's
+    docstring for why the write does not happen here).
+
+    action:
+      edit    — apply `fields`; `before` is the matching Undo payload
+      delete  — the user asked to remove the task; the client must confirm,
+                then call DELETE /tasks/{id}. Never applied without a
+                confirmation, because the delete is permanent.
+      unclear — nothing to apply; `message` says what is missing
+      none    — understood, but it changes nothing that is not already true
+    """
+    action: Literal["edit", "delete", "unclear", "none"]
+    message: str
+    fields: dict = {}
+    before: dict = {}
+    # Fields the agent asked for that were dropped as invalid or impossible
+    # (a malformed date, a reminder on a task with no time). The rest of the
+    # instruction is still applied — one bad value must not discard the
+    # good ones — so the client tells the user which parts did not take.
+    invalid: list[str] = []
 
 class AgentQueryRequest(BaseModel):
     """Request body for POST /agent/query"""
@@ -409,6 +439,64 @@ def delete_task(record_id: str, user_id: str = Depends(get_current_user_id)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete task: {str(e)}"
         )
+
+@app.post("/tasks/{record_id}/agent-edit", response_model=TaskAgentEditResponse)
+def agent_edit_task(record_id: str, request: TaskAgentEditRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Natural-language editing of ONE task, from that task's own card.
+
+    Separate from /agent/query and from a different module (task_agent.py):
+    the target is this URL's record_id, chosen by the user, never by the
+    model — so none of the chat agent's machinery for finding and
+    disambiguating tasks applies. See task_agent.py's docstring.
+
+    Returns a PLAN and writes nothing. The client applies it through
+    PATCH /tasks/{record_id} and DELETE /tasks/{record_id}, i.e. the exact
+    endpoints the manual edit form on the same card already uses, so the
+    reminder invalidation, calendar sync and origin-aware delete reporting
+    that live on those paths keep working unchanged and there is no second
+    write path to keep correct. This costs one extra round trip and grants
+    no new privilege — the user can already PATCH their own tasks from this
+    screen; the agent only fills in the form.
+
+    The task is loaded here, scoped to user_id, and handed to the agent
+    already resolved: a record_id belonging to someone else is a 404 before
+    the model is ever called.
+    """
+    task = service.repository.get_task(user_id, record_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if not (request.instruction or "").strip():
+        raise HTTPException(status_code=422, detail="instruction cannot be empty")
+
+    try:
+        plan = task_agent.plan_task_edit(request.instruction, task, user_id=user_id)
+    except RuntimeError as e:
+        logger.error(f"Task edit agent failed for {record_id}: {e}")
+        raise HTTPException(status_code=503, detail=f"Task edit agent failed: {str(e)}")
+    except Exception:
+        logger.exception(f"Unexpected error in agent-edit for task {record_id}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+    if plan["action"] in ("delete", "unclear"):
+        return TaskAgentEditResponse(action=plan["action"], message=plan["message"])
+
+    # Understood, but nothing to do — every value asked for already matches.
+    # A distinct action so the client can say "already the case" instead of
+    # flashing an empty success toast with an Undo that undoes nothing.
+    if not plan["fields"]:
+        return TaskAgentEditResponse(
+            action="none", message=plan["message"], invalid=plan["invalid"],
+        )
+
+    return TaskAgentEditResponse(
+        action="edit",
+        message=plan["message"],
+        fields=plan["fields"],
+        before=plan["before"],
+        invalid=plan["invalid"],
+    )
 
 
 @app.post("/push/subscribe", status_code=status.HTTP_201_CREATED)

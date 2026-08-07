@@ -178,6 +178,28 @@ export async function updateTask(recordId, updates) {
 }
 
 /**
+ * POST /tasks/{record_id}/agent-edit — turns one natural-language instruction
+ * about THIS task into a change to it ("βάλ' το Παρασκευή απόγευμα").
+ *
+ * Returns a PLAN, not a result — nothing has been written yet:
+ *   { action: 'edit',    message, fields, before, invalid }  → PATCH `fields`
+ *                        (`before` is the Undo payload, built server-side)
+ *   { action: 'delete',  message }   → confirm, then deleteTask()
+ *   { action: 'unclear', message }   → show the message, apply nothing
+ *   { action: 'none',    message }   → understood, nothing to change
+ *
+ * The write deliberately goes back through updateTask/deleteTask rather than
+ * happening inside this endpoint, so it takes the same path as editing the
+ * card by hand — see the endpoint's docstring in main.py.
+ */
+export async function agentEditTask(recordId, instruction) {
+  return request(`/tasks/${recordId}/agent-edit`, {
+    method: 'POST',
+    body: JSON.stringify({ instruction }),
+  });
+}
+
+/**
  * PATCH /tasks/{record_id} — toggles this task's per-task Google Calendar
  * sync opt-in. Thin wrapper over updateTask for a single named field.
  * Returns the updated task object.

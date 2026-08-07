@@ -114,7 +114,11 @@
     "remove_item": "Remove item",
     "notification_on": "Reminder on",
     "notification_off": "Set reminder",
-    "no_time_for_reminder": "Add a time to this task to set a reminder"
+    "no_time_for_reminder": "Add a time to this task to set a reminder",
+    "agent_placeholder": "Tell me what to change…",
+    "agent_send": "Apply",
+    "agent_undo": "UNDO",
+    "agent_skipped": "couldn't do: {{fields}}"
   },
   "menu": {
     "open_menu": "Open menu"

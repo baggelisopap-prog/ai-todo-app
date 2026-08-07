@@ -114,7 +114,11 @@
     "remove_item": "Αφαίρεση στοιχείου",
     "notification_on": "Υπενθύμιση ενεργή",
     "notification_off": "Ορισμός υπενθύμισης",
-    "no_time_for_reminder": "Προσθέστε ώρα σε αυτή την εργασία για να ορίσετε υπενθύμιση"
+    "no_time_for_reminder": "Προσθέστε ώρα σε αυτή την εργασία για να ορίσετε υπενθύμιση",
+    "agent_placeholder": "Πες μου τι να αλλάξω…",
+    "agent_send": "Εφαρμογή",
+    "agent_undo": "ΑΝΑΙΡΕΣΗ",
+    "agent_skipped": "δεν έγινε: {{fields}}"
   },
   "menu": {
     "open_menu": "Άνοιγμα μενού"
