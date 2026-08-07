@@ -88,6 +88,19 @@ class ProfileUpdateRequest(BaseModel):
     """Request body for PATCH /profile"""
     display_name: str
 
+class DeleteTaskResponse(BaseModel):
+    """
+    Response body for DELETE /tasks/{record_id}. The task is always deleted;
+    this reports what happened to its linked Google Calendar event, which the
+    old 204 No Content could not say:
+      none               — no linked event
+      deleted            — the app created that event, so it was removed too
+      kept_google_origin — the event was created in Google Calendar first, so
+                           it stays; the app does not own it
+      delete_failed      — the app owned the event but Google refused
+    """
+    calendar: Literal["none", "deleted", "kept_google_origin", "delete_failed"]
+
 class AgentQueryRequest(BaseModel):
     """Request body for POST /agent/query"""
     question: str
@@ -375,15 +388,21 @@ def update_task(record_id: str, request: UpdateTaskRequest, user_id: str = Depen
             detail=f"Failed to update task: {str(e)}"
         )
 
-@app.delete("/tasks/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete("/tasks/{record_id}", response_model=DeleteTaskResponse, status_code=status.HTTP_200_OK)
 def delete_task(record_id: str, user_id: str = Depends(get_current_user_id)):
     """
-    Permanently delete a task. Returns 204 No Content on success.
-    This is a HARD delete — the record is gone from Airtable.
+    Permanently delete a task. This is a HARD delete — the row is gone.
     For soft delete (preserves data for AI learning), use PATCH with is_rejected=true.
+
+    Returns 200 with `{"calendar": ...}` describing what happened to the linked
+    Google Calendar event (was 204 No Content, which could not say). The task is
+    deleted either way; the field exists so the UI can tell the user when the
+    calendar event deliberately SURVIVED — a task converted from a Google event
+    keeps that event, because the event was created there and this app does not
+    own it. See services.TaskService.delete_task for the four values.
     """
     try:
-        service.delete_task(user_id, record_id)
+        return DeleteTaskResponse(calendar=service.delete_task(user_id, record_id))
     except Exception as e:
         logger.exception(f"Failed to delete task {record_id}")
         raise HTTPException(

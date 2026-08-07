@@ -259,9 +259,26 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
     setIsDeleting(true);
     setDeleteError(null);
     try {
-      await deleteTask(task.record_id);
+      const { calendar } = await deleteTask(task.record_id);
       onTaskDeleted(task.record_id);
-      onShowToast('toast.deleted', 'success');
+      if (calendar === 'kept_google_origin') {
+        // Not a failure — this task came FROM Google Calendar, so the event
+        // there is not ours to delete. Said plainly, and given longer to read
+        // than a one-word toast, because the user WILL still see it in Google.
+        onShowToast({
+          message: t('toast.deleted_calendar_kept'),
+          variant: 'neutral',
+          duration: 7000,
+        });
+      } else if (calendar === 'delete_failed') {
+        onShowToast({
+          message: t('toast.deleted_calendar_failed'),
+          variant: 'error',
+          duration: 7000,
+        });
+      } else {
+        onShowToast('toast.deleted', 'success');
+      }
     } catch (err) {
       setDeleteError(err.message);
       setIsDeleting(false);

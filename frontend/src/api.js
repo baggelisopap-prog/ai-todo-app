@@ -188,7 +188,12 @@ export async function toggleTaskCalendarSync(recordId, enabled) {
 
 /**
  * DELETE /tasks/{record_id} — permanently delete a task.
- * Returns void on success (204 No Content).
+ * Returns { calendar } describing what happened to the linked Google Calendar
+ * event: 'none' | 'deleted' | 'kept_google_origin' | 'delete_failed'. The task
+ * is deleted in all four cases — 'kept_google_origin' means the event was
+ * created in Google Calendar rather than here, so this app leaves it alone and
+ * the user needs telling. (Was 204 No Content, which could not report any of
+ * this.)
  */
 export async function deleteTask(recordId) {
   const response = await authenticatedFetch(`${API_BASE_URL}/tasks/${recordId}`, {
@@ -203,6 +208,13 @@ export async function deleteTask(recordId) {
       detail = response.statusText;
     }
     throw new Error(`API error ${response.status}: ${detail}`);
+  }
+  // Tolerate a body-less response: an older backend still answers 204 here, and
+  // the delete itself succeeded either way — only the calendar detail is missing.
+  try {
+    return await response.json();
+  } catch {
+    return { calendar: 'none' };
   }
 }
 

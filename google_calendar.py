@@ -151,8 +151,12 @@ def sync_task_to_google_calendar(user_id: str, task: dict) -> Optional[str]:
         return None
 
 
-def delete_calendar_event(user_id: str, google_event_id: str) -> None:
+def delete_calendar_event(user_id: str, google_event_id: str) -> bool:
     """Deletes a Google Calendar event. Never raises — logs and moves on.
+
+    Returns True if the event is gone (deleted now, or already absent), False
+    if it could not be removed. The caller uses this to tell the user what
+    actually happened to their calendar rather than assuming success.
 
     The response status IS checked. This was the only Google call in this
     module that ignored it, so a 401 (expired token), 403 or anything else
@@ -173,11 +177,13 @@ def delete_calendar_event(user_id: str, google_event_id: str) -> None:
         )
         if response.status_code in (404, 410):
             logging.info(f"[calendar sync] Event {google_event_id} was already gone ({response.status_code})")
-            return
+            return True
         response.raise_for_status()
         logging.info(f"[calendar sync] Deleted event {google_event_id} for user {user_id}")
+        return True
     except Exception as e:
         logging.error(f"[calendar sync] Failed to delete event {google_event_id} for user {user_id}: {e}")
+        return False
 
 
 def mark_event_completed(user_id: str, google_event_id: str, completed: bool, current_title: str) -> None:

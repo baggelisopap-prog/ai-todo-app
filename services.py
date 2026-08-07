@@ -304,9 +304,10 @@ class TaskService:
 
         return updated_task
 
-    def delete_task(self, user_id: str, record_id: str) -> None:
+    def delete_task(self, user_id: str, record_id: str) -> str:
         """
-        Permanently deletes a task, scoped to user_id. No return value — raises on failure.
+        Permanently deletes a task, scoped to user_id. Raises on failure.
+
         Origin-aware calendar cleanup: only deletes the linked Google
         Calendar event if this task originated in the app
         (calendar_origin == 'app'). A task converted FROM a Google event
@@ -314,6 +315,15 @@ class TaskService:
         after the derived task is deleted here — the event pre-existed
         there and deleting the task shouldn't remove it. A failure on the
         calendar side is logged and never blocks the actual task deletion.
+
+        Returns WHAT HAPPENED TO THE CALENDAR, so the caller can tell the
+        user instead of showing a bare "deleted" for four different outcomes:
+          "none"               — no linked event; nothing to do
+          "deleted"            — app-origin event, removed from Google too
+          "kept_google_origin" — event created in Google Calendar first, so it
+                                 stays there; only the app's task is gone
+          "delete_failed"      — app-origin, but Google refused the delete
+        The task itself is deleted in every one of these cases.
         """
         calendar_fields = None
         try:
@@ -326,8 +336,18 @@ class TaskService:
             raise RuntimeError(f"Failed to delete task {record_id}")
         logger.info(f"Deleted task {record_id}.")
 
-        if calendar_fields and calendar_fields.get("google_event_id") and calendar_fields.get("calendar_origin") == "app":
-            google_calendar.delete_calendar_event(user_id, calendar_fields["google_event_id"])
+        if not calendar_fields or not calendar_fields.get("google_event_id"):
+            return "none"
+
+        if calendar_fields.get("calendar_origin") != "app":
+            logger.info(
+                f"[calendar sync] Task {record_id} came FROM Google Calendar "
+                f"(calendar_origin={calendar_fields.get('calendar_origin')}) — leaving its event in place"
+            )
+            return "kept_google_origin"
+
+        deleted = google_calendar.delete_calendar_event(user_id, calendar_fields["google_event_id"])
+        return "deleted" if deleted else "delete_failed"
 
     def send_push_to_user(self, user_id: str, title: str, body: str, view: Optional[str] = None) -> dict:
         """
