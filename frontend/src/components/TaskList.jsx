@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import EmptyState from './EmptyState';
 import TaskCard from './TaskCard';
 
 function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskId, onToggleExpand, onUpdateTask, onTaskDeleted, onShowToast }) {
@@ -6,9 +7,9 @@ function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskI
 
   if (tasks.length === 0) {
     return (
-      <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">
-        {t('empty.default')}
-      </div>
+      // inline: a TaskList is always nested inside a section that has its own
+      // heading and siblings, never the whole screen.
+      <EmptyState message={t('empty.default')} size="inline" />
     );
   }
 

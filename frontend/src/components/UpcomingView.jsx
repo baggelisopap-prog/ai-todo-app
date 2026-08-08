@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
@@ -101,7 +102,7 @@ function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onT
             {section.label} <span className="ml-1 text-[var(--text-muted)]">({section.tasks.length})</span>
           </h2>
           {section.tasks.length === 0 ? (
-            <div className="py-4 text-center text-[var(--text-muted)] text-sm italic">{t('empty.no_tasks')}</div>
+            <EmptyState message={t('empty.no_tasks')} size="inline" />
           ) : (
             <TaskList
               tasks={section.tasks}

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 
 function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
@@ -133,7 +134,7 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
       </div>
 
       {filteredTasks.length === 0 ? (
-        <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">{t('empty.browse')}</div>
+        <EmptyState message={t('empty.browse')} />
       ) : (
         <TaskList
           tasks={filteredTasks}

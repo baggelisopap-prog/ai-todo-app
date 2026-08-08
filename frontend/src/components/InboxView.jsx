@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 
 function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
@@ -23,7 +24,7 @@ function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
       </div>
 
       {inboxTasks.length === 0 ? (
-        <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">{t('empty.inbox')}</div>
+        <EmptyState message={t('empty.inbox')} />
       ) : (
         <TaskList
           tasks={inboxTasks}

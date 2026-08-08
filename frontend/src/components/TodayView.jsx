@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
@@ -131,7 +132,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
       )}
 
       {isEmpty ? (
-        <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>
+        <EmptyState message={t('empty.today')} />
       ) : (
         <>
           <div className="mb-6">
@@ -139,7 +140,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
               {t('sections.today_header')} <span className="ml-1 text-[var(--text-muted)]">({todayTasks.length})</span>
             </h2>
             {todayTasks.length === 0 ? (
-              <div className="py-4 text-center text-[var(--text-muted)] text-sm italic">{t('empty.today')}</div>
+              <EmptyState message={t('empty.today')} size="inline" />
             ) : (
               <TaskList
                 tasks={todayTasks}

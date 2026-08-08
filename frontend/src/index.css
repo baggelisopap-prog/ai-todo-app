@@ -221,6 +221,36 @@ body {
   height: 2.5rem;
 }
 
+/* --- Motion ------------------------------------------------------------
+   Toasts and modal backdrops appeared instantly, which reads as a glitch
+   rather than as something arriving. Short and subtle on purpose: this is
+   feedback, not decoration, and anything slower than ~200ms is in the way of
+   a user who already knows what they did.
+
+   Both are disabled under prefers-reduced-motion. That setting is not a
+   preference about taste — for some people motion causes nausea — so it is
+   honoured rather than treated as optional. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 0.5rem); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-toast-in {
+  animation: toast-in 180ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.animate-fade-in {
+  animation: fade-in 150ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-in,
+  .animate-fade-in {
+    animation: none;
+  }
+}
+
 /* --- Keyboard focus ----------------------------------------------------
    One component in this app had a focus style. Inputs got a ring from their
    own classes; buttons got nothing, so tabbing through was untrackable.

@@ -65,7 +65,7 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
 
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/20 z-20"
+          className="fixed inset-0 bg-black/20 animate-fade-in z-20"
           onClick={() => setIsOpen(false)}
         />
       )}
@@ -95,7 +95,7 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
 
       {showPhotoChoice && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/40 animate-fade-in flex items-end md:items-center justify-center p-4"
           onClick={() => setShowPhotoChoice(false)}
         >
           <div

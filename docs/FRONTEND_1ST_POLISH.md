@@ -152,7 +152,7 @@ No enter transition anywhere. A short fade/slide on the toast and a fade on moda
 Every empty view is `p-8 text-center text-sm italic`. Consistent, but it is the moment the app has the most room and says the least.
 
 ### 6.3 `--brand-primary` and `--danger` are the same hex
-Not a live defect (see the correction at the top). Worth making the aliasing explicit so the first destructive filled button does not silently look like the primary one.
+Not a live defect (see the correction at the top). **Fixed by writing it down, not by changing it**: a comment in `index.css` now states that the two are the same red on purpose — destructive actions are red *text in a menu*, never a filled button, so nothing is ambiguous today — and that the first destructive FILLED button anyone adds must change `--danger` or it will be indistinguishable from the primary action. Changing the value now would alter the app's identity to defend against a button that does not exist; the trap is real, the change is not yet earned.
 
 ---
 
@@ -198,13 +198,34 @@ Each rule was verified to actually fire by injecting a fault (`bg-pink-500`, a d
 | 3 — Modal behaviour | **done** — hook + 10-case lock test, all green |
 | 4 — Consistency | **done** — check/lint/build green |
 | 5 — Dark mode | **done** — 36 colours tokenised, 47/47 tokens themed, ratchet now 0 |
-| 6 — Polish | next |
+| 6 — Polish | **done** — check/lint/build green |
 
 **Verification after every phase**: `npm run lint`, `npm run build`, and from Phase 7 on, `npm run check`. Anything that needs a human eye is listed under the phase itself and collected at the end of this file as it accumulates.
 
 ## Needs a human eye
 
 _Changes whose correctness a build cannot confirm._
+
+Everything below is a check a build cannot make. Nothing in this pass has been seen rendered.
+
+**From Phase 6 — the dark theme, which needs the most eyes:**
+- Switch the OS to dark and walk every screen. Colour choice is exactly what no script can verify: look for text that has gone low-contrast, a card that no longer separates from the page, and the priority/category dots, which were lightened and could now read as different colours than intended.
+- The toast in dark, both success and error.
+
+**From Phase 6 — the rest:**
+- Toast slide-in and modal backdrop fade. Should read as arriving, not as a glitch; if either feels slow, the durations are 180ms/150ms in `index.css`.
+- The new empty states across Inbox, Today, Upcoming and Browse.
+
+**From Phase 4:**
+- Tab through a screen and confirm the focus outline is visible and not clipped anywhere.
+- Google events in Today should now be cyan, matching the calendar grid.
+
+**From Phase 3:**
+- Escape closes Settings, the chat and the calendar day popup — none of them did before.
+- Open a modal on a phone and try to scroll the page behind it. It should not move.
+
+**From Phase 2:**
+- The complete circle should be comfortably tappable without expanding the card by accident.
 
 **From Phase 1:**
 - **The title/button overlap is actually gone.** Open any screen on a phone and check the heading is fully visible and not sitting under the chat icon. This is also the confirmation that the finding was real — if the headings looked fine before, `pt-14` has simply added empty space and should be reconsidered.

@@ -106,14 +106,31 @@ if (colourHits.length > HARDCODED_COLOUR_BASELINE) {
 }
 
 // --- 4. This app's own utility classes are defined --------------------------
-// Only checks classes we invented (safe-area helpers). Tailwind's own classes
-// are generated at build time and are none of this script's business.
-const OWN_CLASSES = /\b(pb-safe|bottom-safe-\d+|tap-\d+)\b/g;
+// Only checks classes we invented — safe-area helpers, tap targets and the two
+// entrance animations. Tailwind's own classes are generated at build time and
+// are none of this script's business.
+//
+// The animate-* pair is here for the same reason as the rest: they are plain
+// class names, so renaming a keyframe in index.css leaves the component looking
+// correct in source while it silently stops animating. Note that Tailwind also
+// ships an `animate-` prefix, which is exactly why these are named for what
+// they do rather than something that could collide with a generated utility.
+const OWN_CLASSES = /\b(pb-safe|bottom-safe-\d+|tap-\d+|animate-toast-in|animate-fade-in)\b/g;
+
+// A plain css.includes('.' + name) is not good enough, and this was caught by
+// injecting a fault and watching the check pass: renaming .animate-fade-in to
+// .animate-fade-inX in index.css left includes('.animate-fade-in') true, since
+// the old name is a prefix of the new one. Same trap for .tap-4 vs .tap-44.
+// So the selector has to end at a real CSS class boundary.
+function cssDefinesClass(name) {
+  return new RegExp(`\\.${name}(?![\\w-])`).test(css);
+}
+
 for (const file of files) {
   if (file === cssPath) continue;
   const body = readFileSync(file, 'utf8');
   for (const match of body.matchAll(OWN_CLASSES)) {
-    if (!css.includes(`.${match[1]}`)) {
+    if (!cssDefinesClass(match[1])) {
       fail('undefined-utility', `${relative(root, file)} uses .${match[1]}, not defined in index.css`);
     }
   }
