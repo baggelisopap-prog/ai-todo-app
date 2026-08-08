@@ -1,14 +1,14 @@
 import { useEffect } from 'react';
 
 const VARIANT_CLASSES = {
-  success: 'bg-green-50 border-green-200 text-green-800',
-  error: 'bg-red-50 border-red-200 text-red-800',
+  success: 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-text)]',
+  error: 'bg-[var(--danger-bg)] border-[var(--danger-border)] text-[var(--danger-text)]',
   neutral: 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-primary)]',
 };
 
 const VARIANT_ICON_CLASSES = {
-  success: 'text-green-600',
-  error: 'text-red-600',
+  success: 'text-[var(--success-strong)]',
+  error: 'text-[var(--danger-strong)]',
   neutral: 'text-[var(--text-secondary)]',
 };
 

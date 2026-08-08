@@ -117,7 +117,7 @@ const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButt
             />
 
             {error && (
-              <div className="mt-3 p-2 rounded-md border border-red-200 bg-red-50 text-red-800 text-xs">
+              <div className="mt-3 p-2 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger-text)] text-xs">
                 {error}
               </div>
             )}

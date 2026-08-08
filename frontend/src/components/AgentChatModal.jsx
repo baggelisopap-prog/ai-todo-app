@@ -101,7 +101,7 @@ function ProposalCard({ action, t, onConfirm, onCancel }) {
   if (isDone) {
     return (
       <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] flex items-start gap-2">
-        <span className="text-green-600 dark:text-green-400">✓</span>
+        <span className="text-[var(--success-strong)]">✓</span>
         <span>
           <span className="font-medium">{t('agent.action_done')}:</span> {action.resultMessage}
         </span>
@@ -155,7 +155,7 @@ function ProposalCard({ action, t, onConfirm, onCancel }) {
       </div>
 
       {action.status === 'error' && (
-        <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+        <p className="mt-2 text-xs text-[var(--danger-strong)]">
           {t('agent.action_failed')}: {action.errorMessage}
         </p>
       )}

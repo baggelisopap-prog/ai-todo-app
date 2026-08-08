@@ -73,12 +73,13 @@ for (const key of el) if (!en.has(key)) fail('locale-drift', `"${key}" is in el.
 // Colour must come from the token layer so a theme can change it in one place.
 // index.css itself is exempt: that IS the token layer.
 //
-// Ratcheted, not absolute. There were 38 of these when this script was written,
-// and a check that fails from the day it is added guards nothing — it just gets
-// ignored. So the count is capped at a baseline: NEW ones fail immediately, and
-// the baseline only ever comes down. Phase 5 of the polish pass takes it to 0,
-// at which point this becomes the plain rule it is meant to be.
-const HARDCODED_COLOUR_BASELINE = 36;
+// This began as a ratchet — 36 existed when the script was written, and a check
+// that fails from the day it is added guards nothing, it just gets ignored. So
+// the count was capped at a baseline that only ever came down. Phase 5 of the
+// polish pass tokenised all 36, so the baseline is now 0 and this is the plain
+// rule it was always meant to be: a hardcoded colour is a patch of screen that
+// dark mode cannot follow.
+const HARDCODED_COLOUR_BASELINE = 0;
 const PALETTE = 'red|green|blue|amber|yellow|gray|slate|zinc|neutral|stone|emerald|cyan|purple|teal|orange|rose|indigo|sky|violet|fuchsia|pink|lime';
 const hardcoded = new RegExp(`\\b(?:bg|text|border|ring|from|to|via)-(?:${PALETTE})-\\d{2,3}\\b`, 'g');
 const colourHits = [];

@@ -81,7 +81,7 @@ export function LoginScreen() {
               required
               className="w-full px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-center tracking-widest"
             />
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && <p className="text-sm text-[var(--danger-strong)]">{error}</p>}
             <button
               type="submit"
               disabled={loading}
@@ -153,7 +153,7 @@ export function LoginScreen() {
               />
             </div>
           )}
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-[var(--danger-strong)]">{error}</p>}
           <button
             type="submit"
             disabled={loading}

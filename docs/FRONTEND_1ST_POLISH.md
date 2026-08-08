@@ -137,6 +137,10 @@ So the phone's chrome matches.
 
 **Files**: `index.css`, the 12 files from the count, `index.html`
 
+**A half-finished dark mode was already in there.** `AgentChatModal` carried `dark:text-green-400` and `dark:text-red-400` — Tailwind dark variants, which under v4 respond to `prefers-color-scheme` with no configuration. So on a dark-OS phone those two elements had been changing colour all along while the rest of the app stayed light. Both removed; the tokens cover it now.
+
+**Result**: all 36 replaced, and **47 of 47 tokens have a dark counterpart** (asserted, not assumed). Surfaces are lifted rather than inverted — `bg-app` stays the darkest and cards sit above it, matching the light theme's relationship instead of flipping it. Accent hues are lightened, since shades chosen for contrast against white go muddy on a dark ground. Shadows are deepened because they carry almost no weight in dark and would otherwise stop separating a modal from the page. Confirmed present in the built CSS bundle, not just the source.
+
 ---
 
 ## Phase 6 — Polish and latent traps
@@ -193,8 +197,8 @@ Each rule was verified to actually fire by injecting a fault (`bg-pink-500`, a d
 | 2 — Touch targets | **done** — check/lint/build green |
 | 3 — Modal behaviour | **done** — hook + 10-case lock test, all green |
 | 4 — Consistency | **done** — check/lint/build green |
-| 5 — Dark mode | next |
-| 6 — Polish | not started |
+| 5 — Dark mode | **done** — 36 colours tokenised, 47/47 tokens themed, ratchet now 0 |
+| 6 — Polish | next |
 
 **Verification after every phase**: `npm run lint`, `npm run build`, and from Phase 7 on, `npm run check`. Anything that needs a human eye is listed under the phase itself and collected at the end of this file as it accumulates.
 

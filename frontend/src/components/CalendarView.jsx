@@ -1174,7 +1174,7 @@ function ManualCreateModal({ date, time, onClose, onCreate, t }) {
           value={taskName}
           onChange={(e) => setTaskName(e.target.value)}
           placeholder={t('task.name_placeholder')}
-          className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
+          className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors"
         />
 
         <div className="grid grid-cols-2 gap-2 mt-3">
@@ -1197,7 +1197,7 @@ function ManualCreateModal({ date, time, onClose, onCreate, t }) {
           onChange={(e) => setDescription(e.target.value)}
           placeholder={t('modal.description_placeholder')}
           rows={2}
-          className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 resize-none transition-colors mt-3"
+          className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] resize-none transition-colors mt-3"
         />
 
         <div className="mt-3">
@@ -1229,7 +1229,7 @@ function ManualCreateModal({ date, time, onClose, onCreate, t }) {
                 }
               }}
               placeholder={t('modal.add_checklist_item')}
-              className="flex-1 px-3 py-1.5 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
+              className="flex-1 px-3 py-1.5 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors"
             />
             <button
               type="button"

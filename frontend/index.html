@@ -11,7 +11,11 @@
          value; without it the insets are always 0 and the bottom nav sits
          under the iPhone home indicator. See .pb-safe in index.css. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#dc2626" />
+    <!-- Two, so the phone's chrome follows the theme the app is actually
+         showing. Without the media queries a dark-mode user gets a light red
+         bar over a near-black app. -->
+    <meta name="theme-color" content="#dc2626" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#171a21" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="Capture tasks by text, voice or photo. Sorted and prioritised for you, synced with Google Calendar." />
     <title>AI To-Do</title>
   </head>

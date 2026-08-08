@@ -51,6 +51,25 @@
   --brand-primary-hover: #b91c1c;
   --success: #10b981;          /* Green for completion */
   --danger: #dc2626;           /* Red for destructive actions in menu */
+  /* NOTE: --danger and --brand-primary are the same red on purpose today —
+     destructive actions render as red TEXT in a menu, never as a filled
+     button, so nothing is ambiguous. The first destructive FILLED button
+     anyone adds must change --danger, or it will be indistinguishable from
+     the primary action. See docs/FRONTEND_1ST_POLISH.md §6.3. */
+
+  /* Feedback surfaces. These replace the hardcoded bg-red-50 / text-green-800
+     / ring-blue-100 utilities that used to be scattered across 12 files —
+     they were the only thing in the app a theme could not follow. Values are
+     the exact Tailwind shades they replaced, so light mode is unchanged. */
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-text: #991b1b;
+  --danger-strong: #dc2626;
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --success-text: #166534;
+  --success-strong: #16a34a;
+  --ring-soft: #dbeafe;        /* the soft halo on a focused input */
 
   /* Shadows */
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
@@ -58,6 +77,83 @@
   --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   --shadow-fab: 0 4px 12px 0 rgba(220, 38, 38, 0.3);
   --shadow-menu: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* --- Dark palette ------------------------------------------------------
+   Redefines the SAME tokens above, nothing else. Every component already
+   reads them, so this is the whole feature — which is only true because the
+   36 hardcoded Tailwind colours that used to be scattered across 12 files
+   were tokenised first. Those were the one thing no theme could follow.
+
+   Follows the OS. There is no in-app toggle on purpose: that needs a
+   persisted setting and a Settings row, which is a feature, not polish.
+
+   Surfaces are lifted rather than inverted — bg-app is the darkest and cards
+   sit ABOVE it, matching the light theme's relationship instead of flipping
+   it. Accent hues are lightened, because the light theme's shades are chosen
+   for contrast against white and go muddy on a dark ground. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-app: #0f1115;
+    --bg-card: #171a21;
+    --bg-hover: #1f232c;
+    --bg-input: #1f232c;
+    --bg-modal: #171a21;
+    --bg-day-alt: #14171d;
+
+    --border-subtle: #262b35;
+    --border-medium: #363c49;
+    --border-focus: #60a5fa;
+
+    --text-primary: #e8eaed;
+    --text-secondary: #9aa3b2;
+    --text-muted: #6f7887;
+    --text-inverse: #0f1115;
+
+    --priority-p1: #f87171;
+    --priority-p2: #fbbf24;
+    --priority-p3: #60a5fa;
+
+    --priority-p1-bg: #3f1d1d;
+    --priority-p1-text: #fca5a5;
+    --priority-p2-bg: #422c0a;
+    --priority-p2-text: #fcd34d;
+    --priority-p3-bg: #1e3a5f;
+    --priority-p3-text: #93c5fd;
+
+    --calendar-event: #22d3ee;
+    --calendar-event-bg: #0e3f4a;
+    --calendar-event-text: #a5f3fc;
+
+    --category-business: #a78bfa;
+    --category-personal: #34d399;
+    --category-unknown: #8b93a1;
+    --category-hostaway: #2dd4bf;
+
+    --brand-primary: #ef4444;
+    --brand-primary-hover: #f87171;
+    --success: #34d399;
+    --danger: #ef4444;
+
+    --danger-bg: #2a1416;
+    --danger-border: #5b2326;
+    --danger-text: #fca5a5;
+    --danger-strong: #f87171;
+    --success-bg: #0f2a1f;
+    --success-border: #1f5138;
+    --success-text: #86efac;
+    --success-strong: #4ade80;
+    --ring-soft: #1e3a5f;
+
+    /* Shadows carry almost no weight on a dark ground; depth comes from the
+       surface lift above. Deepened so they still separate a modal from the
+       page rather than disappearing. */
+    --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-card-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+    --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+    --shadow-fab: 0 4px 12px 0 rgba(239, 68, 68, 0.35);
+    --shadow-menu: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.35);
+  }
 }
 
 body {

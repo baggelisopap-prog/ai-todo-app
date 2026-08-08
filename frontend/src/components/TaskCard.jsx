@@ -726,7 +726,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
               value={draft.task_name}
               onChange={(e) => updateDraft('task_name', e.target.value)}
               placeholder={t('task.name_placeholder')}
-              className={`w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors ${isCompleted ? 'line-through' : ''}`}
+              className={`w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors ${isCompleted ? 'line-through' : ''}`}
             />
             <TaskMenu
               menuRef={menuRef}
@@ -750,7 +750,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
               value={draft.description}
               onChange={(e) => updateDraft('description', e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 resize-none transition-colors"
+              className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] resize-none transition-colors"
             />
           </Field>
 
@@ -779,7 +779,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                 type="date"
                 value={draft.due_date}
                 onChange={(e) => updateDraft('due_date', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
+                className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors"
               />
             </Field>
             <Field label={t('task.due_time_label')}>
@@ -787,7 +787,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                 type="time"
                 value={draft.due_time}
                 onChange={(e) => updateDraft('due_time', e.target.value)}
-                className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
+                className="w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors"
               />
             </Field>
           </div>
@@ -801,7 +801,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                     value={item.text}
                     onChange={(e) => updateChecklistItem(index, { ...item, text: e.target.value })}
                     placeholder={t('task.checklist_item_placeholder', { n: index + 1 })}
-                    className="flex-1 px-3 py-1.5 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 transition-colors"
+                    className="flex-1 px-3 py-1.5 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors"
                   />
                   <button
                     type="button"
@@ -856,7 +856,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                 }}
                 disabled={isAgentBusy || isSaving || isDeleting}
                 placeholder={t('task.agent_placeholder')}
-                className="flex-1 px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100 disabled:opacity-60 transition-colors"
+                className="flex-1 px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] disabled:opacity-60 transition-colors"
               />
               <button
                 type="button"

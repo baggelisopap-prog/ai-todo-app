@@ -135,7 +135,7 @@ const VoiceButton = forwardRef(function VoiceButton({ onComplete, renderIdleButt
       }
     >
       {voiceError && (
-        <div className="absolute bottom-full mb-2 right-0 w-52 p-2 rounded-lg border border-red-200 bg-[var(--bg-card)] text-[var(--danger)] text-xs shadow-[var(--shadow-menu)] z-10">
+        <div className="absolute bottom-full mb-2 right-0 w-52 p-2 rounded-lg border border-[var(--danger-border)] bg-[var(--bg-card)] text-[var(--danger)] text-xs shadow-[var(--shadow-menu)] z-10">
           {voiceError}
         </div>
       )}

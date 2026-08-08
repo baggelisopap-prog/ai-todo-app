@@ -234,7 +234,7 @@ function App() {
 
         {error && (
           <div className="max-w-3xl mx-auto p-4">
-            <div className="p-4 rounded-lg border border-red-200 bg-red-50 text-red-800">
+            <div className="p-4 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger-text)]">
               <p className="font-medium">{t('errors.load_tasks_failed')}</p>
               <p className="text-sm mt-1 opacity-80">{error}</p>
             </div>

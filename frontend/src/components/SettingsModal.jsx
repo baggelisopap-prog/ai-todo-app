@@ -699,7 +699,7 @@ function AccountSection() {
         <button
           onClick={handleDeleteAccount}
           disabled={isDeleting}
-          className="w-full text-left px-3 py-2.5 rounded-md hover:bg-red-50 text-[var(--danger)] font-medium text-sm disabled:opacity-50"
+          className="w-full text-left px-3 py-2.5 rounded-md hover:bg-[var(--danger-bg)] text-[var(--danger)] font-medium text-sm disabled:opacity-50"
         >
           {isDeleting ? t('settings.deleting') : t('settings.delete_account')}
         </button>

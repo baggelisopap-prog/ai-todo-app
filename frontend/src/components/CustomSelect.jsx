@@ -30,7 +30,7 @@ export function CustomSelect({ value, options, onChange, placeholder, ariaLabel,
           rounded-md
           text-[var(--text-primary)]
           hover:border-[var(--text-secondary)]
-          focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-100
+          focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)]
           transition-colors
         `}
       >
