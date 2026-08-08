@@ -116,6 +116,10 @@ One component in the app has a focus ring. Inputs get `focus:ring` from their ow
 **Fix**: a single global `:focus-visible` rule in `index.css`. Global beats per-component here — it cannot be forgotten by the next button.
 **Files**: `index.css`
 
+**Two choices worth recording.** `:focus-visible` rather than `:focus`, so a mouse click never draws a ring — only keyboard navigation, which is the case that needed it. And `outline` rather than a `box-shadow` ring: outline follows `border-radius` and, unlike a shadow, cannot be clipped by an ancestor's `overflow: hidden` — which matters here because the cards and modals that hold most of the app's buttons all clip.
+
+`browse.filter_*` covers exactly the four categories the card can render (`Business`, `Personal`, `Unknown`, `Hostaway`), and the lookup falls back to the raw string, so a category added to the backend later degrades to today's behaviour instead of rendering a missing-key.
+
 ---
 
 ## Phase 5 — Dark mode
@@ -203,3 +207,16 @@ _Changes whose correctness a build cannot confirm._
 - **The new icon.** Tab favicon, and the icon on the next push notification the app sends.
 - **Install the app** ("Add to Home Screen"). It should offer "AI To-Do", open without browser chrome, and show a red status bar.
 - **The bottom nav on a phone with a home indicator** — labels should sit clear of it, and the toast should clear the nav.
+
+**From Phase 2:**
+- **The complete circle still looks the same size.** The ring is unchanged at 20px; only the invisible hit area around it grew. If the circle itself looks bigger or the card's row spacing shifted, the padding leaked into the layout.
+- **Completing a task from a phone.** The thing being fixed is the miss — a thumb that lands near the circle should complete the task, not expand the card.
+
+**From Phase 3:**
+- **Escape closes Settings, the agent chat and the calendar's day popup** — it previously only closed Add Task.
+- **Scrolling behind an open modal does nothing.** Open Settings on a phone and swipe; the list underneath must not move. Then close it and confirm the page scrolls again — a lock that fails to release is worse than no lock.
+
+**From Phase 4:**
+- **Google events are cyan in Today**, matching the Calendar grid, and no longer the brand red that task actions use.
+- **Category on a card reads in the app's language** and matches the Browse filter pill for the same category.
+- **Tab through a screen.** Every button should now show a focus outline. Clicking one with a mouse should not.
