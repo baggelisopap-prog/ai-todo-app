@@ -19,6 +19,10 @@
  *   4. One of this app's own safe-area helper classes is used but not defined.
  *      Same silent failure as (1), and it is what keeps content off the
  *      iPhone home indicator.
+ *   5. A token is defined in one palette but not the other. The light value
+ *      then bleeds through in dark mode — one unreadable element on an
+ *      otherwise correct screen, which is exactly the kind of thing that only
+ *      shows up on someone else's phone.
  *
  * Exits non-zero on any violation so it can gate a build.
  */
@@ -135,6 +139,41 @@ for (const file of files) {
     }
   }
 }
+
+// --- 5. Light and dark palettes define the same tokens ----------------------
+// Asserted rather than assumed since the polish pass, but it matters more now
+// that the dark palette is the ONLY definition of its side: it hangs off
+// [data-theme='dark'] with no prefers-color-scheme copy, so a token missing
+// there does not fall back to some other dark value, it falls back to the light
+// one. Checked in both directions — a dark-only token is just as broken, it
+// leaves light mode with nothing.
+function tokensIn(selector) {
+  const at = css.indexOf(selector);
+  if (at === -1) return null;
+  const open = css.indexOf('{', at);
+  const close = css.indexOf('}', open); // neither block nests
+  return new Set([...css.slice(open, close).matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1]));
+}
+
+const DARK_SELECTOR = ":root[data-theme='dark']";
+const lightTokens = tokensIn(':root {');
+const darkTokens = tokensIn(DARK_SELECTOR);
+if (!lightTokens || !darkTokens) {
+  fail('palette-missing', `could not find ${!lightTokens ? ':root' : DARK_SELECTOR} in index.css`);
+} else {
+  for (const token of lightTokens) {
+    if (!darkTokens.has(token)) fail('palette-drift', `${token} is defined in :root but not in ${DARK_SELECTOR}`);
+  }
+  for (const token of darkTokens) {
+    if (!lightTokens.has(token)) fail('palette-drift', `${token} is defined in ${DARK_SELECTOR} but not in :root`);
+  }
+}
+
+// index.html's inline pre-paint script duplicates theme.js's storage key and
+// resolution rule, which is the other thing this pass could get silently wrong.
+// It is NOT checked here: theme.test.mjs runs both implementations over every
+// (stored preference × OS) pair and compares them, which catches a drifted key
+// and everything else a text match would miss.
 
 // --- Report -----------------------------------------------------------------
 if (failures.length === 0) {

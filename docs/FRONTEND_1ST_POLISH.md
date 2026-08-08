@@ -132,6 +132,8 @@ Add `--danger-bg/-border/-text` and `--success-bg/-border/-text`, and replace th
 ### 5.2 Add the dark palette
 `@media (prefers-color-scheme: dark)` over the existing `:root` tokens. Follows the OS; no in-app toggle in this pass — a toggle needs a persisted setting and a Settings row, which is a feature, not polish.
 
+> **Superseded 2026-08-08.** The toggle shipped as its own feature (Appearance: System/Light/Dark — FEATURES.md, DECISIONS.md). The media query is gone; the same palette now hangs off `:root[data-theme='dark']`, which JS sets to the resolved theme. Nothing about the values below changed — the split was where the palette is *selected*, not what is in it, which is the payoff of having tokenised everything first.
+
 ### 5.3 Dark `theme-color`
 So the phone's chrome matches.
 

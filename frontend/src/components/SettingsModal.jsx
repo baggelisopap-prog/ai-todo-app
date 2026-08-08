@@ -19,6 +19,7 @@ import {
   deleteAccount,
 } from '../api';
 import { supabase } from '../supabaseClient';
+import { getStoredTheme, setTheme } from '../utils/theme';
 import CollapsibleSection from './CollapsibleSection';
 
 // Hardcoded owner user_id — same "one door" pattern hostaway_integration.py's
@@ -117,6 +118,14 @@ export function SettingsModal({ onClose }) {
             onToggle={() => toggleSection('language')}
           >
             <LanguageSection />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title={t('settings.appearance')}
+            isOpen={!!openSections.appearance}
+            onToggle={() => toggleSection('appearance')}
+          >
+            <AppearanceSection />
           </CollapsibleSection>
 
           {isOwner && (
@@ -660,6 +669,50 @@ function LanguageSection() {
       >
         Ελληνικά
       </button>
+    </div>
+  );
+}
+
+// Three options rather than an on/off switch. A two-state toggle has to start
+// somewhere, and whichever side it starts on silently becomes a CHOICE the
+// moment the user's phone switches at sunset and the app does not follow.
+// "System" is the one answer a boolean cannot express, and it is the default.
+function AppearanceSection() {
+  const { t } = useTranslation();
+  const [theme, setThemeState] = useState(getStoredTheme);
+
+  function handleChange(next) {
+    setTheme(next);       // writes localStorage + <html data-theme>
+    setThemeState(next);  // only so this row re-renders its selection
+  }
+
+  const options = [
+    { value: 'system', label: t('settings.theme_system') },
+    { value: 'light', label: t('settings.theme_light') },
+    { value: 'dark', label: t('settings.theme_dark') },
+  ];
+
+  return (
+    <div>
+      <div className="flex gap-2">
+        {options.map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => handleChange(value)}
+            aria-pressed={theme === value}
+            className={`flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
+              theme === value
+                ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+                : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-[var(--text-muted)] mt-2">
+        {t('settings.theme_description')}
+      </p>
     </div>
   );
 }

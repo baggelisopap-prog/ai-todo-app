@@ -13,11 +13,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Two, so the phone's chrome follows the theme the app is actually
          showing. Without the media queries a dark-mode user gets a light red
-         bar over a near-black app. -->
-    <meta name="theme-color" content="#dc2626" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#171a21" media="(prefers-color-scheme: dark)" />
+         bar over a near-black app.
+
+         The media attributes here are only the answer until the bundle loads:
+         they follow the OS, and the Appearance setting is allowed to disagree
+         with the OS. theme.js's applyTheme() rewrites them (that is what the
+         data-scheme hooks are for) to point at whichever theme is really being
+         shown. Keep both attributes on both tags. -->
+    <meta name="theme-color" content="#dc2626" data-scheme="light" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#171a21" data-scheme="dark" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="Capture tasks by text, voice or photo. Sorted and prioritised for you, synced with Google Calendar." />
     <title>AI To-Do</title>
+    <!-- Runs before the first paint, which is the whole reason it is inline
+         here rather than in the bundle: index.css keys its dark palette off
+         this attribute, so a dark-theme user would otherwise get a white flash
+         while the JS downloads. Deliberately duplicates two things from
+         src/utils/theme.js — the storage key and the resolution rule — because
+         anything imported is already too late. ui-check.mjs asserts the key
+         below still matches the one there. -->
+    <script>
+      (function () {
+        var stored = localStorage.getItem('app_theme');
+        var dark =
+          stored === 'dark' ||
+          (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
