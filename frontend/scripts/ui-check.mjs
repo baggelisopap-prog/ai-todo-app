@@ -107,7 +107,7 @@ if (colourHits.length > HARDCODED_COLOUR_BASELINE) {
 // --- 4. This app's own utility classes are defined --------------------------
 // Only checks classes we invented (safe-area helpers). Tailwind's own classes
 // are generated at build time and are none of this script's business.
-const OWN_CLASSES = /\b(pb-safe|bottom-safe-\d+)\b/g;
+const OWN_CLASSES = /\b(pb-safe|bottom-safe-\d+|tap-\d+)\b/g;
 for (const file of files) {
   if (file === cssPath) continue;
   const body = readFileSync(file, 'utf8');

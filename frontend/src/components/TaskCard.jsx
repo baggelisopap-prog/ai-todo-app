@@ -528,7 +528,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
             <button
               type="button"
               onClick={handleCircleClick}
-              className={`w-5 h-5 mt-0.5 rounded-full flex-shrink-0 flex items-center justify-center transition-all
+              className={`tap-44 w-5 h-5 mt-0.5 rounded-full flex-shrink-0 flex items-center justify-center transition-all
                 ${isCompleted
                   ? 'bg-[var(--success)] border-2 border-[var(--success)]'
                   : 'border-2 border-[var(--border-medium)] hover:border-[var(--text-secondary)]'}`}
@@ -584,7 +584,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                 <button
                   type="button"
                   onClick={handleToggleNotify}
-                  className={`p-1 -m-1 rounded transition-colors ${
+                  className={`tap-40 p-1 -m-1 rounded transition-colors ${
                     !task.due_time
                       ? 'text-[var(--text-muted)] opacity-40'
                       : task.notify_enabled
@@ -608,7 +608,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                 <button
                   type="button"
                   onClick={handleToggleCalendarSync}
-                  className={`p-1 -m-1 rounded transition-colors ${
+                  className={`tap-40 p-1 -m-1 rounded transition-colors ${
                     !task.due_date
                       ? 'text-[var(--text-muted)] opacity-40'
                       : task.calendar_sync_enabled

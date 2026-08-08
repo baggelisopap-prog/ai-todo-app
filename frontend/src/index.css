@@ -87,6 +87,44 @@ body {
   bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
 }
 
+/* --- Tap targets -------------------------------------------------------
+   Grows the region that accepts a thumb WITHOUT changing anything visible.
+   An invisible centred ::after does the catching, so the icon keeps its size
+   and the layout keeps its spacing — padding or a bigger box would have
+   pushed every neighbouring element around.
+
+   Why it matters here beyond the usual guidance: a whole TaskCard is
+   clickable, so a missed tap on the complete circle does not do nothing, it
+   EXPANDS THE CARD. The miss has a visible, wrong outcome.
+
+   Two sizes, because the app has two situations:
+   .tap-44 — the 44px minimum, for controls with room around them.
+   .tap-40 — the card's meta row, where items sit in a gap-3 (12px) flex row.
+             A 44px target on a 16px icon would reach 14px past it and overlap
+             its neighbour's; 40px lands exactly on the gap. Getting all of
+             them to 44 means redesigning that row, which is more than polish.
+   Both are a large improvement on the 20px and 24px they replace. */
+.tap-44,
+.tap-40 {
+  position: relative;
+}
+.tap-44::after,
+.tap-40::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.tap-44::after {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.tap-40::after {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
 }

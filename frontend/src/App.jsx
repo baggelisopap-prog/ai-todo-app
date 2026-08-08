@@ -206,7 +206,7 @@ function App() {
     <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       <button
         onClick={() => setIsAgentOpen(true)}
-        className="fixed top-4 left-4 z-30 w-10 h-10 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
+        className="fixed top-4 left-4 z-30 w-11 h-11 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
         aria-label={t('agent.open')}
       >
         <ChatIcon className="w-5 h-5 text-[var(--text-secondary)]" />
@@ -214,7 +214,7 @@ function App() {
 
       <button
         onClick={() => setIsSettingsOpen(true)}
-        className="fixed top-4 right-4 z-30 w-10 h-10 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
+        className="fixed top-4 right-4 z-30 w-11 h-11 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
         aria-label={t('settings.open')}
       >
         <GearIcon className="w-5 h-5 text-[var(--text-secondary)]" />

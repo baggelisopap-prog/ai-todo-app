@@ -69,7 +69,10 @@ The whole app is used on a phone. Apple asks for 44×44pt, Android for 48×48dp.
 ### 2.3 The chat and settings buttons are 40×40
 Just under the threshold, and they are the only way into two whole surfaces.
 
-**Files**: `TaskCard.jsx`, `App.jsx`
+**Files**: `TaskCard.jsx`, `App.jsx`, `index.css`
+
+**How it was done**: an invisible centred `::after` (`.tap-44` / `.tap-40` in `index.css`) grows the region that accepts a thumb without changing anything visible. Padding or a larger box would have pushed every neighbouring element around; this leaves the layout untouched.
+**One target could not reach 44.** The card's meta row is a `gap-3` (12px) flex row of date, category, bell and calendar. A 44px target on a 16px icon reaches 14px past it and would overlap its neighbour's target; 40px lands exactly on the gap. Getting that row to 44 across the board means redesigning it, which is more than polish — the bell and calendar got `.tap-40`, still a large improvement on the ~24px they had. The circle, which has room, got the full 44.
 
 ---
 
@@ -179,8 +182,8 @@ Each rule was verified to actually fire by injecting a fault (`bg-pink-500`, a d
 |---|---|
 | 1 — Shell and identity | **done** — lint unchanged at 14 pre-existing, build clean |
 | 7 — Re-runnable check | **done** — `npm run check` green; found a real undefined-token bug in LoginScreen |
-| 2 — Touch targets | next |
-| 3 — Modal behaviour | not started |
+| 2 — Touch targets | **done** — check/lint/build green |
+| 3 — Modal behaviour | next |
 | 4 — Consistency | not started |
 | 5 — Dark mode | not started |
 | 6 — Polish | not started |
