@@ -1,6 +1,7 @@
 # BACKLOG — deferred, not started
 _Ideas parked deliberately. Moving one into active work = write it into CURRENT_TASK.md._
 
+- **UX redesign (shell, task row, settings)** — designed 2026-08-09, six phases, none started: see `docs/superpowers/specs/2026-08-09-ux-redesign-design.md`. Phase 0 is a real bug, not polish: app settings live in FOUR independent copies and `PATCH /settings` overwrites the whole object, so changing a notification setting and then a calendar setting silently reverts the first. Phase 5 (instant local task search — there is none in the app today, only the agent) is independent of the rest and is the one to pull forward if the appetite runs out.
 - **Agent writes Phase 2**: delete tasks + Google Calendar event operations (higher risk than Phase 1's complete/update/create).
 - **Task report export (Excel / PDF)** — e.g. "κάνε μου report με όλα τα business tasks του έτους". Design already thought through (2026-08-02), parked for later:
   - **Core principle**: the file is generated ENTIRELY in Python; the agent's only job is translating natural language into parameters (`date_from`, `date_to`, `category`, `include_completed`) — roughly 30 output tokens. Task rows never enter the model's context, so 500 tasks cost the same as 5, `MAX_SEARCH_RESULTS = 30` does not apply (it is a token guard and there are no tokens here), descriptions are not truncated to 100 chars, and the totals are arithmetically correct because Python counts them, not the LLM.
