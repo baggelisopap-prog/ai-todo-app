@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 import {
   isNotificationSupported,
   getNotificationPermission,
@@ -41,6 +42,7 @@ function getInitials(displayName, email) {
 }
 
 export function SettingsModal({ onClose }) {
+  useModalBehavior(onClose);
   const { t } = useTranslation();
   const [profile, setProfile] = useState(null);
   const [profileLoaded, setProfileLoaded] = useState(false);

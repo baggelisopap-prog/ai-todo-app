@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "check": "node scripts/ui-check.mjs"
+    "check": "node scripts/ui-check.mjs && node scripts/modal-lock.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

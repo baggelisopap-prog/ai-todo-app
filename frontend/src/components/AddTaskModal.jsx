@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { extractTasks } from '../api';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 function AddTaskModal({ onClose, onTasksAdded }) {
   const { t } = useTranslation();
+  useModalBehavior(onClose);
   const [text, setText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -34,9 +36,8 @@ function AddTaskModal({ onClose, onTasksAdded }) {
       e.preventDefault();
       handleSubmit();
     }
-    if (e.key === 'Escape') {
-      onClose();
-    }
+    // Escape is handled by useModalBehavior at the document level, so it works
+    // wherever focus happens to be — not only while this textarea has it.
   }
 
   function handleBackdropClick(e) {

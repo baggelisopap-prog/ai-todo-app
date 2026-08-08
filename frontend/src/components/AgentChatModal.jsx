@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 import Markdown from 'react-markdown';
 import { askAgent, confirmAgentAction } from '../api';
 
@@ -180,6 +181,7 @@ function ProposalCard({ action, t, onConfirm, onCancel }) {
 }
 
 export function AgentChatModal({ onClose, onTaskConfirmed }) {
+  useModalBehavior(onClose);
   const { t } = useTranslation();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');

@@ -25,6 +25,7 @@ import { toLocalISODate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import { getEventLabel } from '../utils/eventType';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7); // 07:00-22:00
@@ -605,6 +606,7 @@ function MonthlyGrid({
 }
 
 function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onMakeTask, onDismissEvent, onClose, t }) {
+  useModalBehavior(onClose);
   const dayLabel = formatSelectedDayLabel(date);
   // Combined so the header count is never misleadingly "(0)" on a day that
   // has events but no tasks — this is what previously made the popup look

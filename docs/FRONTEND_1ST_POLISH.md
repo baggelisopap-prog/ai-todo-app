@@ -87,7 +87,11 @@ Six components hand-roll an overlay, so every behaviour a modal needs had to be 
 Open Settings on a phone, scroll, and the list behind it moves instead.
 
 **Fix**: one small shared hook — `useModalBehavior({ onClose })` — that wires Escape and the scroll lock, applied to each modal. Deliberately **not** a shared `<Modal>` component: the four modals have genuinely different chrome (full-screen sheet, centred dialog, chat column), and unifying their markup is a bigger, riskier change than the two behaviours they are actually missing. That refactor stays out of this pass.
-**Files**: new `frontend/src/hooks/useModalBehavior.js`, then the four modals
+**Files**: new `frontend/src/hooks/useModalBehavior.js`, then `AddTaskModal`, `SettingsModal`, `AgentChatModal` and the calendar's `DayDetailModal`.
+
+**Escape got better, not just present.** `AddTaskModal` had it on the textarea's own `onKeyDown`, so it only fired while that textarea held focus. The hook listens on `document`, so it works wherever focus happens to be — the local handler was removed as redundant.
+
+**Scroll locking is refcounted**, because modals here can stack (the photo preview opens over the floating buttons). A naive lock/unlock pair would have the inner one closing unlock the page while the outer is still open. It also remembers the previous `overflow` rather than assuming `''`. Both are covered by `scripts/modal-lock.test.mjs`, 10 cases including a stack closed **outer-first** and a pre-existing `overflow: scroll` that must be restored rather than blanked — its failure mode is a page left permanently unscrollable with no error, which is worth a test even in a repo that has none.
 
 ---
 
@@ -183,8 +187,8 @@ Each rule was verified to actually fire by injecting a fault (`bg-pink-500`, a d
 | 1 — Shell and identity | **done** — lint unchanged at 14 pre-existing, build clean |
 | 7 — Re-runnable check | **done** — `npm run check` green; found a real undefined-token bug in LoginScreen |
 | 2 — Touch targets | **done** — check/lint/build green |
-| 3 — Modal behaviour | next |
-| 4 — Consistency | not started |
+| 3 — Modal behaviour | **done** — hook + 10-case lock test, all green |
+| 4 — Consistency | next |
 | 5 — Dark mode | not started |
 | 6 — Polish | not started |
 
