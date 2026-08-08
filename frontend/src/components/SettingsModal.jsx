@@ -9,8 +9,6 @@ import {
 } from '../utils/notifications';
 import {
   registerPushSubscription,
-  getAppSettings,
-  updateAppSettings,
   getTokenUsage,
   getCalendarStatus,
   disconnectGoogleCalendar,
@@ -20,6 +18,7 @@ import {
 } from '../api';
 import { supabase } from '../supabaseClient';
 import { getStoredTheme, setTheme } from '../utils/theme';
+import { useAppSettings } from '../hooks/useAppSettings';
 import CollapsibleSection from './CollapsibleSection';
 
 // Hardcoded owner user_id — same "one door" pattern hostaway_integration.py's
@@ -42,7 +41,7 @@ function getInitials(displayName, email) {
   return '?';
 }
 
-export function SettingsModal({ onClose }) {
+export function SettingsModal({ onClose, onShowToast }) {
   useModalBehavior(onClose);
   const { t } = useTranslation();
   const [profile, setProfile] = useState(null);
@@ -101,7 +100,7 @@ export function SettingsModal({ onClose }) {
             isOpen={!!openSections.notifications}
             onToggle={() => toggleSection('notifications')}
           >
-            <NotificationsSection />
+            <NotificationsSection onShowToast={onShowToast} />
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -109,7 +108,7 @@ export function SettingsModal({ onClose }) {
             isOpen={!!openSections.calendar}
             onToggle={() => toggleSection('calendar')}
           >
-            <CalendarConnectionView />
+            <CalendarConnectionView onShowToast={onShowToast} />
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -249,18 +248,16 @@ function ProfileSection({ profile, profileLoaded, onProfileUpdate }) {
   );
 }
 
-function NotificationsSection() {
+function NotificationsSection({ onShowToast }) {
   const { t } = useTranslation();
   const [permission, setPermission] = useState(getNotificationPermission());
   const [isRequesting, setIsRequesting] = useState(false);
-  const [settings, setSettings] = useState({
-    notifications_enabled: true,
-    send_all_enabled: true,
-    daily_summary_enabled: false,
-    daily_summary_mode: 'fixed_time',
-    daily_summary_time: '08:00',
-  });
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // No local copy of the settings, and no local defaults to fall back on. Both
+  // used to exist here and were half of the pair that silently reverted each
+  // other's writes — see useAppSettings.jsx.
+  const { settings, updateSettings } = useAppSettings();
+  const settingsLoaded = settings !== null;
 
   const supported = isNotificationSupported();
 
@@ -272,13 +269,6 @@ function NotificationsSection() {
     }
   }, [permission]);
 
-  useEffect(() => {
-    getAppSettings()
-      .then(s => setSettings(s))
-      .catch(err => console.error('Failed to load settings:', err))
-      .finally(() => setSettingsLoaded(true));
-  }, []);
-
   async function handleRequestPermission() {
     setIsRequesting(true);
     const result = await requestNotificationPermission();
@@ -286,41 +276,22 @@ function NotificationsSection() {
     setIsRequesting(false);
   }
 
-  async function handleToggle(field) {
-    const previous = settings;
-    const updated = { ...settings, [field]: !settings[field] };
-    setSettings(updated); // optimistic
+  // One handler for all three, because they only ever differed in which field
+  // they wrote. The store does the optimistic update and the revert; all that
+  // is left here is telling the user when it failed, which is the part the
+  // three copies used to skip.
+  async function applyChange(patch) {
     try {
-      await updateAppSettings(updated);
+      await updateSettings(patch);
     } catch (err) {
-      setSettings(previous); // revert on failure
       console.error('Failed to update settings:', err);
+      onShowToast('errors.failed_update', 'error');
     }
   }
 
-  async function handleModeChange(mode) {
-    const previous = settings;
-    const updated = { ...settings, daily_summary_mode: mode };
-    setSettings(updated);
-    try {
-      await updateAppSettings(updated);
-    } catch (err) {
-      setSettings(previous);
-      console.error('Failed to update settings:', err);
-    }
-  }
-
-  async function handleTimeChange(time) {
-    const previous = settings;
-    const updated = { ...settings, daily_summary_time: time };
-    setSettings(updated);
-    try {
-      await updateAppSettings(updated);
-    } catch (err) {
-      setSettings(previous);
-      console.error('Failed to update settings:', err);
-    }
-  }
+  const handleToggle = (field) => applyChange({ [field]: !settings[field] });
+  const handleModeChange = (mode) => applyChange({ daily_summary_mode: mode });
+  const handleTimeChange = (time) => applyChange({ daily_summary_time: time });
 
   return (
     <div>
@@ -478,18 +449,17 @@ function NotificationsSection() {
   );
 }
 
-function CalendarConnectionView() {
+function CalendarConnectionView({ onShowToast }) {
   const { t } = useTranslation();
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [statusLoaded, setStatusLoaded] = useState(false);
 
-  // Independent copy of app settings, scoped to this view — mirrors how the
-  // Notifications section manages its own settings state. Only the
-  // calendar_sync_all_enabled / calendar_show_events fields are read/written
-  // here; the other fields just ride along unchanged so a PATCH from this
-  // view never clobbers the notification settings (the /settings endpoint
-  // takes the full object).
-  const [settings, setSettings] = useState(null);
+  // This view used to keep its own copy of app settings, with a comment
+  // claiming the untouched fields "just ride along unchanged". They did not:
+  // they rode along as they were AT MOUNT, so a PATCH from here overwrote
+  // whatever the Notifications section had changed in the meantime. Both now
+  // read and write the same object — see useAppSettings.jsx.
+  const { settings, updateSettings } = useAppSettings();
 
   // Fires automatically on mount (no button needed) — this is what makes
   // "Connected" show immediately whenever the user opens the Settings modal.
@@ -500,35 +470,19 @@ function CalendarConnectionView() {
       .finally(() => setStatusLoaded(true));
   }, []);
 
-  useEffect(() => {
-    getAppSettings()
-      .then(s => setSettings(s))
-      .catch(err => console.error('Failed to load settings:', err));
-  }, []);
-
-  async function handleToggleSyncAll() {
-    const previous = settings;
-    const updated = { ...settings, calendar_sync_all_enabled: !settings.calendar_sync_all_enabled };
-    setSettings(updated); // optimistic
+  async function applyChange(patch) {
     try {
-      await updateAppSettings(updated);
+      await updateSettings(patch);
     } catch (err) {
-      setSettings(previous); // revert on failure
       console.error('Failed to update settings:', err);
+      onShowToast('errors.failed_update', 'error');
     }
   }
 
-  async function handleToggleShowEvents() {
-    const previous = settings;
-    const updated = { ...settings, calendar_show_events: !settings.calendar_show_events };
-    setSettings(updated); // optimistic
-    try {
-      await updateAppSettings(updated);
-    } catch (err) {
-      setSettings(previous); // revert on failure
-      console.error('Failed to update settings:', err);
-    }
-  }
+  const handleToggleSyncAll = () =>
+    applyChange({ calendar_sync_all_enabled: !settings.calendar_sync_all_enabled });
+  const handleToggleShowEvents = () =>
+    applyChange({ calendar_show_events: !settings.calendar_show_events });
 
   async function handleConnectCalendar() {
     // Read by App.jsx's onAuthStateChange listener once this OAuth flow

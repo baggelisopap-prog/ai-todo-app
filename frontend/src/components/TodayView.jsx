@@ -4,8 +4,9 @@ import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
-import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent, getAppSettings } from '../api';
+import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent } from '../api';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
+import { useAppSettings } from '../hooks/useAppSettings';
 
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
@@ -13,13 +14,14 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const [selectedPriority, setSelectedPriority] = useState('All');
   const [overdueExpanded, setOverdueExpanded] = useState(true);
   const [todayEvents, setTodayEvents] = useState([]);
-  const [showEventsEnabled, setShowEventsEnabled] = useState(true);
+  const { settings } = useAppSettings();
+
+  // Undefined while the one settings fetch is in flight. Treated as "don't show
+  // yet" rather than defaulting to true: guessing here is what produced a flash
+  // of events for users who had turned them off.
+  const showEventsEnabled = settings?.calendar_show_events;
 
   const today = toLocalISODate(new Date());
-
-  useEffect(() => {
-    getAppSettings().then(s => setShowEventsEnabled(s.calendar_show_events)).catch(console.error);
-  }, []);
 
   useEffect(() => {
     if (!showEventsEnabled) {

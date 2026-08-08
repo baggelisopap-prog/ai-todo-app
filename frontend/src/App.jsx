@@ -14,6 +14,7 @@ import AddTaskModal from './components/AddTaskModal';
 import Toast from './components/Toast';
 import SettingsModal from './components/SettingsModal';
 import { AgentChatModal } from './components/AgentChatModal';
+import { AppSettingsProvider } from './components/AppSettingsProvider';
 import { GearIcon, ChatIcon } from './components/icons';
 
 function App() {
@@ -202,7 +203,11 @@ function App() {
     return <LoginScreen />;
   }
 
+  // The provider sits INSIDE the session check on purpose: every /settings
+  // request needs a bearer token, so mounting it above the LoginScreen would
+  // fire a guaranteed 401 on every visit by a logged-out user.
   return (
+    <AppSettingsProvider>
     <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       <button
         onClick={() => setIsAgentOpen(true)}
@@ -283,13 +288,14 @@ function App() {
       )}
 
       {isSettingsOpen && (
-        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} onShowToast={handleShowToast} />
       )}
 
       {isAgentOpen && (
         <AgentChatModal onClose={() => setIsAgentOpen(false)} onTaskConfirmed={handleAgentActionConfirmed} />
       )}
     </div>
+    </AppSettingsProvider>
   );
 }
 

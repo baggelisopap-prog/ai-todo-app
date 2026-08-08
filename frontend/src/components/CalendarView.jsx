@@ -17,7 +17,6 @@ import FilterBar from './FilterBar';
 import {
   createTaskManual,
   getCalendarEventsInRange,
-  getAppSettings,
   convertCalendarEventToTask,
   dismissCalendarEvent,
 } from '../api';
@@ -26,6 +25,7 @@ import { priorityColor } from '../utils/priorityColor';
 import { getEventLabel } from '../utils/eventType';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
 import { useModalBehavior } from '../hooks/useModalBehavior';
+import { useAppSettings } from '../hooks/useAppSettings';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7); // 07:00-22:00
@@ -159,6 +159,8 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
   const [calendarEvents, setCalendarEvents] = useState([]);
+  const taskDetailRef = useRef(null);
+
   // null = the setting hasn't loaded yet — deliberately NOT defaulted to
   // true, since defaulting it would let the effect below fire an events
   // fetch on mount before we know the real value; if that fetch resolves
@@ -166,16 +168,12 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   // overwrite the just-cleared calendarEvents and events would reappear
   // regardless of the toggle. Gating the fetch on "!== null" avoids that
   // fetch entirely instead of racing it.
-  const [showEventsEnabled, setShowEventsEnabled] = useState(null);
-  const taskDetailRef = useRef(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getAppSettings()
-      .then(s => { if (!cancelled) setShowEventsEnabled(s.calendar_show_events); })
-      .catch(err => { console.error(err); if (!cancelled) setShowEventsEnabled(true); });
-    return () => { cancelled = true; };
-  }, []);
+  //
+  // The value now comes from the shared store rather than a fetch of this
+  // view's own — see useAppSettings.jsx for why there is only one copy. The
+  // race above is unchanged and still worth guarding: the store starts null too.
+  const { settings } = useAppSettings();
+  const showEventsEnabled = settings ? settings.calendar_show_events : null;
 
   // Google Calendar events (display-only) for whatever range is currently
   // visible — the full Monthly grid (including lead/tail days from
