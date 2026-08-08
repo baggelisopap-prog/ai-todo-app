@@ -70,7 +70,7 @@ function FloatingActionButtons({ onAddClick, onVoiceComplete, onPhotoComplete })
         />
       )}
 
-      <div className="fixed bottom-24 right-4 z-30 flex flex-col items-end gap-3 pointer-events-none">
+      <div className="fixed bottom-safe-24 right-4 z-30 flex flex-col items-end gap-3 pointer-events-none">
         <div
           className={`flex flex-col items-end gap-3 transition-all duration-200 ${
             isOpen

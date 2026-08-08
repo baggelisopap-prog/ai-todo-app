@@ -75,7 +75,9 @@ function BottomNav({ activeTab, onTabChange }) {
   const { t } = useTranslation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-card)] border-t border-[var(--border-subtle)] shadow-[0_-1px_3px_rgba(0,0,0,0.03)]">
+    // pb-safe: on a phone with a home indicator the nav is the bottom-most
+    // element on screen, so without the inset its labels sit underneath it.
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-card)] border-t border-[var(--border-subtle)] shadow-[0_-1px_3px_rgba(0,0,0,0.03)] pb-safe">
       <div className="flex justify-around max-w-3xl mx-auto">
         {TABS.map(({ id, labelKey, Icon }) => {
           const isActive = activeTab === id;

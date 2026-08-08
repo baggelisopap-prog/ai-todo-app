@@ -66,6 +66,27 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* --- Safe area ---------------------------------------------------------
+   Every one of these resolves to 0px on hardware without a notch or home
+   indicator, so they are inert on desktop and on older phones. They only do
+   anything because index.html sets viewport-fit=cover; without that meta the
+   env() values are always 0 and these classes are silently no-ops.
+
+   The app is bottom-heavy — nav, toast and the floating buttons all live
+   there — so the bottom inset is the one that matters. Anything pinned to the
+   bottom edge must use one of these instead of a bare `bottom-N`. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+/* For fixed elements that sit ABOVE the bottom edge: keeps their existing gap
+   and adds the inset underneath, rather than letting the inset eat the gap. */
+.bottom-safe-20 {
+  bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+.bottom-safe-24 {
+  bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+
 ::-webkit-scrollbar {
   width: 8px;
 }

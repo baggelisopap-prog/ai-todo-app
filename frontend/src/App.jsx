@@ -220,7 +220,12 @@ function App() {
         <GearIcon className="w-5 h-5 text-[var(--text-secondary)]" />
       </button>
 
-      <main className="flex-1 pb-48">
+      {/* pt-14 clears the two fixed buttons above. They are 40px tall at top-4,
+          so they occupy y:16→56, and every view opens with p-4 and no offset of
+          its own — which put each screen's <h1> at y:16, directly underneath
+          the chat icon. Visible on phones only: on a wide viewport the views'
+          max-w-3xl container is centred and clears the buttons horizontally. */}
+      <main className="flex-1 pt-14 pb-48">
         {isLoading && (
           <div className="max-w-3xl mx-auto p-4 text-[var(--text-muted)] text-sm italic">
             {t('app.loading_tasks')}

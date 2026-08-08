@@ -22,4 +22,16 @@ i18n
     },
   });
 
+// Keep <html lang> honest. index.html ships lang="en" as a placeholder, but the
+// app is fully translated and the user switches in Settings — a stale lang tells
+// screen readers and hyphenation the wrong thing about every word on the page.
+function syncDocumentLanguage(lng) {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = lng;
+  }
+}
+
+syncDocumentLanguage(i18n.language);
+i18n.on('languageChanged', syncDocumentLanguage);
+
 export default i18n;
