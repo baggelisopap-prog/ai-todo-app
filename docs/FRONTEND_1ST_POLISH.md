@@ -188,8 +188,8 @@ Each rule was verified to actually fire by injecting a fault (`bg-pink-500`, a d
 | 7 — Re-runnable check | **done** — `npm run check` green; found a real undefined-token bug in LoginScreen |
 | 2 — Touch targets | **done** — check/lint/build green |
 | 3 — Modal behaviour | **done** — hook + 10-case lock test, all green |
-| 4 — Consistency | next |
-| 5 — Dark mode | not started |
+| 4 — Consistency | **done** — check/lint/build green |
+| 5 — Dark mode | next |
 | 6 — Polish | not started |
 
 **Verification after every phase**: `npm run lint`, `npm run build`, and from Phase 7 on, `npm run check`. Anything that needs a human eye is listed under the phase itself and collected at the end of this file as it accumulates.

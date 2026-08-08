@@ -6,6 +6,17 @@ import { priorityColor } from '../utils/priorityColor';
 import CustomSelect from './CustomSelect';
 import { SparkleIcon, SpinnerIcon } from './icons';
 
+// The card used to print the raw enum — "Business" — while the filter pills in
+// Browse showed "Επαγγελματικά" for the same thing. Same concept, two names, in
+// the same language. Reuses the keys those pills already use rather than
+// inventing a second set.
+const CATEGORY_LABEL_KEYS = {
+  Business: 'browse.filter_business',
+  Personal: 'browse.filter_personal',
+  Unknown: 'browse.filter_unknown',
+  Hostaway: 'browse.filter_hostaway',
+};
+
 function categoryColor(category) {
   switch (category) {
     case 'Business':
@@ -546,7 +557,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                 <span
                   className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ backgroundColor: priorityColor(task.priority) }}
-                  aria-label={`Priority ${task.priority}`}
+                  aria-label={t('task.priority_aria', { priority: task.priority })}
                 />
                 <h3 className={titleClasses}>{task.task_name}</h3>
               </div>
@@ -570,7 +581,7 @@ function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpd
                       className="w-1.5 h-1.5 rounded-full"
                       style={{ backgroundColor: categoryColor(task.category) }}
                     />
-                    {task.category}
+                    {CATEGORY_LABEL_KEYS[task.category] ? t(CATEGORY_LABEL_KEYS[task.category]) : task.category}
                   </span>
                 )}
                 {task.category === 'Hostaway' && task.hostaway_created_at && (

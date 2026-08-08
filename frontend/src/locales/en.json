@@ -135,7 +135,8 @@
     "agent_sug_next_week": "Next week",
     "agent_sug_day_later": "A day later",
     "agent_sug_morning": "Set it for the morning",
-    "agent_sug_hour_earlier": "An hour earlier"
+    "agent_sug_hour_earlier": "An hour earlier",
+    "priority_aria": "Priority {{priority}}"
   },
   "menu": {
     "open_menu": "Open menu"

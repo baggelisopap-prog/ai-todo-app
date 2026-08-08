@@ -135,7 +135,8 @@
     "agent_sug_next_week": "Την επόμενη βδομάδα",
     "agent_sug_day_later": "Μία μέρα μετά",
     "agent_sug_morning": "Βάλ' το το πρωί",
-    "agent_sug_hour_earlier": "Μία ώρα νωρίτερα"
+    "agent_sug_hour_earlier": "Μία ώρα νωρίτερα",
+    "priority_aria": "Προτεραιότητα {{priority}}"
   },
   "menu": {
     "open_menu": "Άνοιγμα μενού"

@@ -125,6 +125,21 @@ body {
   height: 2.5rem;
 }
 
+/* --- Keyboard focus ----------------------------------------------------
+   One component in this app had a focus style. Inputs got a ring from their
+   own classes; buttons got nothing, so tabbing through was untrackable.
+
+   Global on purpose: a per-component rule is one the next button added to the
+   app will not have. :focus-visible (not :focus) means a mouse click never
+   draws it — only keyboard navigation does, which is the case that needs it.
+   `outline` rather than a box-shadow so it follows border-radius and cannot be
+   clipped by an ancestor's overflow. */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
 }

@@ -98,7 +98,14 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
               <div
                 key={event.id}
                 onClick={() => openEventInGoogle(event)}
-                className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--bg-card)] border-l-4 border-[var(--brand-primary)] cursor-pointer hover:brightness-95"
+                // --calendar-event, not --brand-primary. index.css defines the
+                // event colour as cyan and says in so many words that it is
+                // "deliberately distinct" from task colours "so events never
+                // get confused for tasks" — and the calendar grid honours that.
+                // This strip was the one place using the brand red that task
+                // actions use, so the same event was a different colour
+                // depending on which screen you were looking at.
+                className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--bg-card)] border-l-4 border-[var(--calendar-event)] cursor-pointer hover:brightness-95"
               >
                 {event.start_time && (
                   <span className="text-xs text-[var(--text-muted)] tabular-nums">{event.start_time}</span>
