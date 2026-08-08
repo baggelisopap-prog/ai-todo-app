@@ -175,13 +175,19 @@ There is no test framework, and adding one to assert CSS classes would cost more
 
 Each rule was verified to actually fire by injecting a fault (`bg-pink-500`, a deleted `el.json` key, an invented `var()`) and confirming a non-zero exit — a check nobody has seen fail is not a check.
 
+**And that habit caught a bug in the checker itself, in Phase 6.** Rule 4 was extended to guard the two new `animate-*` classes, and the fault injection for them *passed* — which is the one result a fault injection must never give. The cause was the rule's matching: it asked `css.includes('.' + name)`, a plain substring test. Renaming `.animate-fade-in` to `.animate-fade-inX` in `index.css` leaves `'.animate-fade-in'` present as a prefix of the new name, so the check saw the class as still defined. The same trap sat under the classes it already guarded: `.tap-4` would have been satisfied by `.tap-44`.
+
+Rule 4 now tests `\.name(?![\w-])`, so the selector has to end at a real class boundary. Re-running both injections then failed correctly. Worth recording because the rule had been green since the day it was written and would have stayed green through a rename that silently dropped an animation — precisely the failure the rule exists to prevent, hiding inside the rule.
+
+A second, smaller note: the fault has to be injected everywhere the class appears. Both `animate-*` classes are declared twice — once for the animation, once inside the `prefers-reduced-motion` block that cancels it — so a first attempt that renamed only one occurrence was not a fault at all, and its "pass" meant nothing.
+
 ---
 
 ## Deliberately out of scope
 
 - **A shared `<Modal>` component.** See 3.2 — the behaviours are worth sharing, the markup is not, yet.
 - **An in-app dark mode toggle.** That is a setting, not polish.
-- **New artwork or a rebrand.** Icons are derived from the existing favicon.
+- **New artwork or a rebrand.** Superseded during Phase 1: `favicon.svg` turned out to be the Vite logo, so a plain placeholder mark replaced it. See 1.2 — still not a brand.
 - **The `set-state-in-effect` lint warning** in `TaskCard`. Pre-existing, unrelated to presentation, and fixing it means touching the expand/draft logic that the task agent depends on.
 
 ---
@@ -198,50 +204,44 @@ Each rule was verified to actually fire by injecting a fault (`bg-pink-500`, a d
 | 3 — Modal behaviour | **done** — hook + 10-case lock test, all green |
 | 4 — Consistency | **done** — check/lint/build green |
 | 5 — Dark mode | **done** — 36 colours tokenised, 47/47 tokens themed, ratchet now 0 |
-| 6 — Polish | **done** — check/lint/build green |
+| 6 — Polish | **done** — check/lint/build green; the fault injection here found a bug in rule 4 itself |
+
+**All seven phases are landed.** One phase per commit, so any of them can be reverted alone.
 
 **Verification after every phase**: `npm run lint`, `npm run build`, and from Phase 7 on, `npm run check`. Anything that needs a human eye is listed under the phase itself and collected at the end of this file as it accumulates.
 
+**Where the numbers ended up.** 36 hardcoded colours → 0, and the ratchet in `ui-check.mjs` is now a plain rule at 0. 47 tokens, every one of them themed for dark. 255 translation keys, identical in both locales. 33 files scanned by the checker on each run, plus 10 scroll-lock cases in `modal-lock.test.mjs`.
+
+**Lint is unchanged at 14 errors**, the same pre-existing `react-hooks/set-state-in-effect` set in `api.js`, `sw.js`, `CalendarView`, `SettingsModal`, `TaskCard`, `TodayView` and `App.jsx:92`. This pass neither added nor fixed one — they are logic, not presentation, and out of scope by the rule at the top of this file.
+
 ## Needs a human eye
 
-_Changes whose correctness a build cannot confirm._
+_Nothing in this pass has been seen rendered. Every item below is a check a build cannot make, ordered by how likely it is to be wrong._
 
-Everything below is a check a build cannot make. Nothing in this pass has been seen rendered.
+**Phase 5 — the dark theme, which needs the most eyes.**
+- Switch the OS to dark and walk every screen. Colour choice is exactly what no script can verify: look for text that has gone low-contrast, a card that no longer separates from the page behind it, and the priority and category dots — those were lightened, and could now read as different colours than intended.
+- The toast in dark, both the success and the error variant.
+- The phone's own status bar should follow the theme, not stay red over a near-black app.
 
-**From Phase 6 — the dark theme, which needs the most eyes:**
-- Switch the OS to dark and walk every screen. Colour choice is exactly what no script can verify: look for text that has gone low-contrast, a card that no longer separates from the page, and the priority/category dots, which were lightened and could now read as different colours than intended.
-- The toast in dark, both success and error.
-
-**From Phase 6 — the rest:**
-- Toast slide-in and modal backdrop fade. Should read as arriving, not as a glitch; if either feels slow, the durations are 180ms/150ms in `index.css`.
-- The new empty states across Inbox, Today, Upcoming and Browse.
-
-**From Phase 4:**
-- Tab through a screen and confirm the focus outline is visible and not clipped anywhere.
-- Google events in Today should now be cyan, matching the calendar grid.
-
-**From Phase 3:**
-- Escape closes Settings, the chat and the calendar day popup — none of them did before.
-- Open a modal on a phone and try to scroll the page behind it. It should not move.
-
-**From Phase 2:**
-- The complete circle should be comfortably tappable without expanding the card by accident.
-
-**From Phase 1:**
-- **The title/button overlap is actually gone.** Open any screen on a phone and check the heading is fully visible and not sitting under the chat icon. This is also the confirmation that the finding was real — if the headings looked fine before, `pt-14` has simply added empty space and should be reconsidered.
-- **The new icon.** Tab favicon, and the icon on the next push notification the app sends.
+**Phase 1 — identity.**
+- **The title/button overlap is actually gone.** Open any screen on a phone and check the heading is fully visible, not sitting under the chat icon. This also confirms the finding was real: it was found by reading geometry, never seen. If the headings looked fine before, `pt-14` has just added empty space and should be reconsidered.
+- **The new icon**, in the browser tab and on the next push notification the app sends. It replaced the Vite logo, which had been the notification icon all along.
 - **Install the app** ("Add to Home Screen"). It should offer "AI To-Do", open without browser chrome, and show a red status bar.
-- **The bottom nav on a phone with a home indicator** — labels should sit clear of it, and the toast should clear the nav.
+- **The bottom nav on a phone with a home indicator** — labels clear of it, and the toast clear of the nav.
 
-**From Phase 2:**
-- **The complete circle still looks the same size.** The ring is unchanged at 20px; only the invisible hit area around it grew. If the circle itself looks bigger or the card's row spacing shifted, the padding leaked into the layout.
-- **Completing a task from a phone.** The thing being fixed is the miss — a thumb that lands near the circle should complete the task, not expand the card.
+**Phase 2 — touch targets.**
+- **The complete circle should still look the same size.** The ring is unchanged at 20px; only the invisible hit area around it grew. If the circle looks bigger, or the card's meta row spacing shifted, the target leaked into the layout.
+- **Completing a task with a thumb.** The bug being fixed is the miss: a tap that lands near the circle should complete the task, not expand the card.
 
-**From Phase 3:**
-- **Escape closes Settings, the agent chat and the calendar's day popup** — it previously only closed Add Task.
-- **Scrolling behind an open modal does nothing.** Open Settings on a phone and swipe; the list underneath must not move. Then close it and confirm the page scrolls again — a lock that fails to release is worse than no lock.
+**Phase 3 — modals.**
+- **Escape closes Settings, the agent chat and the calendar's day popup.** Previously it only closed Add Task.
+- **Scrolling behind an open modal does nothing**, and scrolling works again after it closes. A lock that fails to release is worse than no lock — the ten cases in `modal-lock.test.mjs` cover the logic, but not that the right components call it.
 
-**From Phase 4:**
-- **Google events are cyan in Today**, matching the Calendar grid, and no longer the brand red that task actions use.
-- **Category on a card reads in the app's language** and matches the Browse filter pill for the same category.
-- **Tab through a screen.** Every button should now show a focus outline. Clicking one with a mouse should not.
+**Phase 4 — consistency.**
+- **Google events are cyan in Today**, matching the Calendar grid, instead of the brand red that task actions use.
+- **A card's category reads in the app's language** and matches the Browse filter pill for the same category.
+- **Tab through a screen.** Every button should show a focus outline, and it should not be clipped by a card or modal edge. Clicking with a mouse should draw nothing.
+
+**Phase 6 — polish.**
+- **The toast slide-in and the modal backdrop fade.** They should read as arriving, not as a glitch. If either feels slow, the durations are 180ms and 150ms in `index.css`.
+- **The new empty states** in Inbox, Today, Upcoming and Browse — and that the inline variant inside Today's sections stays quieter than the full-page one.
