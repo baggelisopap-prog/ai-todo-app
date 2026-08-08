@@ -152,6 +152,14 @@ There is no test framework, and adding one to assert CSS classes would cost more
 **Fix**: `frontend/scripts/ui-check.mjs`, wired as `npm run check`. Plus `npm run build` and `npm run lint` after every phase.
 **Files**: new script, `package.json`
 
+**Built second, and it earned its place immediately.** Two things came out of writing it:
+- It found a real bug on its first run: `LoginScreen.jsx` sets `bg-[var(--bg-page)]` **twice**, and `--bg-page` does not exist — the token is `--bg-app`. The class did nothing; the screen only looked right because `body` paints the same colour underneath. Exactly the silent failure rule 1 exists to catch, sitting in the first screen every user sees. Fixed.
+- The hardcoded-colour count is **36**, not the 25 counted by hand for this doc. The manual `grep` had no `ring-` in its pattern and missed every `ring-blue-100` focus ring. The script's number is the real one.
+
+**The colour rule is a ratchet, not an absolute.** 36 exist today, and a check that fails from the day it is added guards nothing — it gets ignored. So the count is capped at a baseline: a new hardcoded colour fails the build immediately, and when the count drops the script says so and asks for the baseline to be lowered. Phase 5 takes it to 0 and the ratchet becomes a plain rule.
+
+Each rule was verified to actually fire by injecting a fault (`bg-pink-500`, a deleted `el.json` key, an invented `var()`) and confirming a non-zero exit — a check nobody has seen fail is not a check.
+
 ---
 
 ## Deliberately out of scope
@@ -170,8 +178,8 @@ There is no test framework, and adding one to assert CSS classes would cost more
 | Phase | Status |
 |---|---|
 | 1 — Shell and identity | **done** — lint unchanged at 14 pre-existing, build clean |
-| 7 — Re-runnable check | next |
-| 2 — Touch targets | not started |
+| 7 — Re-runnable check | **done** — `npm run check` green; found a real undefined-token bug in LoginScreen |
+| 2 — Touch targets | next |
 | 3 — Modal behaviour | not started |
 | 4 — Consistency | not started |
 | 5 — Dark mode | not started |

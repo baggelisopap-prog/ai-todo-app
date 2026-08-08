@@ -62,7 +62,7 @@ export function LoginScreen() {
 
   if (mode === 'verify') {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--bg-page)]">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--bg-app)]">
         <div className="w-full max-w-sm bg-[var(--bg-card)] rounded-lg shadow-[var(--shadow-card)] p-6">
           <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2 text-center">
             {t('auth.verify_title')}
@@ -102,7 +102,7 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--bg-page)]">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--bg-app)]">
       <div className="w-full max-w-sm bg-[var(--bg-card)] rounded-lg shadow-[var(--shadow-card)] p-6">
         <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-4 text-center">
           {mode === 'signup' ? t('auth.sign_up') : t('auth.log_in')}
