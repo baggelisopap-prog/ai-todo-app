@@ -2,9 +2,11 @@ import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
+import { searchTasks } from '../utils/searchTasks';
 
 function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
+  const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -31,8 +33,10 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
     if (!showCompleted) result = result.filter((t) => !t.is_completed);
     if (!showRejected) result = result.filter((t) => !t.is_rejected);
     if (selectedCategory !== 'All') result = result.filter((t) => t.category === selectedCategory);
-    return result;
-  }, [tasks, selectedCategory, showCompleted, showRejected]);
+    // Last, so the search runs over the smallest set — and so the counts on the
+    // category cards keep describing the whole library rather than the search.
+    return searchTasks(result, query);
+  }, [tasks, selectedCategory, showCompleted, showRejected, query]);
 
   const categoryOptions = [
     { value: 'All', labelKey: 'browse.filter_all', accentClass: 'hover:border-[var(--text-secondary)]', selectedClass: 'border-[var(--text-secondary)] bg-[var(--bg-hover)]' },
@@ -52,6 +56,29 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6">
       {/* Heading lives in AppBar — see TodayView for the reasoning. */}
+
+      {/* No debounce and no request. The tasks are already in memory, so this
+          filters on every keystroke for free — which is also why it can be the
+          first thing on the screen rather than hidden behind a magnifier. */}
+      <div className="relative mb-4">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('browse.search_placeholder')}
+          aria-label={t('browse.search_placeholder')}
+          className="w-full pl-9 pr-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors"
+        />
+        <svg
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <line x1="16.5" y1="16.5" x2="21" y2="21" />
+        </svg>
+      </div>
+
       <div className="mb-6 space-y-4">
         {/* Category cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -131,7 +158,10 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
       </div>
 
       {filteredTasks.length === 0 ? (
-        <EmptyState message={t('empty.browse')} />
+        // A search that found nothing is a different situation from an empty
+        // library, and telling someone "no tasks yet" while they are holding a
+        // typo is the wrong answer.
+        <EmptyState message={query.trim() ? t('empty.no_search_results', { query }) : t('empty.browse')} />
       ) : (
         <TaskList
           tasks={filteredTasks}

@@ -52,6 +52,7 @@
     "pending_approval_header": "Σε αναμονή έγκρισης ({{count}})"
   },
   "empty": {
+    "no_search_results": "Καμία εργασία για «{{query}}»",
     "inbox": "Όλα καθαρά! Δεν υπάρχουν νέες εργασίες.",
     "today": "Τίποτα για σήμερα 🎉",
     "browse": "Δεν βρέθηκαν εργασίες.",
@@ -165,6 +166,7 @@
     "failed_add": "Αποτυχία προσθήκης εργασίας"
   },
   "browse": {
+    "search_placeholder": "Αναζήτηση εργασιών",
     "filter_all": "Όλα",
     "filter_business": "Επαγγελματικά",
     "filter_personal": "Προσωπικά",

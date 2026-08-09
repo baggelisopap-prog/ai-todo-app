@@ -52,6 +52,7 @@
     "pending_approval_header": "Pending approval ({{count}})"
   },
   "empty": {
+    "no_search_results": "Nothing matches “{{query}}”",
     "inbox": "All clear! No new tasks waiting.",
     "today": "Nothing for today 🎉",
     "browse": "No tasks found.",
@@ -166,6 +167,7 @@
     "failed_add": "Failed to add task"
   },
   "browse": {
+    "search_placeholder": "Search tasks",
     "filter_all": "All",
     "filter_business": "Business",
     "filter_personal": "Personal",
