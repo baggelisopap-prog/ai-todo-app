@@ -105,6 +105,7 @@
   "voice": {
     "dictate": "Υπαγόρευση",
     "dictating_in": "Υπαγόρευση στα {{language}}",
+    "switch_language": "Αλλαγή γλώσσας υπαγόρευσης",
     "stop_dictation": "Διακοπή υπαγόρευσης",
     "label": "Φωνή",
     "processing": "Εξαγωγή...",

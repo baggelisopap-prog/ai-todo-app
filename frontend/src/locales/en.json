@@ -106,6 +106,7 @@
   "voice": {
     "dictate": "Dictate",
     "dictating_in": "Dictate in {{language}}",
+    "switch_language": "Switch dictation language",
     "stop_dictation": "Stop dictating",
     "label": "Voice",
     "processing": "Extracting...",

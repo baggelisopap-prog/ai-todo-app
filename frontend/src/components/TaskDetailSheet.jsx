@@ -10,7 +10,7 @@ import CustomSelect from './CustomSelect';
 import DictateButton from './DictateButton';
 import Switch from './Switch';
 import TaskMenu from './TaskMenu';
-import { SparkleIcon, SpinnerIcon } from './icons';
+import { SparkleIcon, SpinnerIcon, SendIcon } from './icons';
 import { CheckIcon, CheckedBox, EmptyBox } from './TaskIcons';
 
 // Field → existing translation key, for rendering what the agent changed.
@@ -592,10 +592,12 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                 type="button"
                 onClick={() => handleAgentEdit()}
                 disabled={isAgentBusy || isSaving || actions.isDeleting || !agentInput.trim()}
-                className="w-10 h-10 flex items-center justify-center rounded-md text-sm font-medium bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-card)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors shrink-0"
+                className="w-11 h-11 flex items-center justify-center rounded-md bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-card)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors shrink-0"
                 aria-label={t('task.agent_send')}
               >
-                {isAgentBusy ? <SpinnerIcon className="w-4 h-4 animate-spin" /> : '↵'}
+                {/* Was a literal '↵', which rendered at the button's font-size
+                    and came out tiny. An icon has a size of its own. */}
+                {isAgentBusy ? <SpinnerIcon className="w-5 h-5 animate-spin" /> : <SendIcon className="w-5 h-5" />}
               </button>
             </div>
 
