@@ -104,6 +104,8 @@
     "add_checklist_item": "Add checklist item"
   },
   "voice": {
+    "dictate": "Dictate",
+    "stop_dictation": "Stop dictating",
     "label": "Voice",
     "processing": "Extracting...",
     "too_short": "Recording too short. Hold longer.",

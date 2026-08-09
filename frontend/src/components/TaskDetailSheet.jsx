@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentEditTask } from '../api';
 import { formatDate } from '../utils/formatDate';
@@ -7,6 +7,7 @@ import { categoryColor, categoryLabel, dueTone, DUE_TONE_CLASSES, priorityLabel 
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useTaskActions } from '../hooks/useTaskActions';
 import CustomSelect from './CustomSelect';
+import DictateButton from './DictateButton';
 import Switch from './Switch';
 import TaskMenu from './TaskMenu';
 import { SparkleIcon, SpinnerIcon } from './icons';
@@ -124,6 +125,10 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const [toggleError, setToggleError] = useState(null);
 
   const [agentInput, setAgentInput] = useState('');
+  // What was in the box when dictation started. Interim results replace the
+  // tail as the recogniser revises its guess, so without an anchor each
+  // revision would append and the field would fill with half-heard repeats.
+  const dictationBaseRef = useRef(null);
   const [isAgentBusy, setIsAgentBusy] = useState(false);
   const [agentNote, setAgentNote] = useState(null);
   const [agentError, setAgentError] = useState(null);
@@ -295,6 +300,21 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
     } finally {
       setIsAgentBusy(false);
     }
+  }
+
+  /**
+   * Dictated words go INTO the box, never straight to the agent. This one
+   * writes to a real task, so a misheard instruction would be a wrong edit —
+   * reading it before pressing send is the whole safeguard.
+   */
+  function handleTranscript(text, { isFinal }) {
+    if (dictationBaseRef.current === null) {
+      // Anchor to whatever was already typed, so dictation adds to it rather
+      // than wiping it.
+      dictationBaseRef.current = agentInput ? `${agentInput.trim()} ` : '';
+    }
+    setAgentInput(dictationBaseRef.current + text);
+    if (isFinal) dictationBaseRef.current = null;
   }
 
   const updateDraft = (field, value) => setDraft((d) => ({ ...d, [field]: value }));
@@ -562,6 +582,11 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                 disabled={isAgentBusy || isSaving || actions.isDeleting}
                 placeholder={t('task.agent_placeholder')}
                 className={`${INPUT_CLASSES} flex-1 disabled:opacity-60`}
+              />
+              <DictateButton
+                onTranscript={handleTranscript}
+                onError={() => setAgentError(t('voice.permission_denied'))}
+                disabled={isAgentBusy || isSaving || actions.isDeleting}
               />
               <button
                 type="button"
