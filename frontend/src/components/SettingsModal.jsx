@@ -17,6 +17,12 @@ import {
 } from '../api';
 import { supabase } from '../supabaseClient';
 import { getStoredTheme, setTheme } from '../utils/theme';
+import {
+  DICTATION_LANGS,
+  resolveDictationLang,
+  setDictationLang,
+  dictationLabelFor,
+} from '../utils/dictationLang';
 import { useAppSettings } from '../hooks/useAppSettings';
 import SettingsRow, { SettingsGroup } from './SettingsRow';
 import OptionSheet from './OptionSheet';
@@ -97,6 +103,18 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
     { value: 'dark', label: t('settings.theme_dark') },
   ];
 
+  // Separate from the interface language on purpose: the language you read is
+  // not necessarily the language you speak, and conflating them is what made
+  // Greek dictation come back as English nonsense. See utils/dictationLang.js.
+  const [dictationLang, setDictationLangState] = useState(() => resolveDictationLang(i18n.resolvedLanguage));
+  const dictationOptions = DICTATION_LANGS.map(({ code, label }) => ({ value: code, label }));
+
+  function handleDictationPick(code) {
+    setDictationLang(code);
+    setDictationLangState(code);
+    setPicker(null);
+  }
+
   function handleLanguagePick(lang) {
     i18n.changeLanguage(lang);
     localStorage.setItem('app_language', lang);
@@ -166,6 +184,11 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
                   value={themeOptions.find(o => o.value === theme)?.label}
                   onClick={() => setPicker('appearance')}
                 />
+                <SettingsRow
+                  label={t('settings.dictation_language')}
+                  value={dictationLabelFor(dictationLang)}
+                  onClick={() => setPicker('dictation')}
+                />
               </SettingsGroup>
 
               {isOwner && (
@@ -214,6 +237,15 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
           options={themeOptions}
           value={theme}
           onPick={handleThemePick}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === 'dictation' && (
+        <OptionSheet
+          title={t('settings.dictation_language')}
+          options={dictationOptions}
+          value={dictationLang}
+          onPick={handleDictationPick}
           onClose={() => setPicker(null)}
         />
       )}

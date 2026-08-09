@@ -105,6 +105,7 @@
   },
   "voice": {
     "dictate": "Dictate",
+    "dictating_in": "Dictate in {{language}}",
     "stop_dictation": "Stop dictating",
     "label": "Voice",
     "processing": "Extracting...",
@@ -246,6 +247,7 @@
     "notifications": "Notifications",
     "calendar": "Google Calendar",
     "language": "Language",
+    "dictation_language": "Dictation language",
     "appearance": "Appearance",
     "theme_system": "System",
     "theme_light": "Light",

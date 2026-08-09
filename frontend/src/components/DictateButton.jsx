@@ -1,9 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useSpeechInput, isSpeechInputSupported } from '../hooks/useSpeechInput';
+import { resolveDictationLang, dictationTagFor, dictationLabelFor } from '../utils/dictationLang';
 import { MicIcon, StopIcon } from './icons';
-
-// The recogniser wants a full BCP-47 tag, while i18n carries only the language.
-const RECOGNITION_LANGS = { el: 'el-GR', en: 'en-US' };
 
 /**
  * Dictates into a text field.
@@ -16,13 +14,19 @@ const RECOGNITION_LANGS = { el: 'el-GR', en: 'en-US' };
  *
  * Renders nothing at all where the browser has no recognition (Firefox today),
  * rather than a button that cannot work.
+ *
+ * The spoken language does NOT come from the app's UI language — see
+ * utils/dictationLang.js for why that was wrong. The label sits on the button
+ * so a wrong one is visible before you speak rather than after, which is how
+ * the original mistake stayed hidden: Greek through an English recogniser does
+ * not fail, it returns confident nonsense.
  */
 function DictateButton({ onTranscript, onError, disabled = false, className = '' }) {
   const { t, i18n } = useTranslation();
 
-  const lang = RECOGNITION_LANGS[i18n.resolvedLanguage?.slice(0, 2)] || 'en-US';
+  const langCode = resolveDictationLang(i18n.resolvedLanguage);
   const { isListening, toggle } = useSpeechInput({
-    lang,
+    lang: dictationTagFor(langCode),
     onResult: onTranscript,
     onError,
   });
@@ -34,7 +38,12 @@ function DictateButton({ onTranscript, onError, disabled = false, className = ''
       type="button"
       onClick={toggle}
       disabled={disabled}
-      aria-label={isListening ? t('voice.stop_dictation') : t('voice.dictate')}
+      title={t('voice.dictating_in', { language: dictationLabelFor(langCode) })}
+      aria-label={
+        isListening
+          ? t('voice.stop_dictation')
+          : t('voice.dictating_in', { language: dictationLabelFor(langCode) })
+      }
       aria-pressed={isListening}
       className={`relative w-10 h-10 flex items-center justify-center rounded-md border transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed ${
         isListening
@@ -49,6 +58,11 @@ function DictateButton({ onTranscript, onError, disabled = false, className = ''
           overflows a 40px button. */}
       <span className="relative flex items-center justify-center">
         {isListening ? <StopIcon className="w-4 h-4" /> : <MicIcon className="w-4 h-4" />}
+      </span>
+      {/* Which language it will listen in, on the button. Two characters is
+          enough to notice it is wrong, and noticing beforehand is the point. */}
+      <span className="absolute -bottom-0.5 -right-0.5 px-0.5 rounded text-[8px] font-bold leading-tight bg-[var(--bg-app)] text-[var(--text-secondary)]">
+        {langCode.toUpperCase()}
       </span>
     </button>
   );
