@@ -4,12 +4,14 @@
     "today": "Today",
     "upcoming": "Upcoming",
     "calendar": "Calendar",
+    "inbox_pending": "Inbox, {{count}} awaiting approval",
     "browse": "All"
   },
   "calendar": {
     "prev_month": "Previous month",
     "next_month": "Next month",
     "monthly": "Monthly",
+    "list": "List",
     "weekly": "Weekly",
     "prev_week": "Previous week",
     "next_week": "Next week",
@@ -249,6 +251,7 @@
   },
   "agent": {
     "open": "Ask about your tasks",
+    "short_label": "Ask",
     "title": "Ask",
     "empty_hint": "Ask me anything about your tasks — e.g. \"what do I have today?\" or \"show my appointments this week\"",
     "input_placeholder": "Type a question...",

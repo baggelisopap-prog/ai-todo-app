@@ -11,17 +11,15 @@ function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          {t('nav.inbox')}
-          <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">({inboxTasks.length})</span>
-        </h1>
-        {inboxTasks.length > 0 && (
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            {t('inbox.hint')}
-          </p>
-        )}
-      </div>
+      {/* The heading and its count both moved: the title to AppBar, the count
+          to the tab's badge, which shows it from anywhere in the app rather
+          than only once you are already looking at the list. The hint stays —
+          it explains what to DO here, which neither of those can. */}
+      {inboxTasks.length > 0 && (
+        <p className="text-sm text-[var(--text-muted)] mb-4">
+          {t('inbox.hint')}
+        </p>
+      )}
 
       {inboxTasks.length === 0 ? (
         <EmptyState message={t('empty.inbox')} />

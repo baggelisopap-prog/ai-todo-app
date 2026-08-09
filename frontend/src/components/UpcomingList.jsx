@@ -1,10 +1,19 @@
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
-import FilterBar from './FilterBar';
 import { toLocalISODate } from '../utils/formatDate';
 
+/**
+ * The next seven days as day-headed sections, plus everything with no date.
+ *
+ * Was its own bottom-tab view ("Upcoming"). It is now the Calendar's List mode,
+ * because Upcoming and Calendar answered the same question — "what is coming" —
+ * with two tabs, and five tabs is where the Greek labels started clipping. What
+ * changed is only where it is mounted: it no longer draws its own heading or
+ * filter bar, since the Calendar above it already provides both.
+ *
+ * Takes tasks ALREADY filtered by the caller's FilterBar, for the same reason.
+ */
 function getSectionLabel(t, daysFromNow, date) {
   if (daysFromNow === 1) {
     return t('sections.tomorrow');
@@ -48,24 +57,17 @@ function computeSections(tasks, t) {
     key: 'no-date',
   };
 
-  const totalCount =
-    daySections.reduce((sum, s) => sum + s.tasks.length, 0) + noDateSection.tasks.length;
-
-  return { daySections, noDateSection, totalCount };
+  return { daySections, noDateSection };
 }
 
-function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
+function UpcomingList({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedPriority, setSelectedPriority] = useState('All');
 
-  const filteredTasks = tasks.filter((task) =>
-    (selectedCategory === 'All' || task.category === selectedCategory) &&
-    (selectedPriority === 'All' || task.priority === selectedPriority)
-  );
+  const { daySections, noDateSection } = computeSections(tasks, t);
 
-  const { daySections, noDateSection, totalCount } = computeSections(filteredTasks, t);
-
+  // Trailing empty days are dropped, but empty days BETWEEN populated ones are
+  // kept — a gap in the week is information ("nothing on Thursday"), whereas
+  // four empty days after the last task is just padding.
   let lastPopulatedIndex = -1;
   for (let i = daySections.length - 1; i >= 0; i--) {
     if (daySections[i].tasks.length > 0) {
@@ -80,22 +82,7 @@ function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onT
   const sections = [...visibleDaySections, noDateSection];
 
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          {t('nav.upcoming')}
-          <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">({totalCount})</span>
-        </h1>
-      </div>
-
-      <FilterBar
-        category={selectedCategory}
-        onCategoryChange={setSelectedCategory}
-        priority={selectedPriority}
-        onPriorityChange={setSelectedPriority}
-        t={t}
-      />
-
+    <div>
       {sections.map((section) => (
         <div key={section.key} className="mb-6">
           <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
@@ -120,4 +107,4 @@ function UpcomingView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onT
   );
 }
 
-export default UpcomingView;
+export default UpcomingList;

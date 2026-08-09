@@ -51,10 +51,7 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t('nav.browse')}</h1>
-      </div>
-
+      {/* Heading lives in AppBar — see TodayView for the reasoning. */}
       <div className="mb-6 space-y-4">
         {/* Category cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">

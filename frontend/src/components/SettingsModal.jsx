@@ -12,7 +12,6 @@ import {
   getTokenUsage,
   getCalendarStatus,
   disconnectGoogleCalendar,
-  getProfile,
   updateProfile,
   deleteAccount,
 } from '../api';
@@ -41,11 +40,9 @@ function getInitials(displayName, email) {
   return '?';
 }
 
-export function SettingsModal({ onClose, onShowToast }) {
+export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }) {
   useModalBehavior(onClose);
   const { t } = useTranslation();
-  const [profile, setProfile] = useState(null);
-  const [profileLoaded, setProfileLoaded] = useState(false);
 
   // Empty object = every section collapsed — the required default. Since
   // SettingsModal is mounted/unmounted by App.jsx (`{isSettingsOpen && ...}`,
@@ -55,13 +52,8 @@ export function SettingsModal({ onClose, onShowToast }) {
   const [openSections, setOpenSections] = useState({});
   const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
-  useEffect(() => {
-    getProfile()
-      .then(setProfile)
-      .catch(err => console.error('Failed to load profile:', err))
-      .finally(() => setProfileLoaded(true));
-  }, []);
-
+  // The profile is fetched once in App.jsx — the AppBar's avatar needs it as
+  // well, and this modal used to re-fetch it on every open.
   const isOwner = profile?.id === OWNER_USER_ID;
 
   return (
@@ -92,7 +84,7 @@ export function SettingsModal({ onClose, onShowToast }) {
             isOpen={!!openSections.profile}
             onToggle={() => toggleSection('profile')}
           >
-            <ProfileSection profile={profile} profileLoaded={profileLoaded} onProfileUpdate={setProfile} />
+            <ProfileSection profile={profile} onProfileUpdate={onProfileUpdate} />
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -158,7 +150,7 @@ export function SettingsModal({ onClose, onShowToast }) {
   );
 }
 
-function ProfileSection({ profile, profileLoaded, onProfileUpdate }) {
+function ProfileSection({ profile, onProfileUpdate }) {
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -168,11 +160,11 @@ function ProfileSection({ profile, profileLoaded, onProfileUpdate }) {
     if (profile) setNameInput(profile.display_name || '');
   }, [profile]);
 
-  if (!profileLoaded) {
-    return <p className="text-sm text-[var(--text-muted)]">{t('settings.loading')}</p>;
-  }
+  // Null means either "still loading" or "the fetch failed" — App.jsx owns it
+  // now and does not distinguish, because the two look the same from here and
+  // the recovery is identical: reopen the app.
   if (!profile) {
-    return <p className="text-sm text-[var(--text-muted)]">{t('settings.load_failed')}</p>;
+    return <p className="text-sm text-[var(--text-muted)]">{t('settings.loading')}</p>;
   }
 
   async function handleSave() {

@@ -14,6 +14,7 @@ import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
 import CustomSelect from './CustomSelect';
 import FilterBar from './FilterBar';
+import UpcomingList from './UpcomingList';
 import {
   createTaskManual,
   getCalendarEventsInRange,
@@ -136,7 +137,7 @@ function isTaskDraggable(task) {
 export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskCreated }) {
   const { t } = useTranslation();
 
-  const [viewMode, setViewMode] = useState('monthly'); // 'monthly' | 'weekly'
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'monthly' | 'weekly'
 
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date();
@@ -181,6 +182,10 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   // the current week. Refetches whenever the visible range changes.
   useEffect(() => {
     if (showEventsEnabled === null) return; // wait until the setting is known
+    // List mode draws no grid and therefore no event chips. Without this it
+    // would fall into the weekly branch below and fetch a week of events that
+    // nothing renders.
+    if (viewMode === 'list') return;
     if (!showEventsEnabled) {
       setCalendarEvents([]);
       return;
@@ -397,28 +402,29 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="max-w-3xl mx-auto p-4 md:p-6">
+        {/* Three modes, since the old "Upcoming" tab moved in here as List —
+            see UpcomingList.jsx. List is first because it is the plain answer
+            to "what is coming"; the grids are for placing things in a month. */}
         <div className="flex justify-center mb-4">
           <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5">
-            <button
-              onClick={() => setViewMode('monthly')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'monthly'
-                  ? 'bg-[var(--brand-primary)] text-white'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-              }`}
-            >
-              {t('calendar.monthly')}
-            </button>
-            <button
-              onClick={() => setViewMode('weekly')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'weekly'
-                  ? 'bg-[var(--brand-primary)] text-white'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-              }`}
-            >
-              {t('calendar.weekly')}
-            </button>
+            {[
+              { mode: 'list', labelKey: 'calendar.list' },
+              { mode: 'monthly', labelKey: 'calendar.monthly' },
+              { mode: 'weekly', labelKey: 'calendar.weekly' },
+            ].map(({ mode, labelKey }) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === mode
+                    ? 'bg-[var(--brand-primary)] text-white'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                }`}
+              >
+                {t(labelKey)}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -430,7 +436,18 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
           t={t}
         />
 
-        {viewMode === 'monthly' ? (
+        {viewMode === 'list' && (
+          <UpcomingList
+            tasks={filteredTasks}
+            expandedTaskId={expandedTaskId}
+            onToggleExpand={onToggleExpand}
+            onTaskUpdate={onTaskUpdate}
+            onTaskDeleted={onTaskDeleted}
+            onShowToast={onShowToast}
+          />
+        )}
+
+        {viewMode === 'monthly' && (
           <MonthlyGrid
             currentMonth={currentMonth}
             onPrevMonth={handlePrevMonth}
@@ -442,7 +459,9 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
             todayISO={todayISO}
             t={t}
           />
-        ) : (
+        )}
+
+        {viewMode === 'weekly' && (
           <>
             <WeeklyGrid
               currentWeekStart={currentWeekStart}

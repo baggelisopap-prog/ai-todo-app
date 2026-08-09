@@ -23,6 +23,9 @@
  *      then bleeds through in dark mode — one unreadable element on an
  *      otherwise correct screen, which is exactly the kind of thing that only
  *      shows up on someone else's phone.
+ *   6. A bottom-nav label grows past what its share of a narrow screen can
+ *      show. `truncate` means it clips instead of overflowing, so it looks
+ *      fine in English and wrong in Greek, with nothing to notice.
  *
  * Exits non-zero on any violation so it can gate a build.
  */
@@ -166,6 +169,55 @@ if (!lightTokens || !darkTokens) {
   }
   for (const token of darkTokens) {
     if (!lightTokens.has(token)) fail('palette-drift', `${token} is defined in ${DARK_SELECTOR} but not in :root`);
+  }
+}
+
+// --- 6. The bottom nav's labels still fit --------------------------------
+// The tabs split the viewport evenly and each label carries `truncate`, so an
+// overflowing label does not break the layout — it silently clips, and only in
+// the language whose words are longer. That is how "Εισερχόμενα" came to render
+// as a stub at five tabs while English looked perfect.
+//
+// The arithmetic, at the narrowest width worth supporting (320px):
+//   320 / TAB_LIMIT tabs = 80px per tab, minus px-0.5 padding either way ≈ 76px.
+//   text-xs is 12px; Greek averages ~6.4px per character at that size.
+//   76 / 6.4 ≈ 11.8 characters.
+// Hence twelve. Adding a fifth tab drops the budget to ~9 characters, which no
+// Greek label here meets — so the tab count is checked too, and deliberately
+// fails rather than quietly re-introducing the clipping.
+const TAB_LIMIT = 4;
+const LABEL_CHAR_LIMIT = 12;
+
+const navSource = readFileSync(join(srcDir, 'components/BottomNav.jsx'), 'utf8');
+const tabsBlock = navSource.match(/const TABS = \[([\s\S]*?)\];/)?.[1];
+if (!tabsBlock) {
+  fail('nav-unreadable', 'could not find the TABS array in BottomNav.jsx');
+} else {
+  const labelKeys = [...tabsBlock.matchAll(/labelKey: '([^']+)'/g)].map((m) => m[1]);
+  if (labelKeys.length > TAB_LIMIT) {
+    fail('nav-too-many-tabs', `${labelKeys.length} tabs, limit is ${TAB_LIMIT} — labels will clip`);
+  }
+  const localesByName = { 'en.json': en, 'el.json': el };
+  for (const key of labelKeys) {
+    for (const [name, keys] of Object.entries(localesByName)) {
+      if (!keys.has(key)) {
+        fail('nav-missing-label', `${key} is a tab label but is not in ${name}`);
+      }
+    }
+  }
+  // Length has to come from the parsed JSON, not the key set above.
+  const enJson = JSON.parse(readFileSync(join(srcDir, 'locales/en.json'), 'utf8'));
+  const elJson = JSON.parse(readFileSync(join(srcDir, 'locales/el.json'), 'utf8'));
+  for (const key of labelKeys) {
+    for (const [name, json] of [['en.json', enJson], ['el.json', elJson]]) {
+      const label = key.split('.').reduce((acc, part) => acc?.[part], json);
+      if (typeof label === 'string' && label.length > LABEL_CHAR_LIMIT) {
+        fail(
+          'nav-label-too-long',
+          `${name} ${key} = "${label}" is ${label.length} chars, limit is ${LABEL_CHAR_LIMIT}`
+        );
+      }
+    }
   }
 }
 

@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAllTasks, updateTask, connectGoogleCalendar } from './api';
+import { getAllTasks, updateTask, connectGoogleCalendar, getProfile } from './api';
 import { supabase } from './supabaseClient';
 import { LoginScreen } from './components/LoginScreen';
 import BottomNav from './components/BottomNav';
 import InboxView from './components/InboxView';
 import TodayView from './components/TodayView';
-import UpcomingView from './components/UpcomingView';
 import CalendarView from './components/CalendarView';
 import BrowseView from './components/BrowseView';
 import FloatingActionButtons from './components/FloatingActionButtons';
@@ -15,7 +14,17 @@ import Toast from './components/Toast';
 import SettingsModal from './components/SettingsModal';
 import { AgentChatModal } from './components/AgentChatModal';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
-import { GearIcon, ChatIcon } from './components/icons';
+import AppBar from './components/AppBar';
+
+// The AppBar shows the current screen's name, so the title each view used to
+// print inside its own scroll container now lives in one place. Calendar covers
+// what used to be two tabs, so it is named for the broader job.
+const TAB_TITLE_KEYS = {
+  inbox: 'nav.inbox',
+  today: 'nav.today',
+  calendar: 'nav.calendar',
+  browse: 'nav.browse',
+};
 
 function App() {
   const { t } = useTranslation();
@@ -33,6 +42,12 @@ function App() {
 
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  // Loaded once here rather than by SettingsModal on every open, because the
+  // AppBar's avatar needs it too and two components fetching one object is the
+  // shape that produced the settings bug (see AppSettingsProvider.jsx).
+  // Deliberately non-blocking: the bar falls back to a gear icon until it lands.
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -80,6 +95,13 @@ function App() {
       }
     }
     loadTasks();
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    getProfile()
+      .then(setProfile)
+      .catch(err => console.error('Failed to load profile:', err));
   }, [session]);
 
   // Notification-tap navigation: the app opened fresh via a deep link
@@ -183,6 +205,12 @@ function App() {
     setExpandedTaskId(null);
   }
 
+  // Must stay identical to InboxView's own filter — a badge that disagrees with
+  // the list it points at is worse than no badge.
+  const pendingCount = tasks.filter(
+    (task) => !task.is_rejected && !task.is_completed && !task.approval_status
+  ).length;
+
   const viewProps = {
     tasks,
     expandedTaskId,
@@ -209,28 +237,17 @@ function App() {
   return (
     <AppSettingsProvider>
     <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
-      <button
-        onClick={() => setIsAgentOpen(true)}
-        className="fixed top-4 left-4 z-30 w-11 h-11 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
-        aria-label={t('agent.open')}
-      >
-        <ChatIcon className="w-5 h-5 text-[var(--text-secondary)]" />
-      </button>
+      <AppBar
+        title={t(TAB_TITLE_KEYS[activeTab])}
+        profile={profile}
+        onOpenAgent={() => setIsAgentOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
 
-      <button
-        onClick={() => setIsSettingsOpen(true)}
-        className="fixed top-4 right-4 z-30 w-11 h-11 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors"
-        aria-label={t('settings.open')}
-      >
-        <GearIcon className="w-5 h-5 text-[var(--text-secondary)]" />
-      </button>
-
-      {/* pt-14 clears the two fixed buttons above. They are 40px tall at top-4,
-          so they occupy y:16→56, and every view opens with p-4 and no offset of
-          its own — which put each screen's <h1> at y:16, directly underneath
-          the chat icon. Visible on phones only: on a wide viewport the views'
-          max-w-3xl container is centred and clears the buttons horizontally. */}
-      <main className="flex-1 pt-14 pb-48">
+      {/* No pt-* here any more. The old one existed only to push content out
+          from under two fixed circular buttons; AppBar is sticky and in flow,
+          so it takes its own space. */}
+      <main className="flex-1 pb-48">
         {isLoading && (
           <div className="max-w-3xl mx-auto p-4 text-[var(--text-muted)] text-sm italic">
             {t('app.loading_tasks')}
@@ -250,7 +267,6 @@ function App() {
           <>
             {activeTab === 'inbox' && <InboxView {...viewProps} />}
             {activeTab === 'today' && <TodayView {...viewProps} />}
-            {activeTab === 'upcoming' && <UpcomingView {...viewProps} />}
             {activeTab === 'calendar' && <CalendarView {...viewProps} onTaskCreated={handleTaskCreated} />}
             {activeTab === 'browse' && <BrowseView {...viewProps} />}
           </>
@@ -265,7 +281,7 @@ function App() {
         />
       )}
 
-      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
+      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} inboxCount={pendingCount} />
 
       {isAddModalOpen && (
         <AddTaskModal
@@ -288,7 +304,12 @@ function App() {
       )}
 
       {isSettingsOpen && (
-        <SettingsModal onClose={() => setIsSettingsOpen(false)} onShowToast={handleShowToast} />
+        <SettingsModal
+          onClose={() => setIsSettingsOpen(false)}
+          onShowToast={handleShowToast}
+          profile={profile}
+          onProfileUpdate={setProfile}
+        />
       )}
 
       {isAgentOpen && (
