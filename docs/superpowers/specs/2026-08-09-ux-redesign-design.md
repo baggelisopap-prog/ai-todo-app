@@ -1,10 +1,19 @@
 # UX redesign — shell, task row, settings
 
-**Date**: 2026-08-09 · **Status**: design approved, not started · **Scope**: frontend only
+**Date**: 2026-08-09 · **Status**: **all six phases implemented 2026-08-09**, not yet seen in a browser · **Scope**: frontend only
 
 This is a design, not a plan. It states what should change and why. Each phase below is sized to become its own spec → plan → implementation cycle; **do not try to execute this document as one piece of work**. That decomposition is deliberate and is explained in §1.2.
 
 Nothing here requires a backend change except Phase 0, which changes no endpoint — only who calls it.
+
+> **Implementation log (2026-08-09).** Shipped as six commits, `UX 0/5` … `UX 5/5`. Two places where the code departs from what is written below, both marked inline where they occur:
+>
+> - **Phase 3 could not offer undo on delete.** Deletion is a hard delete; the section is corrected in place with the reasoning.
+> - **Phase 4 gave Language and Appearance an option sheet rather than a sub-screen**, which §Phase 4 already anticipated and argued for.
+>
+> Four automated checks came out of the work and run in `npm run check`: the settings revert scenario (`settings-store.test.mjs`, which asserts the OLD model fails as well as the new one passing), Greek search folding (`search.test.mjs`), and two new `ui-check` rules — light/dark palette parity, and the bottom nav's tab count and label lengths. The nav rule was fault-injected both ways.
+>
+> **Everything below is still unverified in a running browser.** The build, the lint baseline and the checks all pass; nobody has looked at it.
 
 ---
 
