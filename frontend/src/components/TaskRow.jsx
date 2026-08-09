@@ -19,6 +19,7 @@ import {
   CalendarIcon,
   CalendarFilledIcon,
   BellFilledIcon,
+  BellOutlineIcon,
   ChecklistIcon,
   TrashIcon,
 } from './TaskIcons';
@@ -32,14 +33,20 @@ const TRAY_WIDTH_PX = 140;
  *
  * What changed from the card this replaces, and why:
  *
- * - **The metadata row no longer contains controls.** It held two buttons — the
- *   reminder bell and calendar sync — mixed in with the date and category. They
- *   were rendered at 40% opacity when the task lacked the field they needed
- *   (no due_time, no due_date) and were STILL clickable, answering with a toast
- *   about why they could not work. Forty percent opacity means disabled
- *   everywhere; the control looked like one thing and behaved like another.
- *   Here they are indicators, drawn only when actually on, and both are real
- *   switches in the detail sheet where there is room to label them.
+ * - **The reminder bell and calendar sync stay, and stay tappable.** The bug in
+ *   them was never that they were controls; it was that a task with no
+ *   due_time drew the bell at 40% opacity — the universal signal for
+ *   "disabled" — and then answered a tap anyway. The control looked like one
+ *   thing and behaved like another.
+ *
+ *   An earlier pass over-corrected: it made them indicators and hid them
+ *   whenever they were off, which cost the one-tap toggle from the list and
+ *   made a row's controls appear and disappear from task to task. Now they are
+ *   always drawn and always tappable, with the dimming gone — off looks off,
+ *   and a tap that cannot toggle says why. Note that `disabled` was not an
+ *   option for the cannot-toggle case: disabled elements receive no click
+ *   events, so they could not have explained themselves at all. The detail
+ *   sheet states the same reasons permanently, where there is room for them.
  *
  * - **Priority is text as well as colour** (see taskDisplay.priorityLabel).
  *
@@ -93,10 +100,38 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
   const progress = checklistProgress(task.checklist);
   const tone = dueTone(task);
 
-  // Drawn only when the reminder or the sync is actually ON. An indicator for
-  // an inactive thing is the same noise the old dimmed buttons were.
-  const notifyOn = task.notify_enabled && task.due_time;
-  const calendarOn = task.calendar_sync_enabled && task.due_date;
+  // Both are ALWAYS drawn and always tappable. An earlier pass hid them
+  // whenever they were off, which removed the one-tap toggle from the list and
+  // made a row's controls appear and disappear depending on the task.
+  //
+  // What is NOT coming back is the dimming. The original bug was that a task
+  // with no due_time drew the bell at 40% opacity — the universal signal for
+  // "disabled" — and then answered a tap anyway. Here nothing is dimmed and
+  // nothing is inert: off looks off, and a tap that cannot toggle explains why
+  // instead of doing nothing. A `disabled` button could not do that at all,
+  // since disabled elements receive no click events.
+  const notifyOn = Boolean(task.notify_enabled && task.due_time);
+  const calendarOn = Boolean(task.calendar_sync_enabled && task.due_date);
+
+  function handleToggleNotify(e) {
+    e.stopPropagation();
+    if (!task.due_time) {
+      onShowToast('task.no_time_for_reminder', 'neutral');
+      return;
+    }
+    actions.setNotify(!task.notify_enabled);
+  }
+
+  function handleToggleCalendar(e) {
+    e.stopPropagation();
+    // Calendar sync only needs a DATE — a task with no time still syncs as an
+    // all-day event, which is why this checks a different field to the bell.
+    if (!task.due_date) {
+      onShowToast('calendar.no_date_for_sync', 'neutral');
+      return;
+    }
+    actions.setCalendarSync(!task.calendar_sync_enabled);
+  }
 
   const rowClasses = [
     'bg-[var(--bg-card)] border border-[var(--border-subtle)]',
@@ -236,22 +271,39 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
               <span className="text-[var(--priority-p2)] font-medium">{t('task.pending')}</span>
             )}
 
-            {/* Indicators, not buttons — see the note at the top of this file.
-                Non-interactive, so no tap target and no lie about being one. */}
-            {notifyOn && (
-              <BellFilledIcon
-                className="w-3.5 h-3.5 text-[var(--brand-primary)]"
-                role="img"
-                aria-label={t('task.notification_on')}
-              />
-            )}
-            {calendarOn && (
-              <CalendarFilledIcon
-                className="w-3.5 h-3.5 text-[var(--brand-primary)]"
-                role="img"
-                aria-label={t('calendar.sync_task_tooltip')}
-              />
-            )}
+            <button
+              type="button"
+              data-no-toggle
+              onClick={handleToggleNotify}
+              aria-pressed={notifyOn}
+              // Carries the reason, so hovering on a desktop and a screen
+              // reader anywhere both get it without having to tap and find out.
+              title={task.due_time ? undefined : t('task.no_time_for_reminder')}
+              aria-label={task.due_time ? t('task.notification_label') : t('task.no_time_for_reminder')}
+              className={`tap-40 p-1 -m-1 rounded transition-colors ${
+                notifyOn
+                  ? 'text-[var(--brand-primary)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+              }`}
+            >
+              {notifyOn ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
+            </button>
+
+            <button
+              type="button"
+              data-no-toggle
+              onClick={handleToggleCalendar}
+              aria-pressed={calendarOn}
+              title={task.due_date ? undefined : t('calendar.no_date_for_sync')}
+              aria-label={task.due_date ? t('calendar.sync_task_label') : t('calendar.no_date_for_sync')}
+              className={`tap-40 p-1 -m-1 rounded transition-colors ${
+                calendarOn
+                  ? 'text-[var(--brand-primary)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+              }`}
+            >
+              {calendarOn ? <CalendarFilledIcon className="w-4 h-4" /> : <CalendarIcon className="w-4 h-4" />}
+            </button>
           </div>
 
           {(actions.actionError || actions.deleteError) && (
