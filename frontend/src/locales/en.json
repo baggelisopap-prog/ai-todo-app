@@ -2,7 +2,6 @@
   "nav": {
     "inbox": "Inbox",
     "today": "Today",
-    "upcoming": "Upcoming",
     "calendar": "Calendar",
     "inbox_pending": "Inbox, {{count}} awaiting approval",
     "browse": "All"
@@ -55,7 +54,6 @@
   "empty": {
     "inbox": "All clear! No new tasks waiting.",
     "today": "Nothing for today 🎉",
-    "upcoming": "No upcoming tasks.",
     "browse": "No tasks found.",
     "default": "No tasks to show.",
     "no_tasks": "No tasks"
@@ -130,7 +128,6 @@
     "remove_item": "Remove item",
     "notification_on": "Reminder on",
     "notification_label": "Reminder",
-    "notification_off": "Set reminder",
     "no_time_for_reminder": "Add a time to this task to set a reminder",
     "agent_title": "Edit with AI",
     "agent_placeholder": "e.g. move it to Friday afternoon",
@@ -249,10 +246,7 @@
     "theme_system": "System",
     "theme_light": "Light",
     "theme_dark": "Dark",
-    "theme_description": "System follows your device’s light or dark setting. Choose Light or Dark to keep this app on one of them whatever the device does.",
     "developer": "Developer",
-    "account": "Account",
-    "about": "About",
     "edit_name": "Edit name",
     "name_placeholder": "Your name",
     "save": "Save",
@@ -260,8 +254,7 @@
     "delete_account": "Delete account",
     "delete_confirm": "Are you sure? This permanently deletes your account and all your data.",
     "deleting": "Deleting...",
-    "version": "Version",
-    "about_tagline": "AI-powered task management."
+    "version": "Version"
   },
   "agent": {
     "open": "Ask about your tasks",

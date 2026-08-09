@@ -7,10 +7,11 @@ import { AppSettingsContext } from '../hooks/useAppSettings';
  *
  * It exists because there used to be four. TodayView, CalendarView and TWO
  * sections inside SettingsModal each called getAppSettings() and kept their own
- * useState copy — and the two Settings sections are mounted at the same time,
- * since CollapsibleSection hides collapsed content with a CSS class rather than
- * unmounting it. `PATCH /settings` takes the WHOLE AppSettings object and writes
- * all seven fields, and each section sent `{...itsOwnCopy, theFieldItChanged}`.
+ * useState copy — and those two Settings sections were mounted at the same
+ * time, because the accordion holding them hid collapsed content with a CSS
+ * class instead of unmounting it. `PATCH /settings` takes the WHOLE AppSettings
+ * object and writes all seven fields, and each section sent
+ * `{...itsOwnCopy, theFieldItChanged}`.
  *
  * So: turn notifications off (server now correct), then toggle a calendar
  * setting, and the calendar section posts its snapshot from mount — in which

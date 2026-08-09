@@ -18,7 +18,8 @@ import {
 import { supabase } from '../supabaseClient';
 import { getStoredTheme, setTheme } from '../utils/theme';
 import { useAppSettings } from '../hooks/useAppSettings';
-import CollapsibleSection from './CollapsibleSection';
+import SettingsRow, { SettingsGroup } from './SettingsRow';
+import OptionSheet from './OptionSheet';
 
 // Hardcoded owner user_id — same "one door" pattern hostaway_integration.py's
 // get_user_id_for_hostaway_account() uses to gate the Hostaway integration to
@@ -40,113 +41,238 @@ function getInitials(displayName, email) {
   return '?';
 }
 
+const SCREENS = {
+  profile: 'settings.my_profile',
+  notifications: 'settings.notifications',
+  calendar: 'settings.calendar',
+  developer: 'settings.developer',
+};
+
+/**
+ * Settings.
+ *
+ * This was eight accordions, every one of them closed on every open. A closed
+ * accordion shows only its name, so finding anything cost an exploratory tap
+ * and the current value of every setting was invisible until you opened its
+ * section. Half of them held a single control: Language was two buttons,
+ * Appearance three, About three lines of text.
+ *
+ * It is now a list of rows that state their own value, with sub-screens for the
+ * two sections that have enough content to deserve one. Three deliberate
+ * choices inside that:
+ *
+ * - **Profile is a header, not a row.** It is who you are, not a setting, and
+ *   it is the natural partner of the avatar in the app bar that opens this.
+ * - **Language and Appearance did NOT get sub-screens.** A whole screen for a
+ *   two-option choice is a tap in, a tap to choose and a tap back; the row
+ *   already shows the value, so the screen would buy nothing. They open a small
+ *   option sheet instead — see OptionSheet.jsx.
+ * - **About stopped being a section.** A version string is a footer, not a door.
+ *
+ * Sign out and Delete account are isolated in their own group at the bottom,
+ * away from anything you might tap while looking for something else.
+ */
 export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }) {
   useModalBehavior(onClose);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
-  // Empty object = every section collapsed — the required default. Since
-  // SettingsModal is mounted/unmounted by App.jsx (`{isSettingsOpen && ...}`,
-  // not shown/hidden via an `isOpen` prop on an always-mounted instance),
-  // this useState default already resets sections to all-closed on every
-  // fresh open — no extra effect needed.
-  const [openSections, setOpenSections] = useState({});
-  const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  // 'root' plus one level. Not a general navigation stack: two screens deep is
+  // already more than this amount of settings justifies, and a stack would need
+  // history handling to stop Back closing the whole modal.
+  const [screen, setScreen] = useState('root');
+  const [picker, setPicker] = useState(null); // 'language' | 'appearance' | null
 
-  // The profile is fetched once in App.jsx — the AppBar's avatar needs it as
-  // well, and this modal used to re-fetch it on every open.
   const isOwner = profile?.id === OWNER_USER_ID;
+
+  const currentLang = i18n.resolvedLanguage?.startsWith('el') ? 'el' : 'en';
+  const languageOptions = [
+    { value: 'en', label: 'English' },
+    { value: 'el', label: 'Ελληνικά' },
+  ];
+
+  const [theme, setThemeState] = useState(getStoredTheme);
+  const themeOptions = [
+    { value: 'system', label: t('settings.theme_system') },
+    { value: 'light', label: t('settings.theme_light') },
+    { value: 'dark', label: t('settings.theme_dark') },
+  ];
+
+  function handleLanguagePick(lang) {
+    i18n.changeLanguage(lang);
+    localStorage.setItem('app_language', lang);
+    setPicker(null);
+  }
+
+  function handleThemePick(next) {
+    setTheme(next);       // writes localStorage + <html data-theme>
+    setThemeState(next);  // only so this row re-renders its value
+    setPicker(null);
+  }
+
+  const title = screen === 'root' ? t('settings.title') : t(SCREENS[screen]);
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 animate-fade-in flex items-end md:items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/40 animate-fade-in flex items-end md:items-center justify-center md:p-4"
       onClick={onClose}
     >
       <div
         className="w-full md:max-w-md bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] max-h-[85vh] flex flex-col"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
       >
         <div className="flex items-center gap-2 p-4 border-b border-[var(--border-subtle)] flex-shrink-0">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)] flex-1">
-            {t('settings.title')}
+          {screen !== 'root' && (
+            <button
+              onClick={() => setScreen('root')}
+              className="tap-44 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xl leading-none"
+              aria-label={t('settings.back')}
+            >
+              ‹
+            </button>
+          )}
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] flex-1 truncate">
+            {title}
           </h2>
           <button
             onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            aria-label={t('actions.cancel')}
+            className="tap-44 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            aria-label={t('actions.close')}
           >
             ✕
           </button>
         </div>
 
-        <div className="p-4 space-y-2 overflow-y-auto">
-          <CollapsibleSection
-            title={t('settings.my_profile')}
-            isOpen={!!openSections.profile}
-            onToggle={() => toggleSection('profile')}
-          >
-            <ProfileSection profile={profile} onProfileUpdate={onProfileUpdate} />
-          </CollapsibleSection>
+        <div className="p-4 overflow-y-auto">
+          {screen === 'root' && (
+            <div className="space-y-4">
+              <ProfileHeader profile={profile} onClick={() => setScreen('profile')} t={t} />
 
-          <CollapsibleSection
-            title={t('settings.notifications')}
-            isOpen={!!openSections.notifications}
-            onToggle={() => toggleSection('notifications')}
-          >
-            <NotificationsSection onShowToast={onShowToast} />
-          </CollapsibleSection>
+              <SettingsGroup>
+                <SettingsRow label={t('settings.notifications')} onClick={() => setScreen('notifications')} />
+                <SettingsRow label={t('settings.calendar')} onClick={() => setScreen('calendar')} />
+              </SettingsGroup>
 
-          <CollapsibleSection
-            title={t('settings.calendar')}
-            isOpen={!!openSections.calendar}
-            onToggle={() => toggleSection('calendar')}
-          >
-            <CalendarConnectionView onShowToast={onShowToast} />
-          </CollapsibleSection>
+              <SettingsGroup>
+                <SettingsRow
+                  label={t('settings.language')}
+                  value={languageOptions.find(o => o.value === currentLang)?.label}
+                  onClick={() => setPicker('language')}
+                />
+                <SettingsRow
+                  label={t('settings.appearance')}
+                  value={themeOptions.find(o => o.value === theme)?.label}
+                  onClick={() => setPicker('appearance')}
+                />
+              </SettingsGroup>
 
-          <CollapsibleSection
-            title={t('settings.language')}
-            isOpen={!!openSections.language}
-            onToggle={() => toggleSection('language')}
-          >
-            <LanguageSection />
-          </CollapsibleSection>
+              {isOwner && (
+                <SettingsGroup>
+                  <SettingsRow label={t('settings.developer')} onClick={() => setScreen('developer')} />
+                </SettingsGroup>
+              )}
 
-          <CollapsibleSection
-            title={t('settings.appearance')}
-            isOpen={!!openSections.appearance}
-            onToggle={() => toggleSection('appearance')}
-          >
-            <AppearanceSection />
-          </CollapsibleSection>
+              {/* Its own group, at the bottom, away from anything you might be
+                  reaching for. Deleting the account still sits behind a
+                  confirmation on top of that. */}
+              <SettingsGroup>
+                <SettingsRow
+                  label={t('settings.sign_out')}
+                  onClick={() => supabase.auth.signOut()}
+                  showChevron={false}
+                />
+                <DeleteAccountRow t={t} />
+              </SettingsGroup>
 
-          {isOwner && (
-            <CollapsibleSection
-              title={t('settings.developer')}
-              isOpen={!!openSections.developer}
-              onToggle={() => toggleSection('developer')}
-            >
-              <DeveloperUsageView />
-            </CollapsibleSection>
+              <p className="text-center text-xs text-[var(--text-muted)] pt-1">
+                {t('app.title')} · {t('settings.version')} {APP_VERSION}
+              </p>
+            </div>
           )}
 
-          <CollapsibleSection
-            title={t('settings.account')}
-            isOpen={!!openSections.account}
-            onToggle={() => toggleSection('account')}
-          >
-            <AccountSection />
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title={t('settings.about')}
-            isOpen={!!openSections.about}
-            onToggle={() => toggleSection('about')}
-          >
-            <AboutSection />
-          </CollapsibleSection>
+          {screen === 'profile' && <ProfileSection profile={profile} onProfileUpdate={onProfileUpdate} />}
+          {screen === 'notifications' && <NotificationsSection onShowToast={onShowToast} />}
+          {screen === 'calendar' && <CalendarConnectionView onShowToast={onShowToast} />}
+          {screen === 'developer' && <DeveloperUsageView />}
         </div>
       </div>
+
+      {picker === 'language' && (
+        <OptionSheet
+          title={t('settings.language')}
+          options={languageOptions}
+          value={currentLang}
+          onPick={handleLanguagePick}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === 'appearance' && (
+        <OptionSheet
+          title={t('settings.appearance')}
+          options={themeOptions}
+          value={theme}
+          onPick={handleThemePick}
+          onClose={() => setPicker(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Identity, not a setting — so it gets the avatar and the email rather than a
+ * row with a chevron and a name. It is also the partner of the app bar's
+ * avatar, which is what opened this modal.
+ */
+function ProfileHeader({ profile, onClick, t }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-4 p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+    >
+      <span
+        className="w-12 h-12 rounded-full bg-[var(--brand-primary)] text-white flex items-center justify-center text-base font-semibold flex-shrink-0"
+        aria-hidden="true"
+      >
+        {getInitials(profile?.display_name, profile?.email)}
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-base font-semibold text-[var(--text-primary)] truncate">
+          {profile?.display_name || profile?.email || t('settings.loading')}
+        </span>
+        <span className="block text-sm text-[var(--text-muted)] truncate">{profile?.email}</span>
+      </span>
+    </button>
+  );
+}
+
+function DeleteAccountRow({ t }) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function handleDeleteAccount() {
+    if (!window.confirm(t('settings.delete_confirm'))) return;
+    setIsDeleting(true);
+    try {
+      await deleteAccount();
+      // The account (and all its data) is gone server-side — sign out locally
+      // so App.jsx's session listener drops back to the login screen.
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Failed to delete account:', err);
+      setIsDeleting(false);
+    }
+  }
+
+  return (
+    <SettingsRow
+      label={isDeleting ? t('settings.deleting') : t('settings.delete_account')}
+      onClick={handleDeleteAccount}
+      danger
+      showChevron={false}
+    />
   );
 }
 
@@ -580,140 +706,6 @@ function CalendarConnectionView({ onShowToast }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function LanguageSection() {
-  const { i18n } = useTranslation();
-  const currentLang = i18n.resolvedLanguage?.startsWith('el') ? 'el' : 'en';
-
-  function handleChange(lang) {
-    i18n.changeLanguage(lang);
-    localStorage.setItem('app_language', lang);
-  }
-
-  return (
-    <div className="flex gap-2">
-      <button
-        onClick={() => handleChange('en')}
-        className={`flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-          currentLang === 'en'
-            ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
-            : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-        }`}
-      >
-        English
-      </button>
-      <button
-        onClick={() => handleChange('el')}
-        className={`flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-          currentLang === 'el'
-            ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
-            : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-        }`}
-      >
-        Ελληνικά
-      </button>
-    </div>
-  );
-}
-
-// Three options rather than an on/off switch. A two-state toggle has to start
-// somewhere, and whichever side it starts on silently becomes a CHOICE the
-// moment the user's phone switches at sunset and the app does not follow.
-// "System" is the one answer a boolean cannot express, and it is the default.
-function AppearanceSection() {
-  const { t } = useTranslation();
-  const [theme, setThemeState] = useState(getStoredTheme);
-
-  function handleChange(next) {
-    setTheme(next);       // writes localStorage + <html data-theme>
-    setThemeState(next);  // only so this row re-renders its selection
-  }
-
-  const options = [
-    { value: 'system', label: t('settings.theme_system') },
-    { value: 'light', label: t('settings.theme_light') },
-    { value: 'dark', label: t('settings.theme_dark') },
-  ];
-
-  return (
-    <div>
-      <div className="flex gap-2">
-        {options.map(({ value, label }) => (
-          <button
-            key={value}
-            onClick={() => handleChange(value)}
-            aria-pressed={theme === value}
-            className={`flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-              theme === value
-                ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
-                : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <p className="text-xs text-[var(--text-muted)] mt-2">
-        {t('settings.theme_description')}
-      </p>
-    </div>
-  );
-}
-
-function AccountSection() {
-  const { t } = useTranslation();
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  async function handleDeleteAccount() {
-    const confirmed = window.confirm(t('settings.delete_confirm'));
-    if (!confirmed) return;
-
-    setIsDeleting(true);
-    try {
-      await deleteAccount();
-      // The account (and all its data) is gone server-side — sign out
-      // locally so App.jsx's session listener drops back to the login
-      // screen. onClose is unnecessary: App.jsx stops rendering the
-      // Settings modal's parent tree entirely once session becomes null.
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error('Failed to delete account:', err);
-      setIsDeleting(false);
-    }
-  }
-
-  return (
-    <div className="space-y-1">
-      <button
-        onClick={() => supabase.auth.signOut()}
-        className="w-full text-left px-3 py-2.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-primary)] font-medium text-sm"
-      >
-        {t('settings.sign_out')}
-      </button>
-
-      <div className="pt-2 mt-1 border-t border-[var(--border-subtle)]">
-        <button
-          onClick={handleDeleteAccount}
-          disabled={isDeleting}
-          className="w-full text-left px-3 py-2.5 rounded-md hover:bg-[var(--danger-bg)] text-[var(--danger)] font-medium text-sm disabled:opacity-50"
-        >
-          {isDeleting ? t('settings.deleting') : t('settings.delete_account')}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AboutSection() {
-  const { t } = useTranslation();
-  return (
-    <div className="text-sm space-y-1">
-      <p className="font-semibold text-[var(--text-primary)]">{t('app.title')}</p>
-      <p className="text-[var(--text-secondary)]">{t('settings.version')} {APP_VERSION}</p>
-      <p className="text-xs text-[var(--text-muted)]">{t('settings.about_tagline')}</p>
     </div>
   );
 }
