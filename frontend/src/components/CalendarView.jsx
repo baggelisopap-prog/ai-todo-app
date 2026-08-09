@@ -403,14 +403,16 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="max-w-3xl mx-auto p-4 md:p-6">
         {/* Three modes, since the old "Upcoming" tab moved in here as List —
-            see UpcomingList.jsx. List is first because it is the plain answer
-            to "what is coming"; the grids are for placing things in a month. */}
+            see UpcomingList.jsx. Ordered by how much time each one shows:
+            the next few days, then a week, then a month. Zooming out along a
+            row that reads left to right means the control itself says which
+            direction you are moving in. */}
         <div className="flex justify-center mb-4">
           <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5">
             {[
               { mode: 'list', labelKey: 'calendar.list' },
-              { mode: 'monthly', labelKey: 'calendar.monthly' },
               { mode: 'weekly', labelKey: 'calendar.weekly' },
+              { mode: 'monthly', labelKey: 'calendar.monthly' },
             ].map(({ mode, labelKey }) => (
               <button
                 key={mode}
