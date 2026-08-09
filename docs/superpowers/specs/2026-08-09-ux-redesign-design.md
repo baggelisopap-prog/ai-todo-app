@@ -166,10 +166,14 @@ Lift app settings to a single owner in `App.jsx` — one fetch, one copy, one wr
 Swipe right completes. Swipe left reveals Schedule and Delete. Per §2, and non-negotiably:
 
 - **every one of these actions also lives in the `⋯` menu**, which is the accessible path and already exists;
-- delete is red, and always raises a toast with **undo**;
+- delete is red and never happens on the gesture alone;
 - the gesture is hinted on first use.
 
 `@dnd-kit` is confined to `CalendarView`, so its drag sensors cannot conflict with swipe in `TaskList`. Verify this when implementing rather than assuming it, since both listen to pointer events.
+
+> **CORRECTED while implementing (2026-08-09).** This section originally said delete "always raises a toast with **undo**". That is not available: deletion here is a hard delete, and DECISIONS.md already records it as the one action with no undo, which is why the agent's delete path routes into the confirm dialog rather than the applied-with-undo flow every other agent edit uses. Promising undo would have meant either lying in the toast or reconstructing the task client-side under a new `record_id`, breaking its Google Calendar link. The safeguard is the existing confirmation instead, and the swipe was designed around the same limit: **swipe left does not act, it reveals a tray**. Reschedule and Delete each need a deliberate second tap, so a gesture can never destroy anything on its own. Swipe right does act immediately, because completing is reversible by the same circle that did it.
+>
+> Reschedule needed a destination that did not exist. It is a three-option sheet — today, tomorrow, next week — written straight to `due_date` with no model call. The inline agent already offers those three as chips, but each of those spends a request on arithmetic the browser does for free. Anything else still goes through the date field in the detail sheet.
 
 ### Phase 4 — Settings
 **Fixes**: the rest of §3.3. **Depends on**: Phase 0.
@@ -217,7 +221,7 @@ Not metrics — this app has one user and analytics would be theatre. Concrete c
 - **Phase 0**: turn off notifications, then toggle a calendar setting, then reopen settings — notifications are still off. This is the reproduction from §3.1 and it must fail before the fix and pass after.
 - **Phase 1**: at the narrowest supported width, in Greek, no tab label is clipped; no view's title scrolls out of sight.
 - **Phase 2**: no element in the row is both dimmed and clickable. Tapping a task never puts the user in an editing state.
-- **Phase 3**: every swipe action is reachable from the `⋯` menu; deleting always offers undo.
+- **Phase 3**: every swipe action is reachable from the `⋯` menu; no gesture deletes anything without a second, deliberate tap; a mostly-vertical drag scrolls the page instead of moving the row.
 - **Phase 4**: the current value of Language and Appearance is readable without opening anything; a failed write shows the user a message.
 - **Phase 5**: typing part of a task name finds it without a network request.
 

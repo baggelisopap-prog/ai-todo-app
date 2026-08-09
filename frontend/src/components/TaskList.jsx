@@ -1,9 +1,15 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskCard from './TaskCard';
+import SwipeHint from './SwipeHint';
 
 function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskId, onToggleExpand, onUpdateTask, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
+  // One hint for the whole app, not one per list — several TaskLists are on
+  // screen at once in Today, and three identical hints stacked down the page
+  // would be worse than none.
+  const [hintDismissed, setHintDismissed] = useState(false);
 
   if (tasks.length === 0) {
     return (
@@ -16,7 +22,9 @@ function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskI
   const sortedTasks = sortTasks(tasks, sortBy);
 
   return (
-    <ul className="space-y-2">
+    <>
+      {!hintDismissed && <SwipeHint onDismiss={() => setHintDismissed(true)} />}
+      <ul className="space-y-2">
       {sortedTasks.map((task) => (
         <li key={task.record_id}>
           <TaskCard
@@ -30,7 +38,8 @@ function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskI
           />
         </li>
       ))}
-    </ul>
+      </ul>
+    </>
   );
 }
 

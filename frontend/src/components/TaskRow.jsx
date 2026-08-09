@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDate, roundToNearestHalfHour } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
@@ -10,14 +11,21 @@ import {
   checklistProgress,
 } from '../utils/taskDisplay';
 import { useTaskActions } from '../hooks/useTaskActions';
+import { useSwipeRow } from '../hooks/useSwipeRow';
 import TaskMenu from './TaskMenu';
+import QuickReschedule from './QuickReschedule';
 import {
   CheckIcon,
   CalendarIcon,
   CalendarFilledIcon,
   BellFilledIcon,
   ChecklistIcon,
+  TrashIcon,
 } from './TaskIcons';
+
+// Two 70px buttons. Named because the row's parked offset has to match the
+// tray's real width exactly, or the last button is clipped.
+const TRAY_WIDTH_PX = 140;
 
 /**
  * One task, as it appears in a list.
@@ -49,6 +57,38 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
   const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast });
   const { isPending, isCompleted, isRejected } = actions;
 
+  const [isTrayOpen, setIsTrayOpen] = useState(false);
+  const [isReschedulingOpen, setIsReschedulingOpen] = useState(false);
+
+  // Swipe right completes, because completing is the thing you do most and it
+  // is trivially reversible — the same circle undoes it and the toast says so.
+  // Swipe left does NOT act; it reveals a tray. Reschedule and Delete both
+  // deserve a deliberate second tap, and a gesture that deletes on release is
+  // one pocket-brush away from destroying something.
+  const swipe = useSwipeRow({
+    enabled: !isTrayOpen,
+    onSwipeRight: () => actions.toggleComplete(variant),
+    onSwipeLeft: () => setIsTrayOpen(true),
+  });
+
+  async function handleReschedule(date) {
+    setIsReschedulingOpen(false);
+    setIsTrayOpen(false);
+    try {
+      await onUpdate(task.record_id, { due_date: date });
+      // Reuses the key the calendar's drag-to-reschedule already shows, rather
+      // than adding a second phrasing of the same event.
+      onShowToast('calendar.rescheduled', 'success');
+    } catch {
+      onShowToast('errors.failed_update', 'error');
+    }
+  }
+
+  async function handleDelete() {
+    setIsTrayOpen(false);
+    await actions.remove();
+  }
+
   const showDescription = task.description && task.description !== task.task_name;
   const progress = checklistProgress(task.checklist);
   const tone = dueTone(task);
@@ -75,8 +115,54 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
     onOpen(task.record_id);
   }
 
+  // How far the row is displaced: following the finger mid-swipe, or parked
+  // open over the tray.
+  const offset = isTrayOpen ? -TRAY_WIDTH_PX : swipe.dx;
+
   return (
-    <article onClick={handleClick} className={rowClasses}>
+    <div className="relative overflow-hidden rounded-lg">
+      {/* Behind the row. The right-hand pair is the tray a left swipe reveals;
+          the left-hand strip is only feedback that a right swipe is in
+          progress, since that one acts on release rather than parking open. */}
+      {offset > 0 && (
+        <div className="absolute inset-y-0 left-0 flex items-center px-4 bg-[var(--success-bg)]" style={{ width: offset }}>
+          <CheckIcon className="w-4 h-4 text-[var(--success-strong)]" />
+        </div>
+      )}
+
+      <div className="absolute inset-y-0 right-0 flex items-stretch" aria-hidden={!isTrayOpen}>
+        <button
+          type="button"
+          tabIndex={isTrayOpen ? 0 : -1}
+          onClick={() => setIsReschedulingOpen(true)}
+          className="w-[70px] flex flex-col items-center justify-center gap-1 bg-[var(--priority-p2-bg)] text-[var(--priority-p2-text)] text-[11px] font-medium"
+        >
+          <CalendarIcon className="w-4 h-4" />
+          {t('actions.reschedule_short')}
+        </button>
+        <button
+          type="button"
+          tabIndex={isTrayOpen ? 0 : -1}
+          onClick={handleDelete}
+          className="w-[70px] flex flex-col items-center justify-center gap-1 bg-[var(--danger-bg)] text-[var(--danger-text)] text-[11px] font-medium"
+        >
+          <TrashIcon className="w-4 h-4" />
+          {t('actions.delete')}
+        </button>
+      </div>
+
+      <article
+        onClick={handleClick}
+        {...swipe.handlers}
+        // touch-pan-y is what keeps vertical scrolling with the browser while
+        // handing horizontal movement to useSwipeRow. Without it the browser
+        // claims the whole gesture and the swipe never fires.
+        className={`relative touch-pan-y ${rowClasses}`}
+        style={{
+          transform: `translateX(${offset}px)`,
+          transition: swipe.isSwiping ? 'none' : 'transform 150ms ease-out',
+        }}
+      >
       <div className="flex items-start gap-3">
         <button
           type="button"
@@ -187,11 +273,31 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
           onReject={actions.reject}
           onUnreject={actions.unreject}
           onEdit={() => onOpen(task.record_id)}
-          onDelete={actions.remove}
+          onReschedule={() => setIsReschedulingOpen(true)}
+          onDelete={handleDelete}
           t={t}
         />
       </div>
-    </article>
+      </article>
+
+      {/* Tapping anywhere else closes the tray. Without this it can only be
+          shut by swiping it back, which nobody discovers. */}
+      {isTrayOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-10 cursor-default"
+          aria-label={t('actions.close')}
+          onClick={() => setIsTrayOpen(false)}
+        />
+      )}
+
+      {isReschedulingOpen && (
+        <QuickReschedule
+          onPick={handleReschedule}
+          onClose={() => setIsReschedulingOpen(false)}
+        />
+      )}
+    </div>
   );
 }
 

@@ -60,13 +60,23 @@
     "default": "No tasks to show.",
     "no_tasks": "No tasks"
   },
+  "reschedule": {
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "next_week": "Next week"
+  },
+  "hints": {
+    "swipe": "Tip: swipe a task right to complete it, or left for more actions."
+  },
   "actions": {
+
     "add": "Add",
     "add_label": "Text",
     "adding": "Adding...",
     "cancel": "Cancel",
     "close": "Close",
     "reschedule": "Reschedule",
+    "reschedule_short": "Move",
     "save": "Save",
     "saving": "Saving...",
     "approve": "Approve",
