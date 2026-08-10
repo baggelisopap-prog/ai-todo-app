@@ -89,14 +89,10 @@ def get_reservation_details(reservation_id: int) -> dict:
     """
     Fetches guest name and stay dates from Hostaway's reservation object.
 
-    IMPORTANT: the exact field names for guest name / arrival / departure
-    dates on the Reservation object were NOT fully confirmed from available
-    documentation (only the Listing object schema was fully confirmed).
-    The field names below (guestName, arrivalDate, departureDate) are the
-    conventional Hostaway naming pattern based on related fields seen in
-    their docs, but VERIFY this against the actual raw API response the
-    first time this runs — log the full raw response, compare field names,
-    and adjust the .get() keys below if they don't match reality.
+    Field names VERIFIED against a live API response (2026-08-10): the
+    Reservation object really does carry guestName, arrivalDate and
+    departureDate. This previously warned that they were guessed from a
+    naming pattern and had never been confirmed — they were right.
     """
     try:
         token = _get_hostaway_access_token()
@@ -107,8 +103,6 @@ def get_reservation_details(reservation_id: int) -> dict:
         )
         response.raise_for_status()
         result = response.json().get("result", {})
-
-        logging.info(f"[hostaway] Raw reservation response for verification: {result}")
 
         return {
             "guest_name": result.get("guestName") or "Πελάτης",
