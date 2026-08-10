@@ -878,6 +878,59 @@ def _append_to_hostaway_thread(
     return updates
 
 
+def _handle_outgoing_hostaway_message(user_id: str, data: dict) -> dict:
+    """
+    An outgoing message arrived. Close the task it answers — if a human
+    wrote it, and if there is exactly one task it could be answering.
+
+    Both guards are load-bearing. The account runs a `messageReceived`
+    automation that fires after EVERY guest message, so "an outgoing
+    message means the task is handled" would close every task within
+    seconds of creating it, silently. Spec §1.1.
+    """
+    if not hostaway_threading.is_human_reply(data):
+        return {"status": "ignored", "reason": "automated outgoing message"}
+
+    conversation_id = data.get("conversationId")
+    if not conversation_id:
+        return {"status": "ignored", "reason": "outgoing message without a conversationId"}
+
+    open_tasks = repository.get_open_tasks_for_conversation(user_id, str(conversation_id))
+    if not open_tasks:
+        return {"status": "ok", "note": "no open task for this conversation"}
+
+    if len(open_tasks) > 1:
+        # Which of the two did the reply answer? That is a judgement, so it
+        # is not made — the user is told and decides. Spec §3.2.
+        try:
+            service.send_push_to_user(
+                user_id,
+                title="Απάντησες στον πελάτη",
+                body=f"{len(open_tasks)} tasks αυτής της συζήτησης είναι ακόμα ανοιχτά.",
+            )
+        except Exception as e:
+            logging.error(f"[hostaway webhook] Failed to send ambiguity notice: {e}")
+        return {"status": "ambiguous", "open_tasks": len(open_tasks)}
+
+    task = open_tasks[0]
+    now_str = datetime.now(ZoneInfo("Europe/Athens")).isoformat()
+
+    if task.priority == "P1":
+        # "I'm coming in 20 minutes" is an answer, not a fixed problem.
+        # Stop nagging; leave it on the list until a human closes it.
+        updates = {"hostaway_answered_at": now_str}
+    else:
+        updates = {"is_completed": True, "hostaway_answered_at": now_str}
+
+    repository.update_hostaway_thread_fields(user_id, task.record_id, updates)
+    logging.info(
+        f"[hostaway webhook] Human reply on conversation {conversation_id}: "
+        f"task {task.record_id} ({task.priority}) -> "
+        f"{'answered, left open' if task.priority == 'P1' else 'completed'}"
+    )
+    return {"status": "ok", "task": task.record_id}
+
+
 @app.post("/webhooks/hostaway")
 async def hostaway_webhook(request: Request):
     """
@@ -899,7 +952,24 @@ async def hostaway_webhook(request: Request):
     data = payload.get("data", {})
 
     if data.get("isIncoming") != 1:
-        return {"status": "ignored", "reason": "not an incoming guest message"}
+        # Silently dropped until 2026-08-10. An outgoing message is how we
+        # learn the conversation was answered — and the log line matters
+        # independently: it is the only evidence of whether Hostaway fires
+        # this webhook for outgoing messages at all (spec §6).
+        logging.info(
+            f"[hostaway webhook] Outgoing message: conversation="
+            f"{data.get('conversationId')} userId={data.get('userId')} "
+            f"communicationId={data.get('communicationId')} "
+            f"communicationEvent={data.get('communicationEvent')}"
+        )
+        outgoing_user_id = hostaway_integration.get_user_id_for_hostaway_account(
+            payload.get("accountId")
+        )
+        try:
+            return _handle_outgoing_hostaway_message(outgoing_user_id, data)
+        except Exception as e:
+            logging.error(f"[hostaway webhook] Outgoing handling failed: {e}")
+            return {"status": "error", "note": "outgoing handling failed, see logs"}
 
     message_body = (data.get("body") or "").strip()
     if not message_body:
