@@ -68,7 +68,6 @@
     "swipe": "Tip: swipe a task right to complete it, or left for more actions."
   },
   "actions": {
-
     "add": "Add",
     "add_label": "Text",
     "adding": "Adding...",
@@ -154,7 +153,10 @@
     "agent_sug_day_later": "A day later",
     "agent_sug_morning": "Set it for the morning",
     "agent_sug_hour_earlier": "An hour earlier",
-    "priority_aria": "Priority {{priority}}"
+    "priority_aria": "Priority {{priority}}",
+    "hostaway_open_conversation": "Open in Hostaway",
+    "hostaway_message_count": "{{count}} messages",
+    "hostaway_answered": "Replied — still open"
   },
   "menu": {
     "open_menu": "Open menu"

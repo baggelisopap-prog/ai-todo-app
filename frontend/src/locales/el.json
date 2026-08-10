@@ -153,7 +153,10 @@
     "agent_sug_day_later": "Μία μέρα μετά",
     "agent_sug_morning": "Βάλ' το το πρωί",
     "agent_sug_hour_earlier": "Μία ώρα νωρίτερα",
-    "priority_aria": "Προτεραιότητα {{priority}}"
+    "priority_aria": "Προτεραιότητα {{priority}}",
+    "hostaway_open_conversation": "Άνοιγμα στη Hostaway",
+    "hostaway_message_count": "{{count}} μηνύματα",
+    "hostaway_answered": "Απαντήθηκε — ακόμα ανοιχτό"
   },
   "menu": {
     "open_menu": "Άνοιγμα μενού"

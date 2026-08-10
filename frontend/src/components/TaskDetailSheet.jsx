@@ -13,6 +13,10 @@ import TaskMenu from './TaskMenu';
 import { SparkleIcon, SpinnerIcon, SendIcon } from './icons';
 import { CheckIcon, CheckedBox, EmptyBox } from './TaskIcons';
 
+// Confirmed against a real inbox URL, not documentation: a conversation's id
+// from the Hostaway API is exactly the id in this path.
+const HOSTAWAY_INBOX_URL = 'https://dashboard.hostaway.com/messages/inbox';
+
 // Field → existing translation key, for rendering what the agent changed.
 // Reuses the labels already on the edit form so the diff names each field the
 // same way the field above it does.
@@ -554,6 +558,33 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                 </div>
               </Field>
             </>
+          )}
+
+          {/* A Hostaway task points at the conversation it came from. The URL
+              shape was confirmed against a real inbox URL, not documentation:
+              a conversation's id from the API is exactly the id in this path. */}
+          {task.hostaway_conversation_id && (
+            <div className="flex items-center gap-2 flex-wrap" data-no-toggle>
+              <a
+                href={`${HOSTAWAY_INBOX_URL}/${task.hostaway_conversation_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs font-medium text-[var(--brand-primary)] underline"
+              >
+                {t('task.hostaway_open_conversation')}
+              </a>
+              {task.hostaway_message_count > 1 && (
+                <span className="text-[11px] text-[var(--text-secondary)]">
+                  {t('task.hostaway_message_count', { count: task.hostaway_message_count })}
+                </span>
+              )}
+              {task.hostaway_answered_at && (
+                <span className="text-[11px] text-[var(--text-secondary)]">
+                  {t('task.hostaway_answered')}
+                </span>
+              )}
+            </div>
           )}
 
           {/* Inline task agent, in BOTH modes. It suits a reading context as
