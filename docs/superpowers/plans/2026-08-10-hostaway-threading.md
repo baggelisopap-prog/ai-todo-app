@@ -201,6 +201,7 @@ git commit -m "Hostaway threading: the five columns, and a test harness to hang 
   - `parse_hostaway_datetime(value: Optional[str]) -> Optional[datetime]`
   - `should_append_to_thread(last_message_at: Optional[str], new_message_at: Optional[str], window_seconds: int = THREAD_WINDOW_SECONDS) -> bool`
   - `higher_priority(a: str, b: str) -> str`
+  - `is_more_urgent(new_priority: Optional[str], old_priority: Optional[str]) -> bool`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -255,6 +256,15 @@ def test_higher_priority_picks_the_more_urgent():
 def test_higher_priority_survives_junk():
     assert ht.higher_priority("P3", "banana") == "P3"
     assert ht.higher_priority(None, "P2") == "P2"
+
+
+def test_is_more_urgent_only_looks_upwards():
+    """The burst re-notification fires on an ESCALATION, never on a change."""
+    assert ht.is_more_urgent("P1", "P3") is True
+    assert ht.is_more_urgent("P2", "P3") is True
+    assert ht.is_more_urgent("P3", "P3") is False
+    assert ht.is_more_urgent("P3", "P1") is False
+    assert ht.is_more_urgent(None, "P3") is False
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -342,12 +352,25 @@ def higher_priority(a: Optional[str], b: Optional[str]) -> str:
     if rank_a == 0 and rank_b == 0:
         return "P3"
     return a if rank_a >= rank_b else b
+
+
+def is_more_urgent(new_priority: Optional[str], old_priority: Optional[str]) -> bool:
+    """
+    True only when the priority moved UP.
+
+    The burst re-notification hangs off this. Asking "did it change?" would
+    give the same answer today, because higher_priority() cannot return a
+    downgrade — but that is a property of another function, and if it ever
+    stops holding, "changed" would start firing pushes on de-escalations.
+    The condition says what it means instead.
+    """
+    return _PRIORITY_RANK.get(new_priority or "", 0) > _PRIORITY_RANK.get(old_priority or "", 0)
 ```
 
 - [ ] **Step 4: Run the tests**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_hostaway_threading.py -v`
-Expected: 8 passed.
+Expected: 9 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -450,7 +473,7 @@ def is_human_reply(message: dict) -> bool:
 - [ ] **Step 4: Run the tests**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -v`
-Expected: 16 passed.
+Expected: 17 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -642,7 +665,7 @@ def update_hostaway_thread_fields(user_id: str, record_id: str, updates: dict) -
 - [ ] **Step 4: Run the tests**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -v`
-Expected: 21 passed.
+Expected: 22 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -855,8 +878,8 @@ Then replace the block that runs from `classification = hostaway_integration.cla
         # One push per message is the rule (spec §4) — but inside a burst,
         # three pushes in forty seconds for one thought IS the noise this
         # feature exists to remove. So the burst notifies once, and again
-        # only when it turns out to be more urgent than it looked.
-        if updates["priority"] != previous_priority:
+        # ONLY on an escalation: decided by the owner, 2026-08-10.
+        if hostaway_threading.is_more_urgent(updates["priority"], previous_priority):
             emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(updates["priority"], "")
             try:
                 service.send_push_to_user(
@@ -894,7 +917,7 @@ In `services.py`, inside `create_task_manual`'s `TaskRecord(...)` construction, 
 - [ ] **Step 7: Run the whole suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -v`
-Expected: 25 passed.
+Expected: 26 passed.
 
 - [ ] **Step 8: Commit**
 
@@ -1104,7 +1127,7 @@ with:
 - [ ] **Step 5: Run the whole suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -v`
-Expected: 31 passed.
+Expected: 32 passed.
 
 - [ ] **Step 6: Commit**
 
@@ -1192,7 +1215,7 @@ In `services.py`'s `_check_hostaway_escalations`, immediately inside `for task i
 - [ ] **Step 4: Run the suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -v`
-Expected: 33 passed.
+Expected: 34 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1385,4 +1408,4 @@ Update `PROJECT_STATUS.md` and `CURRENT_TASK.md` with what was actually observed
 
 **Deviations from the spec, both flagged above:** a fifth column (`hostaway_thread`), and re-classification updating `description`/`priority` rather than `task_name`.
 
-**One behaviour worth a second look during review:** inside a burst the app sends a push only when the priority *changes*, not on every message. The spec's §4 says "one push per incoming message, exactly as today". These conflict, and the code follows the burst rule deliberately — three notifications in forty seconds for one thought is the noise this feature exists to remove, and a burst message that does not change the priority adds nothing the first push did not already say. Flagged rather than silently resolved; if the owner disagrees, it is one `if` in Task 5 Step 5.
+**One conflict with the spec, resolved by the owner (2026-08-10):** inside a burst the app pushes only when the priority moves **up**, not on every message. The spec's §4 says "one push per incoming message, exactly as today". The owner chose escalation-only — three notifications in forty seconds for one thought is the noise this feature exists to remove. Enforced by `is_more_urgent()` rather than a `!=` comparison, so it cannot silently start firing on de-escalations if `higher_priority()` ever changes.
