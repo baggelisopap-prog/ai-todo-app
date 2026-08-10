@@ -30,6 +30,7 @@ import agent_tools
 import task_agent
 import google_calendar
 import hostaway_integration
+import hostaway_threading
 import repository
 import token_tracker
 import os
@@ -830,6 +831,53 @@ def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(g
         raise HTTPException(status_code=500, detail=f"Failed to execute action: {str(e)}")
 
 
+HOSTAWAY_THREAD_SEPARATOR = "\n---\n"
+
+
+def _append_to_hostaway_thread(
+    user_id: str,
+    task,
+    message_body: str,
+    message_date: str,
+    classification: dict,
+) -> dict:
+    """
+    Folds a burst message into an existing open task and re-classifies the
+    whole thread. Returns the update dict that was written.
+
+    The WHOLE thread is re-classified, not just the new message, because
+    the messages being merged are precisely the ones that mean nothing
+    alone — «του νησιού», «Πετσέτες εννοώ συγγνώμη». The call count is
+    unchanged from today (one per message); only ~23 extra tokens per
+    burst are spent re-sending it. Spec §3.1.
+
+    Priority can only ever escalate: a follow-up «και μια ερώτηση» must not
+    downgrade a P1 thread about missing keys.
+    """
+    thread = task.hostaway_thread or ""
+    new_thread = f"{thread}{HOSTAWAY_THREAD_SEPARATOR}{message_body}" if thread else message_body
+    new_priority = hostaway_threading.higher_priority(task.priority, classification["priority"])
+
+    updates = {
+        "hostaway_thread": new_thread,
+        "hostaway_message_count": (task.hostaway_message_count or 0) + 1,
+        "hostaway_last_message_at": message_date,
+        "priority": new_priority,
+        "description": f"{classification['summary']}\n\nΜηνύματα:\n{new_thread}",
+        # A new message restarts the escalation cycle — the clock measures
+        # "how long since we nagged", and the burst has just been notified
+        # (or deliberately not, on an unchanged priority).
+        "hostaway_last_notified_at": datetime.now(ZoneInfo("Europe/Athens")).isoformat(),
+    }
+    repository.update_hostaway_thread_fields(user_id, task.record_id, updates)
+    logging.info(
+        f"[hostaway webhook] Appended to thread {task.hostaway_conversation_id} "
+        f"(task {task.record_id}, {updates['hostaway_message_count']} messages, "
+        f"priority {task.priority} -> {new_priority})"
+    )
+    return updates
+
+
 @app.post("/webhooks/hostaway")
 async def hostaway_webhook(request: Request):
     """
@@ -859,6 +907,8 @@ async def hostaway_webhook(request: Request):
 
     listing_map_id = data.get("listingMapId")
     reservation_id = data.get("reservationId")
+    conversation_id = data.get("conversationId")
+    message_date = data.get("date")
 
     hostaway_account_id = payload.get("accountId")
     user_id = hostaway_integration.get_user_id_for_hostaway_account(hostaway_account_id)
@@ -873,12 +923,57 @@ async def hostaway_webhook(request: Request):
         listing_name = "Άγνωστο property"
         reservation_details = {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"}
 
+    # Is this message part of a burst an open task already covers? The
+    # comparison uses HOSTAWAY's dates on both sides, never now() — so it
+    # behaves identically whether the webhook was instant or the message was
+    # picked up minutes later. Spec §3.1.
+    existing_task = None
+    if conversation_id:
+        for candidate in repository.get_open_tasks_for_conversation(user_id, str(conversation_id)):
+            if hostaway_threading.should_append_to_thread(
+                candidate.hostaway_last_message_at, message_date
+            ):
+                existing_task = candidate
+                break
+
+    # Classify the whole thread when appending, the single message otherwise:
+    # the messages that get merged are exactly the ones that mean nothing on
+    # their own, so classifying the new one alone would produce noise.
+    text_to_classify = message_body
+    if existing_task:
+        previous = existing_task.hostaway_thread or ""
+        text_to_classify = (
+            f"{previous}{HOSTAWAY_THREAD_SEPARATOR}{message_body}" if previous else message_body
+        )
+
     try:
-        classification = hostaway_integration.classify_message(message_body, user_id=user_id)
+        classification = hostaway_integration.classify_message(text_to_classify, user_id=user_id)
     except Exception as e:
         logging.error(f"[hostaway webhook] Classification failed unexpectedly: {e}")
         classification = {"summary": message_body[:200], "priority": "P1"}
 
+    if existing_task:
+        previous_priority = existing_task.priority
+        updates = _append_to_hostaway_thread(
+            user_id, existing_task, message_body, message_date, classification
+        )
+        # One push per message is the rule (spec §4) — but inside a burst,
+        # three pushes in forty seconds for one thought IS the noise this
+        # feature exists to remove. So the burst notifies once, and again
+        # ONLY on an escalation: decided by the owner, 2026-08-10.
+        if hostaway_threading.is_more_urgent(updates["priority"], previous_priority):
+            emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(updates["priority"], "")
+            try:
+                service.send_push_to_user(
+                    user_id,
+                    title=f"{emoji} {existing_task.task_name}",
+                    body=classification["summary"],
+                )
+            except Exception as e:
+                logging.error(f"[hostaway webhook] Failed to send escalation notification: {e}")
+        return {"status": "ok", "threaded_into": existing_task.record_id}
+
+    # ── no open burst: create a task, exactly as before ──
     guest_name = reservation_details["guest_name"]
     arrival = reservation_details["arrival_date"]
     departure = reservation_details["departure_date"]
@@ -921,6 +1016,10 @@ async def hostaway_webhook(request: Request):
             "checklist": [],
             "hostaway_created_at": now_str,
             "hostaway_last_notified_at": now_str,
+            "hostaway_conversation_id": str(conversation_id) if conversation_id else None,
+            "hostaway_last_message_at": message_date,
+            "hostaway_message_count": 1,
+            "hostaway_thread": message_body,
         })
         logging.info(f"[hostaway webhook] Created task: {task_name} (priority={priority})")
     except Exception as e:

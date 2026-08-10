@@ -265,6 +265,10 @@ class TaskService:
             created_time=None,
             hostaway_created_at=fields.get("hostaway_created_at"),
             hostaway_last_notified_at=fields.get("hostaway_last_notified_at"),
+            hostaway_conversation_id=fields.get("hostaway_conversation_id"),
+            hostaway_last_message_at=fields.get("hostaway_last_message_at"),
+            hostaway_message_count=fields.get("hostaway_message_count", 0),
+            hostaway_thread=fields.get("hostaway_thread"),
         )
         return self.repository.save_task(user_id, task)
 
