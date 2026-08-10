@@ -94,6 +94,8 @@ Verified against `main.py` and the frontend on 2026-08-09.
 | H12 | **Accounting (QuickBooks, Xero)** | Low | High | Wrong job | No |
 
 ### 4.1 Depth: Email → task
+> **Superseded in part by `2026-08-10-email-to-task-notes.md`**, which corrects two things below: this section missed that inbound mail needs a domain the project does not own yet (a hard prerequisite, not the cosmetic BACKLOG item it looks like), and it puts the ignore-signatures-and-footers rule in the extraction prompt, which is the wrong layer — strip in code. It also adds the design idea this section does not have: the note the user types above the forward.
+
 Every user gets an address like `u-<token>@in.<domain>`. Anything sent there lands in the Inbox as a pending task, extracted by the same AI that handles typed capture. An inbound-parse provider (Postmark, Mailgun, SendGrid all do this) posts the parsed message to a new endpoint.
 
 **The parts that will bite.** The address is effectively public once used, so it needs a **non-guessable per-user token**, revocable from Settings, and a rate limit. **Sender allow-listing** should default to the account's own address, with an explicit "accept from anyone" switch. Email bodies carry quoted history, signatures and legal footers — the extraction prompt must be told to ignore them or every task acquires a disclaimer. And untrusted text reaching an LLM is the injection surface the project already reasoned about for Hostaway: **the rule is unchanged** — data, not instructions; lands pending; a human approves.
