@@ -572,6 +572,53 @@ def update_hostaway_last_notified(user_id: str, record_id: str, last_notified_at
     supabase.table("tasks").update({"hostaway_last_notified_at": last_notified_at}).eq("id", record_id).eq("user_id", user_id).execute()
 
 
+def get_open_tasks_for_conversation(user_id: str, conversation_id: str) -> list[TaskRecord]:
+    """
+    Every open (not completed, not rejected) task belonging to one Hostaway
+    conversation, newest first, scoped to user_id.
+
+    Deliberately a filtered QUERY rather than the get_tasks_for_user() scan
+    its neighbours use: this runs on every inbound webhook, and that
+    function is already known to fetch ~124 rows in ~930 ms to use five
+    (CURRENT_TASK.md). The partial index on hostaway_conversation_id makes
+    this a handful of rows.
+
+    Never raises — a lookup failure must not become a 500 on a webhook that
+    Hostaway would then retry or disable. Returning [] degrades to today's
+    behaviour: a new task gets created.
+    """
+    try:
+        response = (
+            supabase.table("tasks")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("hostaway_conversation_id", conversation_id)
+            .eq("is_completed", False)
+            .eq("is_rejected", False)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        repo = _get_shared_tasks_repo()
+        return [repo._supabase_row_to_task(row) for row in (response.data or [])]
+    except Exception as e:
+        logger.warning(
+            f"Failed to load open tasks for conversation {conversation_id} "
+            f"(user {user_id}): {e}"
+        )
+        return []
+
+
+def update_hostaway_thread_fields(user_id: str, record_id: str, updates: dict) -> None:
+    """
+    Writes threading fields (thread text, counts, priority, answered/notified
+    timestamps) onto one task, scoped to user_id. A no-op when there is
+    nothing to change, so callers can build the dict conditionally.
+    """
+    if not updates:
+        return
+    supabase.table("tasks").update(updates).eq("id", record_id).eq("user_id", user_id).execute()
+
+
 def get_tasks_for_date(
     user_id: str, date_str: str, tasks: Optional[list[TaskRecord]] = None
 ) -> list[TaskRecord]:
