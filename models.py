@@ -82,6 +82,18 @@ class TaskRecord(SingleTask):
     hostaway_created_at: Optional[str] = None
     hostaway_last_notified_at: Optional[str] = None
 
+    # Hostaway message threading (2026-08-10). hostaway_last_message_at holds
+    # HOSTAWAY's message date, never a server clock read — that is what makes
+    # the 90-second burst window independent of when the webhook reached us.
+    # hostaway_thread accumulates the raw guest messages so the whole thread
+    # can be re-classified; hostaway_answered_at marks a P1 that was replied
+    # to (escalation stops, the task deliberately stays open).
+    hostaway_conversation_id: Optional[str] = None
+    hostaway_last_message_at: Optional[str] = None
+    hostaway_message_count: int = 0
+    hostaway_answered_at: Optional[str] = None
+    hostaway_thread: Optional[str] = None
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str

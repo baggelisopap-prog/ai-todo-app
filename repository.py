@@ -147,6 +147,11 @@ class AirtableTaskRepository:
             created_time=row.get("created_time"),
             hostaway_created_at=row.get("hostaway_created_at"),
             hostaway_last_notified_at=row.get("hostaway_last_notified_at"),
+            hostaway_conversation_id=row.get("hostaway_conversation_id"),
+            hostaway_last_message_at=row.get("hostaway_last_message_at"),
+            hostaway_message_count=_get(row, "hostaway_message_count", 0),
+            hostaway_answered_at=row.get("hostaway_answered_at"),
+            hostaway_thread=row.get("hostaway_thread"),
         )
 
     def save_task(self, user_id: str, task: TaskRecord) -> TaskRecord:
