@@ -488,6 +488,12 @@ class TaskService:
         escalations_sent = 0
 
         for task in hostaway_tasks:
+            if task.hostaway_answered_at:
+                # A human replied to this conversation. On a P1 the task
+                # deliberately stays open (replying is not fixing — see the
+                # threading design §3.2), but it must stop nagging.
+                continue
+
             if not task.hostaway_last_notified_at:
                 continue  # missing tracking field (e.g. task created before this feature existed)
 
