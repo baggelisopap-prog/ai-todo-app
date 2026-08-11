@@ -983,16 +983,6 @@ async def hostaway_webhook(request: Request):
     hostaway_account_id = payload.get("accountId")
     user_id = hostaway_integration.get_user_id_for_hostaway_account(hostaway_account_id)
 
-    try:
-        listing_name = hostaway_integration.get_listing_name(listing_map_id) if listing_map_id else "Άγνωστο property"
-        reservation_details = hostaway_integration.get_reservation_details(reservation_id) if reservation_id else {
-            "guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"
-        }
-    except Exception as e:
-        logging.error(f"[hostaway webhook] Enrichment failed: {e}")
-        listing_name = "Άγνωστο property"
-        reservation_details = {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"}
-
     # Is this message part of a burst an open task already covers? The
     # comparison uses HOSTAWAY's dates on both sides, never now() — so it
     # behaves identically whether the webhook was instant or the message was
@@ -1044,6 +1034,20 @@ async def hostaway_webhook(request: Request):
         return {"status": "ok", "threaded_into": existing_task.record_id}
 
     # ── no open burst: create a task, exactly as before ──
+    # Enrichment lives HERE, not above the burst check: it is two Hostaway API
+    # calls and the append path uses neither the listing name nor the
+    # reservation, so enriching first would spend two round-trips per burst
+    # message to throw the answers away.
+    try:
+        listing_name = hostaway_integration.get_listing_name(listing_map_id) if listing_map_id else "Άγνωστο property"
+        reservation_details = hostaway_integration.get_reservation_details(reservation_id) if reservation_id else {
+            "guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"
+        }
+    except Exception as e:
+        logging.error(f"[hostaway webhook] Enrichment failed: {e}")
+        listing_name = "Άγνωστο property"
+        reservation_details = {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"}
+
     guest_name = reservation_details["guest_name"]
     arrival = reservation_details["arrival_date"]
     departure = reservation_details["departure_date"]
