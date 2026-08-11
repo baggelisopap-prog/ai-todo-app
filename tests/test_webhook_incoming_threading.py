@@ -6,7 +6,12 @@ from models import TaskRecord
 def _task(**overrides):
     fields = dict(
         task_name="Hostaway: Κώστας - Arachova",
-        description="Καλησπέρα.\n\nProperty: Arachova\nDates: ? → ?\n\nOriginal message: καλησπέρα σας",
+        description=(
+            "Καλησπέρα.\n\n"
+            "Property: Arachova \"The View\" Maisonette\n"
+            "Dates: 2026-08-11 → 2026-08-13\n\n"
+            "Μηνύματα:\nκαλησπέρα σας"
+        ),
         category="Hostaway",
         priority="P3",
         checklist=[],
@@ -74,3 +79,36 @@ def test_the_new_summary_replaces_the_old_one_in_the_description(monkeypatch):
     # both messages survive in the description
     assert "καλησπέρα σας" in written["description"]
     assert "δεν βρίσκω τα κλειδιά" in written["description"]
+
+
+def test_appending_keeps_the_property_and_the_dates(monkeypatch):
+    """
+    The Property/Dates block is written ONCE at creation, from two Hostaway
+    API calls the append path deliberately does not repeat. Rebuilding the
+    description without it would strip exactly the context a P1 needs, from
+    the second message onwards.
+    """
+    written = {}
+    monkeypatch.setattr(main.repository, "update_hostaway_thread_fields",
+                        lambda u, r, updates: written.update(updates))
+
+    main._append_to_hostaway_thread(
+        "user-1", _task(), "δεν βρίσκω τα κλειδιά", "2026-08-10 14:00:40",
+        {"summary": "Ο πελάτης δεν βρίσκει τα κλειδιά.", "priority": "P1"},
+    )
+    assert 'Property: Arachova "The View" Maisonette' in written["description"]
+    assert "Dates: 2026-08-11 → 2026-08-13" in written["description"]
+
+
+def test_appending_survives_a_task_with_no_property_block(monkeypatch):
+    """Tasks created before this format existed, and enrichment failures."""
+    written = {}
+    monkeypatch.setattr(main.repository, "update_hostaway_thread_fields",
+                        lambda u, r, updates: written.update(updates))
+
+    main._append_to_hostaway_thread(
+        "user-1", _task(description="Καλησπέρα."), "και κάτι ακόμα",
+        "2026-08-10 14:00:40", {"summary": "Κάτι.", "priority": "P3"},
+    )
+    assert written["description"].startswith("Κάτι.")
+    assert "και κάτι ακόμα" in written["description"]

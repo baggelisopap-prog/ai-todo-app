@@ -15,6 +15,7 @@ Interactive docs: http://localhost:8000/docs
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form, Depends
@@ -832,6 +833,38 @@ def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(g
 
 
 HOSTAWAY_THREAD_SEPARATOR = "\n---\n"
+HOSTAWAY_MESSAGES_HEADING = "Μηνύματα:"
+
+
+def _hostaway_meta_block(description: str) -> str:
+    """
+    Pulls the Property/Dates block out of a Hostaway task's description.
+
+    It is written ONCE, at creation, from two Hostaway API calls the append
+    path deliberately does not repeat (see the enrichment note in the
+    webhook). Rebuilding a threaded task's description without it would
+    delete which property and which stay the task is about the moment a
+    second message arrives — exactly the context a P1 needs.
+
+    Reads both the current shape and the pre-2026-08-11 one, so a task
+    created before this existed keeps its block on its first append.
+    """
+    if not description:
+        return ""
+    head = re.split(
+        rf"\n\n{HOSTAWAY_MESSAGES_HEADING}\n|\n\nOriginal message: ", description
+    )[0]
+    parts = head.split("\n\n", 1)
+    return parts[1].strip() if len(parts) > 1 else ""
+
+
+def _render_hostaway_description(summary: str, meta_block: str, thread: str) -> str:
+    """The one description shape, used by both the create and append paths."""
+    blocks = [summary]
+    if meta_block:
+        blocks.append(meta_block)
+    blocks.append(f"{HOSTAWAY_MESSAGES_HEADING}\n{thread}")
+    return "\n\n".join(blocks)
 
 
 def _append_to_hostaway_thread(
@@ -863,7 +896,9 @@ def _append_to_hostaway_thread(
         "hostaway_message_count": (task.hostaway_message_count or 0) + 1,
         "hostaway_last_message_at": message_date,
         "priority": new_priority,
-        "description": f"{classification['summary']}\n\nΜηνύματα:\n{new_thread}",
+        "description": _render_hostaway_description(
+            classification["summary"], _hostaway_meta_block(task.description), new_thread
+        ),
         # A new message restarts the escalation cycle — the clock measures
         # "how long since we nagged", and the burst has just been notified
         # (or deliberately not, on an unchanged priority).
@@ -1058,11 +1093,12 @@ async def hostaway_webhook(request: Request):
     priority = classification["priority"]
 
     task_name = f"Hostaway: {guest_name} - {listing_name}"
-    description = (
-        f"{classification['summary']}\n\n"
-        f"Property: {listing_name}\n"
-        f"Dates: {arrival} → {departure}\n\n"
-        f"Original message: {message_body}"
+    # Same shape the append path re-renders, so a threaded task and a fresh
+    # one read identically and _hostaway_meta_block has one thing to find.
+    description = _render_hostaway_description(
+        classification["summary"],
+        f"Property: {listing_name}\nDates: {arrival} → {departure}",
+        message_body,
     )
 
     # Instant notification for every priority, then ongoing re-notification
