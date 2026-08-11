@@ -17,20 +17,26 @@ The requirement was stated as **«σε όλα αυτά θέλω zero fail, όχ�
 
 **Write the answer down either way.** An unrecorded "we checked once" is how this file grew its last four gaps.
 
-## Gap B — the auto-reply must not close anything
-The regression that matters most. The account's `messageReceived` automation fires after every guest message; if the `userId` guard is wrong or absent in production, **every task closes seconds after it is created, silently.**
+## VERIFIED against the deployed endpoint (2026-08-11)
+Synthetic Hostaway payloads POSTed to the live `/webhooks/hostaway`, then the resulting rows read straight out of `tasks`. Two fake conversations (`99990001`, `99990002`), three tasks created and since deleted.
 
-**To verify**: send a guest message, let the automation fire, confirm the task is still open a minute later.
+| Behaviour | Result |
+|---|---|
+| 3 messages inside 70 s | **ONE** task, `hostaway_message_count=3`, all three in `hostaway_thread` |
+| Priority through the burst | **P3 → P1** as the real problem landed |
+| Summary after the burst | the KEYS problem, not «καλησπέρα» |
+| A different problem 5 minutes later | **a second task** (P2, wifi) — two problems stay two tasks |
+| A human reply with TWO tasks open | neither touched (`is_completed=False`, `hostaway_answered_at=None` on both), reported instead |
+| A human reply on a P3 | **completed**, `hostaway_answered_at` set |
+| An automation (`userId: null`) | ignored — **the auto-reply cannot close a task** |
 
-## Gap C — threading against a real burst
-**To verify**: from a test thread, send three messages under 40 seconds apart — a greeting, a name, then a real P1 problem. Confirm: ONE task not three; `hostaway_message_count` = 3; priority ended P1; the description's summary describes the *problem*, not the greeting; exactly ONE extra push arrived (on the escalation, not on each message).
+That last row was Gap B, the dangerous one, and it is closed in production.
 
-Then send one problem, wait **three minutes**, send a different one → **two** tasks. This is the owner's explicit requirement: two problems are two tasks, and only the noise is removed.
+**One bug found by this pass and fixed (`469b127`)**: `_append_to_hostaway_thread` rebuilt the description from the summary and thread only, so the **Property/Dates block disappeared on the second message** of every conversation. The unit tests asserted the messages survive an append; nothing asserted the reservation context did. Both paths now render through `_render_hostaway_description`.
 
-## Gap D — a real reply, both priorities
-Reply by hand to a **P3** thread → the task completes. Reply by hand to a **P1** thread → the task stays open, shows "Απαντήθηκε — ακόμα ανοιχτό", and sends no further escalation for at least one full escalation interval (P1 is 30 minutes).
+**Not covered by this pass**: a P1 reply leaving the task open was never isolated (the P1 task shared its conversation with the wifi task, so the reply correctly hit the ambiguous branch instead). Worth one clean run.
 
-## Gap E — the link, and the sheet
+## Gap B — the link, and the sheet
 Open a threaded task, tap the Hostaway link, confirm it opens the right conversation. Check the message count renders and that EN and EL both read correctly. Never seen rendered.
 
 ## How to verify anything here
