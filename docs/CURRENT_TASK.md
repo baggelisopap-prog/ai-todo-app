@@ -19,10 +19,23 @@ Answered by the owner hitting it live: replied to a guest, nothing happened. Ful
 
 **A second bug this exposed, now fixed**: the webhook's ignored-event branch returned with NO log line, so `[hostaway webhook] Outgoing message:` — the line this gap was supposed to be settled by — could never have distinguished "Hostaway never called" from "Hostaway called with an event name we don't match". Every delivery now logs its event before any filtering.
 
-## Gap A2 — the polling has never been seen running deployed
-16 unit tests pass on real captured payloads, and a dry run against the live API and real rows (writes intercepted) found the real 07:51 reply and would have completed that task. **That is not the same as having run on Render.**
+## Gap A2 — CLOSED (2026-08-13). Seen running on Render, both ways.
+Deployed as `cd5187e` and watched against the `tasks` table, polling every 30 s:
 
-**To verify**: reply to a guest, wait ~2 minutes, then check (a) `[hostaway replies] Conversation …: reply at …` in Render's log, and (b) the row — `hostaway_answered_at` set, and `is_completed` true if it was a P2/P3. Watch the escalation does NOT also fire in that tick.
+| task | conversation | reply | result |
+|---|---|---|---|
+| `f6fa2735` | 49446134 | 15:11:29, sent hours earlier | closed on the FIRST tick after deploy — a reply that predated the feature was still found |
+| `4c2bb5f7` | 49446111 | 15:41:21, sent during the watch | closed within ~2 minutes of being sent — the live path |
+
+The second row is the one that matters: at 18:16 Athens that conversation had no human reply and the dry run correctly left it alone; the reply arrived at 18:41 and the task was closed by 18:42. Detection and restraint, on the same task, half an hour apart.
+
+**Still unobserved** (small, but do not claim them): the escalation NOT firing in the same tick as a discovery (`test_the_answered_task_does_not_also_escalate_this_tick` covers the mechanism, nothing has watched it live), the two-open-tasks ambiguity push, and a P1 or P2 reply being recorded without completing — every live case so far has been a P3.
+
+## Gap A3 — the staged rollout is deliberately incomplete
+`HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES = {"P3"}` in `services.py`. The owner asked for the least urgent priority only, until auto-completion has been watched for a while («για αρχή, μην χάσω κανένα τασκ»). A P1 or P2 reply currently records `hostaway_answered_at` and stops the escalation, and the task stays on the list.
+
+**Next step, when P3 has been trusted for a while**: add `"P2"` to that set. That is the entire change — both reply paths read it, and `test_adding_p2_to_the_set_is_the_only_change_needed` asserts it. P1 is not a candidate: replying to "I can't find the keys" is an answer, not a fix (design §3.2).
+
 **Write the answer down either way.** An unrecorded "we checked once" is how this file grew its last four gaps.
 
 ## VERIFIED against the deployed endpoint (2026-08-11)
