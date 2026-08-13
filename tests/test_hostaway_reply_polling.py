@@ -149,6 +149,28 @@ def test_a_human_reply_completes_a_p3_task(monkeypatch):
     assert result["tasks_completed"] == 1
 
 
+def test_the_poller_names_itself_as_the_source(monkeypatch):
+    """
+    So "it closed by itself" is answerable from the row. This was the FIRST
+    thing that had to be ruled out when a task closed unexplained, and it
+    took reasoning about which dict keys are written together to do it.
+    """
+    calls, _, _ = _run(monkeypatch, [_task(priority="P3")])
+
+    _, updates = calls["updates"][0]
+    assert updates["completed_source"] == "hostaway_reply"
+    assert updates["completed_at"] is not None
+
+
+def test_a_task_left_open_is_not_stamped_as_completed(monkeypatch):
+    """A P1 records the reply, but it was not completed and must not say so."""
+    calls, _, _ = _run(monkeypatch, [_task(priority="P1")])
+
+    _, updates = calls["updates"][0]
+    assert "completed_source" not in updates
+    assert "completed_at" not in updates
+
+
 def test_a_human_reply_does_not_complete_a_p1_task(monkeypatch):
     """Replying is not fixing. Stop nagging, stay on the list."""
     calls, result, _ = _run(monkeypatch, [_task(priority="P1")])

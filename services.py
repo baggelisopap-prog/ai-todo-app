@@ -48,6 +48,21 @@ HOSTAWAY_ESCALATION_INTERVALS = {
 # the escalation nagging — it just stays on the list for a human to close.
 HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES = {"P3"}
 
+
+def hostaway_completion_fields() -> dict:
+    """
+    The three fields that together mean "a guest reply closed this task".
+
+    One function, because two paths can close a task this way — the scheduler's
+    reply check and the webhook's outgoing handler — and "what closed this?"
+    must never have two spellings to grep for.
+    """
+    return {
+        "is_completed": True,
+        "completed_at": datetime.now(ZoneInfo("Europe/Athens")).isoformat(),
+        "completed_source": "hostaway_reply",
+    }
+
 # Ceiling on how many conversations the reply check pulls from Hostaway in a
 # single scheduler tick. One HTTP call each, run sequentially on a cron that
 # fires every ~2 minutes, so an unbounded loop is what turns a busy week into
@@ -303,12 +318,25 @@ class TaskService:
         """
         return self.repository.get_all_tasks(user_id)
 
-    def update_task(self, user_id: str, record_id: str, updates: dict) -> TaskRecord:
+    def update_task(
+        self, user_id: str, record_id: str, updates: dict, completed_source: str = "ui"
+    ) -> TaskRecord:
         """
         Updates an existing task in the database, scoped to user_id.
         There is no separate "mark complete"/"un-complete" endpoint — both
         go through this same generic PATCH path with is_completed in
-        updates, alongside any other field change. If this update changes
+        updates, alongside any other field change.
+
+        A completion also records WHO did it. `completed_source` defaults to
+        "ui" because this generic path IS the UI's; the agent's confirm-action
+        passes "agent", and the Hostaway reply poller writes "hostaway_reply"
+        through its own repository call. On 2026-08-13 a task completed itself
+        six seconds after being created, and neither the row, nor the
+        application log, nor agent_runs could say what had done it — the
+        investigation could only get as far as "a write shaped like the UI's",
+        which is a guess. This column is the answer to that question.
+
+        If this update changes
         is_completed AND the task has a linked Google Calendar event, the
         event's title gets a "✓ " prefix added (complete) or removed
         (un-complete) — completion no longer DELETES the event (revised
@@ -316,6 +344,21 @@ class TaskService:
         either way. Never blocks the actual completion/un-completion if
         the calendar update fails.
         """
+        if "is_completed" in updates:
+            # A new dict, never the caller's: this method is handed request
+            # bodies and agent payloads that the caller may still be using.
+            stamp = (
+                {
+                    "completed_at": datetime.now(ZoneInfo("Europe/Athens")).isoformat(),
+                    "completed_source": completed_source,
+                }
+                if updates["is_completed"]
+                # Re-opening clears it. A task that is open again must not keep
+                # claiming it was closed, and by whom.
+                else {"completed_at": None, "completed_source": None}
+            )
+            updates = {**updates, **stamp}
+
         updated_task = self.repository.update_task(user_id, record_id, updates)
 
         if "is_completed" in updates:
@@ -589,7 +632,7 @@ class TaskService:
             for task, reply_date in answered:
                 updates = {"hostaway_answered_at": reply_date}
                 if not ambiguous and task.priority in HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES:
-                    updates["is_completed"] = True
+                    updates.update(hostaway_completion_fields())
 
                 try:
                     repository.update_hostaway_thread_fields(user_id, task.record_id, updates)

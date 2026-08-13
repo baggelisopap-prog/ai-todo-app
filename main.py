@@ -804,7 +804,9 @@ def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(g
             if not request.record_id:
                 raise HTTPException(status_code=422, detail="record_id is required for complete_task")
             _reject_if_pending_approval(user_id, request.record_id)
-            updated = service.update_task(user_id, request.record_id, {"is_completed": True})
+            updated = service.update_task(
+                user_id, request.record_id, {"is_completed": True}, completed_source="agent"
+            )
             return ConfirmActionResponse(status="done", message=f"Completed: {updated.task_name}", task=updated)
 
         elif request.type == "update_task":
@@ -961,7 +963,7 @@ def _handle_outgoing_hostaway_message(user_id: str, data: dict) -> dict:
     # so the two paths can never disagree about what a reply closes.
     updates = {"hostaway_answered_at": answered_at}
     if task.priority in services.HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES:
-        updates["is_completed"] = True
+        updates.update(services.hostaway_completion_fields())
 
     repository.update_hostaway_thread_fields(user_id, task.record_id, updates)
     logging.info(

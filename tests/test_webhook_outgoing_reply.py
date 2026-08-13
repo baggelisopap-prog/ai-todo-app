@@ -66,6 +66,18 @@ def test_a_human_reply_does_NOT_complete_a_p1_task(monkeypatch):
     assert updates["hostaway_answered_at"] is not None
 
 
+def test_the_webhook_path_names_the_same_source_as_the_poller(monkeypatch):
+    """Two paths, one answer to 'what closed this?' — never two spellings."""
+    calls = _wire(monkeypatch, [_task(priority="P3")])
+    main._handle_outgoing_hostaway_message("user-1", {
+        "isIncoming": 0, "userId": 990952, "conversationId": 47342748,
+        "date": "2026-08-12 07:51:05",
+    })
+    _, updates = calls["updates"][0]
+    assert updates["completed_source"] == "hostaway_reply"
+    assert updates["completed_at"] is not None
+
+
 def test_the_reply_is_recorded_with_hostaways_date(monkeypatch):
     """
     One column, one format. The scheduler's reply check parses this field to
