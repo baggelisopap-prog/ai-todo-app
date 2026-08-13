@@ -243,10 +243,27 @@ With a faked Hostaway API:
   Hostaway login; a real invite flow (the owner connects, colleagues join) is
   the answer if this ever grows.
 
-## §9 OPEN — task distribution on a shared account
+## §9 DECIDED — task distribution: a copy each
 
-The one decision this spec does not make. A guest writes to account 147809; three
-colleagues have connected it. Who gets a task?
+**Option A, chosen by the owner 2026-08-13.** A guest message becomes one task
+per connected colleague. A shared team inbox (option C below) is explicitly a
+later project, not a thing to half-build now.
+
+What that means concretely:
+- The message is classified **once** — one Gemini call, N task rows from it.
+- The thread text used for classification belongs to the CONVERSATION, not to a
+  user: every colleague's copy of a conversation holds the same messages, so the
+  first open task found for that conversation supplies the thread and its
+  summary and priority are applied to every copy.
+- Enrichment (listing name, reservation) is fetched **once** per message and
+  reused for every copy, not once per colleague.
+- Anyone replying closes every copy on its own, because each colleague's poller
+  finds the same reply. This needs no new code: `is_human_reply` already accepts
+  any staff `userId` (§1.2).
+- Accepted noise: N pushes per guest message, and N escalation clocks until
+  someone answers.
+
+The options as they were weighed:
 
 **A. A copy each.** One classification (one Gemini call), N task rows, one per
 connected colleague. Anyone replies → every copy closes on its own, because each
@@ -262,5 +279,4 @@ duplicate noise, but a colleague cannot see or take a guest problem.
 membership concept, and changes task ownership and RLS everywhere — a much larger
 piece of work than this whole spec.
 
-The schema in §1 supports A and B without change; C does not fit it. This must be
-answered before the plan is written.
+The schema in §1 supports A and B without change; C does not fit it.
