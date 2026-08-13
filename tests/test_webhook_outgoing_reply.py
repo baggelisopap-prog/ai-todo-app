@@ -1,4 +1,5 @@
 """An outgoing message closes a task only when a human wrote it."""
+import hostaway_threading as ht
 import main
 from models import TaskRecord
 
@@ -63,6 +64,22 @@ def test_a_human_reply_does_NOT_complete_a_p1_task(monkeypatch):
     _, updates = calls["updates"][0]
     assert "is_completed" not in updates
     assert updates["hostaway_answered_at"] is not None
+
+
+def test_the_reply_is_recorded_with_hostaways_date(monkeypatch):
+    """
+    One column, one format. The scheduler's reply check parses this field to
+    tell "already recorded" from "new reply"; a server clock read is
+    unparseable to it and an answered P1 would look unanswered forever.
+    """
+    calls = _wire(monkeypatch, [_task(priority="P1")])
+    main._handle_outgoing_hostaway_message("user-1", {
+        "isIncoming": 0, "userId": 990952, "conversationId": 47342748,
+        "date": "2026-08-12 07:51:05",
+    })
+    _, updates = calls["updates"][0]
+    assert updates["hostaway_answered_at"] == "2026-08-12 07:51:05"
+    assert ht.parse_hostaway_datetime(updates["hostaway_answered_at"]) is not None
 
 
 def test_two_open_tasks_are_left_alone_and_reported(monkeypatch):

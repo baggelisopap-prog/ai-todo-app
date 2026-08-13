@@ -114,6 +114,42 @@ def get_reservation_details(reservation_id: int) -> dict:
         return {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"}
 
 
+def get_conversation_messages(conversation_id) -> list[dict]:
+    """
+    Every message in one Hostaway conversation, newest first.
+
+    This is how the app learns that a human replied to a guest. The webhook
+    cannot tell us: it is subscribed to `message.received`, which is the only
+    message event Hostaway's unified webhooks offer — the account's three
+    other registered webhooks (Make, Zapier, GuestArrive) each enumerate the
+    same five events and none of them covers a sent message. Verified
+    2026-08-12 against the API, and against `tasks`, where
+    hostaway_answered_at was null on every row ever written while real human
+    replies sat in this endpoint.
+
+    Field names VERIFIED against a live response (2026-08-12, conversations
+    49166048 and 44234683): `date` ("2026-08-12 07:51:05", naive and
+    listing-local, exactly what parse_hostaway_datetime reads), `isIncoming`,
+    `userId`, `communicationId`, `communicationEvent`.
+
+    Returns [] on any failure rather than raising. That is the safe
+    direction: no reply seen means the task stays open and is closed by
+    hand, and the scheduler tick that calls this must not die on it.
+    """
+    try:
+        token = _get_hostaway_access_token()
+        response = requests.get(
+            f"https://api.hostaway.com/v1/conversations/{conversation_id}/messages",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        return response.json().get("result") or []
+    except Exception as e:
+        logging.error(f"[hostaway] Failed to fetch messages for conversation {conversation_id}: {e}")
+        return []
+
+
 class _MessageClassification(BaseModel):
     summary: str
     priority: Literal["P1", "P2", "P3"]

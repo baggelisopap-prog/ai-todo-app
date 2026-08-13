@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from typing import Optional, Literal
 from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings
 from services import TaskService
+import services  # for HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES — one policy, both reply paths
 from repository import save_push_subscription, get_app_settings, update_app_settings
 from auth import get_current_user_id
 import agent_engine
@@ -948,20 +949,25 @@ def _handle_outgoing_hostaway_message(user_id: str, data: dict) -> dict:
         return {"status": "ambiguous", "open_tasks": len(open_tasks)}
 
     task = open_tasks[0]
-    now_str = datetime.now(ZoneInfo("Europe/Athens")).isoformat()
+    # HOSTAWAY's date for the reply, not a clock read here — the same value
+    # the scheduler's reply check writes, so one column never holds two
+    # formats. It matters: find_unanswered_human_reply parses this field to
+    # decide "have I already recorded this reply?", and an Athens ISO string
+    # is unparseable to it, which would make an answered P1 look unanswered
+    # on every tick. Falls back to now() only if Hostaway omits the date.
+    answered_at = data.get("date") or datetime.now(ZoneInfo("Europe/Athens")).isoformat()
 
-    if task.priority == "P1":
-        # "I'm coming in 20 minutes" is an answer, not a fixed problem.
-        # Stop nagging; leave it on the list until a human closes it.
-        updates = {"hostaway_answered_at": now_str}
-    else:
-        updates = {"is_completed": True, "hostaway_answered_at": now_str}
+    # Same policy the scheduler's reply check applies, read from the same set
+    # so the two paths can never disagree about what a reply closes.
+    updates = {"hostaway_answered_at": answered_at}
+    if task.priority in services.HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES:
+        updates["is_completed"] = True
 
     repository.update_hostaway_thread_fields(user_id, task.record_id, updates)
     logging.info(
         f"[hostaway webhook] Human reply on conversation {conversation_id}: "
         f"task {task.record_id} ({task.priority}) -> "
-        f"{'answered, left open' if task.priority == 'P1' else 'completed'}"
+        f"{'completed' if updates.get('is_completed') else 'answered, left open'}"
     )
     return {"status": "ok", "task": task.record_id}
 
@@ -981,10 +987,25 @@ async def hostaway_webhook(request: Request):
         logging.error(f"[hostaway webhook] Failed to parse JSON: {e}")
         return {"status": "error", "note": "invalid JSON"}
 
-    if payload.get("event") != "message.received":
-        return {"status": "ignored", "reason": "not a message event"}
+    data = payload.get("data") or {}
+    event = payload.get("event")
 
-    data = payload.get("data", {})
+    # Logged for EVERY delivery, before any filtering, because the branch
+    # right below returns silently: "nothing in the log" could not tell
+    # "Hostaway never POSTed" apart from "Hostaway POSTed an event name we
+    # don't match". Gap A — does this webhook fire for outgoing messages at
+    # all? — was being answered out of exactly that silence, and the answer
+    # it gives is not trustworthy while the ignored branch is mute.
+    logging.info(
+        f"[hostaway webhook] Delivery: event={event!r} "
+        f"isIncoming={data.get('isIncoming')!r} "
+        f"conversation={data.get('conversationId')} "
+        f"userId={data.get('userId')} "
+        f"payload_keys={sorted(payload.keys())}"
+    )
+
+    if event != "message.received":
+        return {"status": "ignored", "reason": "not a message event"}
 
     if data.get("isIncoming") != 1:
         # Silently dropped until 2026-08-10. An outgoing message is how we

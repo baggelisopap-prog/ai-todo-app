@@ -11,6 +11,8 @@ from models import SingleTask, TaskList, TaskRecord
 from ai_engine import extract_tasks, extract_tasks_from_audio, extract_tasks_from_image
 from repository import AirtableTaskRepository
 import google_calendar
+import hostaway_integration
+import hostaway_threading
 import repository
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,29 @@ HOSTAWAY_ESCALATION_INTERVALS = {
     "P2": timedelta(hours=1),
     "P3": timedelta(hours=2),
 }
+
+# Which priorities a human reply is allowed to COMPLETE outright.
+#
+# Deliberately the least urgent one only, as a staged rollout: the owner
+# wants to watch auto-completion work before trusting it with anything that
+# matters («για αρχή, μην χάσω κανένα τασκ», 2026-08-13). P3 is "where's a
+# good taverna" and "we're out of toilet paper" — a wrong close costs
+# nothing. Add "P2" here when it has been seen working; that is the whole
+# change, both callers read this set.
+#
+# P1 is not a candidate and should not be added: replying to "I can't find
+# the keys" with "I'm coming in 20 minutes" is an answer, not a fix (design
+# §3.2). Every priority outside this set still records the reply and stops
+# the escalation nagging — it just stays on the list for a human to close.
+HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES = {"P3"}
+
+# Ceiling on how many conversations the reply check pulls from Hostaway in a
+# single scheduler tick. One HTTP call each, run sequentially on a cron that
+# fires every ~2 minutes, so an unbounded loop is what turns a busy week into
+# a scheduler that never finishes its pass. Freshest conversation first, since
+# that is where a reply is most likely; if the cap ever bites it says so in
+# the log rather than skipping quietly. Today the real number is 1.
+HOSTAWAY_REPLY_POLL_LIMIT = 20
 
 # pywebpush's webpush() only accepts a Vapid instance or a private-key file
 # path for vapid_private_key — passing the raw multi-line PEM string directly
@@ -457,6 +482,11 @@ class TaskService:
 
             daily_summary_sent = self._maybe_send_daily_summary(user_id, now, settings, user_tasks)
 
+            # Replies BEFORE escalations, and off the same user_tasks list:
+            # a task answered two minutes ago must not be nagged about in the
+            # very tick that discovers the answer.
+            hostaway_replies = self._check_hostaway_replies(user_id, user_tasks)
+
             hostaway_result = self._check_hostaway_escalations(user_id, now, user_tasks)
 
             calendar_result = sync_google_calendar_for_user(user_id)
@@ -469,10 +499,128 @@ class TaskService:
                 "daily_summary_sent": daily_summary_sent,
                 "hostaway_checked": hostaway_result["checked"],
                 "hostaway_escalations_sent": hostaway_result["escalations_sent"],
+                "hostaway_conversations_polled": hostaway_replies["conversations_polled"],
+                "hostaway_replies_found": hostaway_replies["replies_found"],
+                "hostaway_tasks_completed_by_reply": hostaway_replies["tasks_completed"],
                 "calendar_sync": calendar_result,
             })
 
         return {"status": "ok", "users_processed": len(all_user_ids), "results": results}
+
+    def _check_hostaway_replies(self, user_id: str, user_tasks: list[TaskRecord]) -> dict:
+        """
+        Asks Hostaway what the webhook will never tell us: whether a human
+        replied to the guest.
+
+        The webhook handles incoming messages and nothing else, because
+        `message.received` is the only message event Hostaway's unified
+        webhooks offer (see hostaway_integration.get_conversation_messages
+        for how that was established). So the TRIGGER moved here, to the
+        existing ~2-minute cron; every DECISION is the same pure function
+        the webhook path used, and `_handle_outgoing_hostaway_message` still
+        answers a delivery if one ever arrives.
+
+        One HTTP call per conversation, not per task: two open tasks sharing
+        a conversation are answered out of one response.
+        """
+        candidates = [
+            task
+            for task in repository.get_active_hostaway_tasks(user_id, tasks=user_tasks)
+            if task.hostaway_conversation_id
+        ]
+        if not candidates:
+            return {"conversations_polled": 0, "replies_found": 0, "tasks_completed": 0}
+
+        by_conversation: dict[str, list[TaskRecord]] = {}
+        for task in candidates:
+            by_conversation.setdefault(task.hostaway_conversation_id, []).append(task)
+
+        ordered = sorted(
+            by_conversation.items(),
+            key=lambda item: max((t.hostaway_last_message_at or "") for t in item[1]),
+            reverse=True,
+        )
+        if len(ordered) > HOSTAWAY_REPLY_POLL_LIMIT:
+            logger.warning(
+                f"[hostaway replies] {len(ordered)} conversations open for user {user_id}, "
+                f"polling the {HOSTAWAY_REPLY_POLL_LIMIT} freshest this tick"
+            )
+        ordered = ordered[:HOSTAWAY_REPLY_POLL_LIMIT]
+
+        polled = 0
+        replies_found = 0
+        tasks_completed = 0
+
+        for conversation_id, conversation_tasks in ordered:
+            messages = hostaway_integration.get_conversation_messages(conversation_id)
+            polled += 1
+            if not messages:
+                continue
+
+            answered = []
+            for task in conversation_tasks:
+                reply_date = hostaway_threading.find_unanswered_human_reply(
+                    messages, task.hostaway_last_message_at, task.hostaway_answered_at
+                )
+                if reply_date:
+                    answered.append((task, reply_date))
+
+            if not answered:
+                continue
+            replies_found += len(answered)
+
+            # Which of two open tasks did one reply answer? A judgement, so
+            # it is not made (design §3.2). The webhook could leave both
+            # untouched and just say so; a check that runs every two minutes
+            # cannot — "touch nothing" would re-send that notice forever. So
+            # the reply is recorded on both (the nagging stops, the notice
+            # fires once) and NEITHER is completed. The user decides.
+            ambiguous = len(answered) > 1
+            if ambiguous:
+                try:
+                    self.send_push_to_user(
+                        user_id,
+                        title="Απάντησες στον πελάτη",
+                        body=f"{len(answered)} tasks αυτής της συζήτησης είναι ακόμα ανοιχτά.",
+                    )
+                except Exception as e:
+                    logger.error(f"[hostaway replies] Failed to send ambiguity notice: {e}")
+
+            for task, reply_date in answered:
+                updates = {"hostaway_answered_at": reply_date}
+                if not ambiguous and task.priority in HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES:
+                    updates["is_completed"] = True
+
+                try:
+                    repository.update_hostaway_thread_fields(user_id, task.record_id, updates)
+                except Exception as e:
+                    logger.error(f"[hostaway replies] Failed to update task {task.record_id}: {e}")
+                    continue
+
+                # Keep the in-memory record in step with the row just
+                # written: _check_hostaway_escalations runs next in this same
+                # tick, off this same list, and would otherwise nag about a
+                # task we just learned was answered.
+                task.hostaway_answered_at = reply_date
+                if updates.get("is_completed"):
+                    task.is_completed = True
+                    tasks_completed += 1
+
+                outcome = (
+                    "completed" if updates.get("is_completed")
+                    else "left open (two tasks, one reply)" if ambiguous
+                    else f"left open ({task.priority} does not auto-complete)"
+                )
+                logger.info(
+                    f"[hostaway replies] Conversation {conversation_id}: reply at "
+                    f"{reply_date} -> task {task.record_id} ({task.priority}) {outcome}"
+                )
+
+        return {
+            "conversations_polled": polled,
+            "replies_found": replies_found,
+            "tasks_completed": tasks_completed,
+        }
 
     def _check_hostaway_escalations(self, user_id: str, now: datetime, user_tasks: list[TaskRecord]) -> dict:
         """

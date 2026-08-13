@@ -8,13 +8,21 @@ Hostaway message threading, the conversation deep link, and auto-complete on a h
 
 The requirement was stated as **«σε όλα αυτά θέλω zero fail, όχι 9/10»**, so a checklist that is not actually run is worth very little here.
 
-## Gap A — does the webhook even fire for outgoing messages? (blocks half the feature)
-**The one unverified assumption in the whole design.** `_handle_outgoing_hostaway_message` — the P2/P3 completion and the P1 silencing — only runs if Hostaway POSTs outgoing messages to `/webhooks/hostaway`. The account's webhook (id 34986) is subscribed to `message.received` and nothing else; no `message.sent` appears in the event vocabulary of any of the four registered webhooks, and the API exposes no catalogue of available events, so this cannot be settled from the API.
+## Gap A — CLOSED (2026-08-12). Hostaway does not deliver outgoing messages.
+Answered by the owner hitting it live: replied to a guest, nothing happened. Full evidence in PROJECT_STATUS.md. Short version — `message.received` is the only message event Hostaway's unified webhooks offer, `hostaway_answered_at` was null on all 15 Hostaway tasks ever written (so the outgoing path had never run once), and the replies were sitting in the API the whole time.
 
-**To verify**: reply to any guest through the Hostaway inbox, then search Render's logs for `[hostaway webhook] Outgoing message:`. That line is new — the branch used to return silently, which is exactly why nobody could ever answer this question.
-- **Line appears** → the feature works as designed. Record it in PROJECT_STATUS.md and delete this gap.
-- **No line** → move the trigger, not the logic: on each scheduler tick, for every open Hostaway task with a `hostaway_conversation_id`, fetch `GET /v1/conversations/{id}/messages` and apply `hostaway_threading.is_human_reply` to the newest one. The decision functions are unchanged.
+**The trigger moved, the decisions did not.** `TaskService._check_hostaway_replies` runs on the existing ~2-minute cron: one `GET /v1/conversations/{id}/messages` per conversation that has an open task, then `hostaway_threading.find_unanswered_human_reply` — `is_human_reply` plus two rules polling needs and a webhook did not:
+1. the reply must be **newer than the guest message the task is about** (conversation 44234683 had a human reply from the previous day that would have closed a brand-new task);
+2. it must not be one **already recorded**, or an answered P1 — which stays open by design — gets rewritten every two minutes forever.
 
+`hostaway_answered_at` now stores **Hostaway's date for the reply**, not `now()`, so both comparisons are one clock against itself. Safe to change: the column was null on every row that had ever existed, and its only two readers (`services.py`'s escalation skip, `TaskDetailSheet.jsx`) test it for truthiness.
+
+**A second bug this exposed, now fixed**: the webhook's ignored-event branch returned with NO log line, so `[hostaway webhook] Outgoing message:` — the line this gap was supposed to be settled by — could never have distinguished "Hostaway never called" from "Hostaway called with an event name we don't match". Every delivery now logs its event before any filtering.
+
+## Gap A2 — the polling has never been seen running deployed
+16 unit tests pass on real captured payloads, and a dry run against the live API and real rows (writes intercepted) found the real 07:51 reply and would have completed that task. **That is not the same as having run on Render.**
+
+**To verify**: reply to a guest, wait ~2 minutes, then check (a) `[hostaway replies] Conversation …: reply at …` in Render's log, and (b) the row — `hostaway_answered_at` set, and `is_completed` true if it was a P2/P3. Watch the escalation does NOT also fire in that tick.
 **Write the answer down either way.** An unrecorded "we checked once" is how this file grew its last four gaps.
 
 ## VERIFIED against the deployed endpoint (2026-08-11)

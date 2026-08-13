@@ -21,9 +21,17 @@ logger = logging.getLogger(__name__)
 # 90 seconds sits in the empty band. Spec §1.3.
 THREAD_WINDOW_SECONDS = 90
 
-# Hostaway sends "2026-08-10 14:00:00" — no timezone, listing-local. Both
-# sides of every comparison come from the same conversation, so naive
-# datetimes are correct here and converting would invent precision.
+# Hostaway sends "2026-08-10 14:00:00" — no offset, and the clock is UTC.
+# MEASURED, 2026-08-13, not inferred from listingTimeZoneName (which says
+# Europe/Athens and misled this comment until now): a guest message dated
+# 15:10:18 produced a task row whose UTC created_at is 15:10:29 and whose
+# Athens hostaway_last_notified_at is 18:10:28 — the same instant, eleven
+# seconds later.
+#
+# Naive datetimes are still correct here, because every comparison in this
+# module is a Hostaway date against another Hostaway date. But NEVER compare
+# one of these to datetime.now(Europe/Athens): in summer that is three hours
+# of error, silently in the direction of "this reply is older than it is".
 _HOSTAWAY_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 _PRIORITY_RANK = {"P1": 3, "P2": 2, "P3": 1}
@@ -86,6 +94,69 @@ def is_more_urgent(new_priority: Optional[str], old_priority: Optional[str]) -> 
     The condition says what it means instead.
     """
     return _PRIORITY_RANK.get(new_priority or "", 0) > _PRIORITY_RANK.get(old_priority or "", 0)
+
+
+def find_unanswered_human_reply(
+    messages: list[dict],
+    task_last_message_at: Optional[str],
+    task_answered_at: Optional[str] = None,
+) -> Optional[str]:
+    """
+    The Hostaway date of the human reply this task has not learned about
+    yet, or None. Drives the scheduler's reply check the way is_human_reply
+    drove the webhook's — same rule, a different trigger.
+
+    Three conditions, each one measured against a real conversation:
+
+    1. **A human wrote it.** is_human_reply, unchanged: conversation
+       49166048 carries the `messageReceived` auto-reply 16 seconds after
+       every guest message, and it must never count as an answer.
+
+    2. **It is NEWER than the guest message this task is about.**
+       Conversation 44234683 is why this is not optional: a guest wrote at
+       06:23 today, and the newest human reply in that thread is 17:21
+       YESTERDAY — an answer to the PREVIOUS question. "Does this
+       conversation contain a human reply?" would have closed a brand-new
+       task on sight.
+
+    3. **It is not one already recorded.** A P1 stays open after being
+       answered, so without this the scheduler would rewrite the same task
+       every two minutes, forever.
+
+    Every comparison is a Hostaway date against a Hostaway date — one clock,
+    the same rule should_append_to_thread follows, and the reason
+    hostaway_answered_at stores Hostaway's date and not now().
+
+    The newest qualifying reply is picked by comparison, not by trusting the
+    order the API happens to return.
+    """
+    task_last = parse_hostaway_datetime(task_last_message_at)
+    if task_last is None:
+        # Nothing to measure "after" against, so an old leftover reply is
+        # indistinguishable from an answer. Do nothing: the task stays open
+        # and the user closes it by hand. Never the other error.
+        return None
+
+    already_recorded = parse_hostaway_datetime(task_answered_at)
+
+    newest: Optional[datetime] = None
+    newest_raw: Optional[str] = None
+
+    for message in messages:
+        if not is_human_reply(message):
+            continue
+
+        sent_at = parse_hostaway_datetime(message.get("date"))
+        if sent_at is None or sent_at <= task_last:
+            continue
+        if already_recorded is not None and sent_at <= already_recorded:
+            continue
+
+        if newest is None or sent_at > newest:
+            newest = sent_at
+            newest_raw = message.get("date")
+
+    return newest_raw
 
 
 def is_human_reply(message: dict) -> bool:
