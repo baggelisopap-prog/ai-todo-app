@@ -50,7 +50,7 @@ shape for a per-user integration in this codebase.
 |---|---|---|
 | `id` | UUID PK | |
 | `user_id` | UUID **UNIQUE**, FK → `auth.users` ON DELETE CASCADE | one connection per user |
-| `account_id` | TEXT **UNIQUE** NOT NULL | Hostaway's `accountId`, which is also the `client_id` |
+| `account_id` | TEXT NOT NULL, **indexed, NOT unique** | Hostaway's `accountId`, which is also the `client_id` — §1.2 |
 | `client_secret_encrypted` | TEXT NOT NULL | §2 — never stored or returned in the clear |
 | `webhook_id` | INTEGER NULL | the unified webhook we registered, so disconnect knows what to remove |
 | `tasks_enabled` | BOOLEAN NOT NULL DEFAULT true | switch 1 |
@@ -59,17 +59,38 @@ shape for a per-user integration in this codebase.
 
 RLS enabled, `user_id = auth.uid()`, as on every table here.
 
-**`account_id UNIQUE` is the hinge of the design.** An inbound webhook carries
+**`account_id` is the hinge of the design.** An inbound webhook carries
 `accountId` and nothing else identifying; one indexed lookup on that column
-answers all three questions the request needs — whose account this is, which
+answers the questions the request needs — whose account this is, which
 credentials to call Hostaway back with, and whether the user still wants any of
-it. `UNIQUE` also states the rule the app depends on: one Hostaway account
-cannot feed two app users.
+it.
 
 **Deliberately NOT included**: any `last_error` / `last_ok_at` health column. A
 connection that has quietly stopped working is a real risk in this project's
 history, but it is a feature with its own UI and its own spec, and guessing at
 it now would ship a column nobody reads. Noted in BACKLOG instead.
+
+### §1.2 One Hostaway account, many colleagues
+**Measured 2026-08-13, and it corrects an earlier draft of this spec.** The
+owner's account (147809) has **fifteen** staff users on it, and across 40 recent
+conversations three different people replied to guests: 990952 (the owner),
+1074746 and 990953. This is not the exception, it is how the business runs.
+
+So `account_id` must NOT be unique. Colleagues each get their own app profile
+and each connect the *same* Hostaway account; a unique constraint there would
+turn "my colleague can't log in to the integration" into a schema error nobody
+would immediately understand.
+
+**What this does NOT affect: auto-completion already handles it correctly.**
+`is_human_reply` never asks *who* replied, only whether a person did — it takes
+any non-null `userId` and rejects the automations. That was chosen to exclude
+`messageReceived` auto-replies and GuestArrive, and it happens to be exactly
+right here. Confirmed live on 2026-08-13: the task that closed itself was
+closed by **Κωνσταντίνος' reply (1074746), not the owner's**. A colleague
+answering from their own profile closes the task the same way.
+
+What is still open is task DISTRIBUTION — when a guest writes to a shared
+account, which connected colleagues get a task. See §9.
 
 ### §1.1 Where the switches live
 On the connection row, not in `app_settings`.
@@ -206,11 +227,40 @@ With a faked Hostaway API:
 ## §8 Accepted consequences
 
 - **Gemini classification is billed to the owner's key** for every connected
-  user's guest messages. Negligible at two users, a business decision at fifty.
-  Not solved here.
+  user's guest messages. **Accepted by the owner, 2026-08-13**: the first users
+  are his own colleagues working his own listings, so the cost is his either
+  way, and by the time outsiders connect the usage will be billed on. Not a
+  blocker, and no metering is built here — `token_usage_log` already records
+  per-user usage if it is ever needed to produce an invoice.
 - **Polling scales with connected users.** The existing per-user ceiling
   (`HOSTAWAY_REPLY_POLL_LIMIT = 20` conversations) now applies per user, so the
   worst case per tick is users × 20 HTTP calls. Fine at two; worth a queue long
   before it is a problem.
-- **One Hostaway account cannot be shared by two app users.** Enforced by
-  `account_id UNIQUE`. A team wanting shared inboxes needs a different design.
+- **A shared Hostaway account means the API key is shared too.** Every colleague
+  pastes the same account id and secret. There is no per-colleague credential
+  and no way to revoke one person without revoking all — Hostaway issues keys
+  per account, not per user. Acceptable for a small team who already share the
+  Hostaway login; a real invite flow (the owner connects, colleagues join) is
+  the answer if this ever grows.
+
+## §9 OPEN — task distribution on a shared account
+
+The one decision this spec does not make. A guest writes to account 147809; three
+colleagues have connected it. Who gets a task?
+
+**A. A copy each.** One classification (one Gemini call), N task rows, one per
+connected colleague. Anyone replies → every copy closes on its own, because each
+user's poller finds the same reply. Everyone sees the problem, whoever handles it
+clears it for all. Costs: N pushes per message, and N escalation clocks nagging
+until someone answers.
+
+**B. One task, on the connecting user.** Effectively today's behaviour extended:
+Hostaway tasks land on one person, colleagues use the app for their own work. No
+duplicate noise, but a colleague cannot see or take a guest problem.
+
+**C. A genuinely shared task.** One row, visible to a team. Needs a workspace or
+membership concept, and changes task ownership and RLS everywhere — a much larger
+piece of work than this whole spec.
+
+The schema in §1 supports A and B without change; C does not fit it. This must be
+answered before the plan is written.
