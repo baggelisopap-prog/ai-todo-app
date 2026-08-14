@@ -492,61 +492,76 @@ class TaskService:
         results = []
 
         for user_id in all_user_ids:
-            settings = repository.get_app_settings(user_id)
-            if not settings.notifications_enabled:
-                results.append({"user_id": user_id, "status": "skipped", "reason": "notifications disabled"})
-                continue
+            # One user's failure must not cost every other user their tick.
+            # This loop had no guard at all, which was survivable only while
+            # nothing inside it raised. Per-user Hostaway credentials put a
+            # raise in here — a secret that cannot be decrypted (missing or
+            # rotated HOSTAWAY_ENCRYPTION_KEY) took down reminders, the daily
+            # summary, escalations and calendar sync for everyone processed
+            # after that user, every two minutes, deterministically. The tick
+            # is a batch over strangers; it fails per user or not at all.
+            try:
+                settings = repository.get_app_settings(user_id)
+                if not settings.notifications_enabled:
+                    results.append({"user_id": user_id, "status": "skipped", "reason": "notifications disabled"})
+                    continue
 
-            require_bell = not settings.send_all_enabled
+                require_bell = not settings.send_all_enabled
 
-            # Fetched once per user per tick, then filtered multiple ways in
-            # Python — mirrors the original single-global-fetch pattern,
-            # just scoped per user now instead of across everyone at once.
-            user_tasks = self.repository.get_all_tasks(user_id)
+                # Fetched once per user per tick, then filtered multiple ways in
+                # Python — mirrors the original single-global-fetch pattern,
+                # just scoped per user now instead of across everyone at once.
+                user_tasks = self.repository.get_all_tasks(user_id)
 
-            window_start = now
-            window_end = now + timedelta(minutes=REMINDER_OFFSET_MINUTES)
+                window_start = now
+                window_end = now + timedelta(minutes=REMINDER_OFFSET_MINUTES)
 
-            due_tasks = repository.get_tasks_due_for_notification(
-                user_id, window_start, window_end, tasks=user_tasks, require_bell_enabled=require_bell
-            )
-
-            sent = 0
-            for task in due_tasks:
-                result = self.send_push_to_user(
-                    user_id,
-                    title=task.task_name,
-                    body=f"Σε 15 λεπτά: {task.task_name}" if not task.description else task.description,
-                    view="today",
+                due_tasks = repository.get_tasks_due_for_notification(
+                    user_id, window_start, window_end, tasks=user_tasks, require_bell_enabled=require_bell
                 )
-                if result.get("sent", 0) > 0:
-                    repository.mark_notification_sent(user_id, task.record_id)
-                    sent += 1
 
-            daily_summary_sent = self._maybe_send_daily_summary(user_id, now, settings, user_tasks)
+                sent = 0
+                for task in due_tasks:
+                    result = self.send_push_to_user(
+                        user_id,
+                        title=task.task_name,
+                        body=f"Σε 15 λεπτά: {task.task_name}" if not task.description else task.description,
+                        view="today",
+                    )
+                    if result.get("sent", 0) > 0:
+                        repository.mark_notification_sent(user_id, task.record_id)
+                        sent += 1
 
-            # Replies BEFORE escalations, and off the same user_tasks list:
-            # a task answered two minutes ago must not be nagged about in the
-            # very tick that discovers the answer.
-            hostaway_replies = self._check_hostaway_replies(user_id, user_tasks)
+                daily_summary_sent = self._maybe_send_daily_summary(user_id, now, settings, user_tasks)
 
-            hostaway_result = self._check_hostaway_escalations(user_id, now, user_tasks)
+                # Replies BEFORE escalations, and off the same user_tasks list:
+                # a task answered two minutes ago must not be nagged about in the
+                # very tick that discovers the answer.
+                hostaway_replies = self._check_hostaway_replies(user_id, user_tasks)
 
-            calendar_result = sync_google_calendar_for_user(user_id)
+                hostaway_result = self._check_hostaway_escalations(user_id, now, user_tasks)
 
-            results.append({
-                "user_id": user_id,
-                "status": "ok",
-                "checked": len(due_tasks),
-                "sent": sent,
-                "daily_summary_sent": daily_summary_sent,
-                "hostaway_checked": hostaway_result["checked"],
-                "hostaway_escalations_sent": hostaway_result["escalations_sent"],
-                "hostaway_conversations_polled": hostaway_replies["conversations_polled"],
-                "hostaway_replies_found": hostaway_replies["replies_found"],
-                "hostaway_tasks_completed_by_reply": hostaway_replies["tasks_completed"],
-                "calendar_sync": calendar_result,
-            })
+                calendar_result = sync_google_calendar_for_user(user_id)
+
+                results.append({
+                    "user_id": user_id,
+                    "status": "ok",
+                    "checked": len(due_tasks),
+                    "sent": sent,
+                    "daily_summary_sent": daily_summary_sent,
+                    "hostaway_checked": hostaway_result["checked"],
+                    "hostaway_escalations_sent": hostaway_result["escalations_sent"],
+                    "hostaway_conversations_polled": hostaway_replies["conversations_polled"],
+                    "hostaway_replies_found": hostaway_replies["replies_found"],
+                    "hostaway_tasks_completed_by_reply": hostaway_replies["tasks_completed"],
+                    "calendar_sync": calendar_result,
+                })
+            except Exception as e:
+                # Reported, not just swallowed: a tick that quietly skips a
+                # user looks identical to a tick where that user had nothing
+                # to do, which is how this class of bug stays invisible.
+                logger.exception(f"[scheduler] User {user_id} failed this tick: {e}")
+                results.append({"user_id": user_id, "status": "error", "error": str(e)})
 
         return {"status": "ok", "users_processed": len(all_user_ids), "results": results}
 

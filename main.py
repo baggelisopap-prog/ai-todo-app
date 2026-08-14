@@ -1164,8 +1164,14 @@ async def hostaway_webhook(request: Request):
     def _enrichment():
         nonlocal enrichment
         if enrichment is None:
-            credentials = hostaway_integration.credentials_from_connection(recipients[0])
             try:
+                # Inside the try, not above it: decrypting the stored secret
+                # raises when HOSTAWAY_ENCRYPTION_KEY is missing or wrong, and
+                # that used to escape this function, the loop and the handler —
+                # turning every guest message into a 500. Hostaway disables a
+                # webhook that keeps failing, so the misconfiguration would
+                # have cost us the webhook itself.
+                credentials = hostaway_integration.credentials_from_connection(recipients[0])
                 enrichment = (
                     hostaway_integration.get_listing_name(listing_map_id, credentials)
                     if listing_map_id else "Άγνωστο property",

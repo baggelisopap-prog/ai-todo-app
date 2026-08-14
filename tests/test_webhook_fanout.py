@@ -136,3 +136,30 @@ def test_every_colleague_with_the_switch_off_means_no_classification(monkeypatch
     _post(_incoming())
     assert calls["classified"] == []
     assert calls["created"] == []
+
+
+def test_undecryptable_credentials_still_return_200_and_still_create_the_task(monkeypatch):
+    """
+    The handler's contract is "always 200, even on internal errors", because
+    Hostaway disables a webhook that keeps failing — so a missing
+    HOSTAWAY_ENCRYPTION_KEY must not turn every guest message into a 500 and
+    cost us the webhook itself.
+
+    The message body is the part that matters; the guest name and listing are
+    decoration. So the task is still written, with the same fallbacks a failed
+    Hostaway call already uses.
+    """
+    calls = _wire(monkeypatch, [_connection("user-1")])
+
+    def _boom(connection):
+        raise RuntimeError("HOSTAWAY_ENCRYPTION_KEY is not set")
+
+    monkeypatch.setattr(main.hostaway_integration, "credentials_from_connection", _boom)
+
+    result = _post(_incoming(body="δεν βρίσκω τα κλειδιά"))
+
+    assert result["status"] == "ok"
+    assert [user_id for user_id, _ in calls["created"]] == ["user-1"]
+    _, fields = calls["created"][0]
+    assert fields["task_name"] == "Hostaway: Πελάτης - Άγνωστο property"
+    assert "δεν βρίσκω τα κλειδιά" in fields["hostaway_thread"]
