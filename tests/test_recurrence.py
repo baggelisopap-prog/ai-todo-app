@@ -60,3 +60,56 @@ def test_an_empty_weekday_set_generates_nothing():
 
 def test_a_backwards_window_generates_nothing():
     assert _weekly([1, 2, 3, 4, 5], date(2026, 8, 23), date(2026, 8, 17)) == []
+
+def _monthly(month_day, window_start, window_end, starts_on=None, ends_on=None):
+    return recurrence.occurrences_between(
+        freq=recurrence.MONTHLY,
+        weekdays=None,
+        month_day=month_day,
+        window_start=window_start,
+        window_end=window_end,
+        starts_on=starts_on or window_start,
+        ends_on=ends_on,
+    )
+
+
+def test_the_first_of_the_month():
+    got = _monthly(1, date(2026, 8, 15), date(2026, 11, 15))
+    assert got == [date(2026, 9, 1), date(2026, 10, 1), date(2026, 11, 1)]
+
+
+def test_the_thirty_first_falls_back_to_the_last_day_of_a_short_month():
+    """February has no 31st. The month must not be skipped."""
+    got = _monthly(31, date(2027, 1, 1), date(2027, 4, 30))
+    assert got == [
+        date(2027, 1, 31),
+        date(2027, 2, 28),
+        date(2027, 3, 31),
+        date(2027, 4, 30),
+    ]
+
+
+def test_the_fallback_knows_about_leap_years():
+    got = _monthly(31, date(2028, 2, 1), date(2028, 2, 29))
+    assert got == [date(2028, 2, 29)]
+
+
+def test_last_day_of_month_is_its_own_request():
+    got = _monthly(recurrence.LAST_DAY_OF_MONTH, date(2026, 8, 1), date(2026, 10, 31))
+    assert got == [date(2026, 8, 31), date(2026, 9, 30), date(2026, 10, 31)]
+
+
+def test_a_monthly_rule_respects_the_window_edges():
+    got = _monthly(15, date(2026, 8, 16), date(2026, 9, 14))
+    assert got == []
+
+
+def test_a_monthly_rule_with_no_day_generates_nothing():
+    assert _monthly(None, date(2026, 8, 1), date(2026, 12, 31)) == []
+
+
+def test_clamp_month_day_directly():
+    assert recurrence.clamp_month_day(2027, 2, 31) == date(2027, 2, 28)
+    assert recurrence.clamp_month_day(2028, 2, 31) == date(2028, 2, 29)
+    assert recurrence.clamp_month_day(2026, 8, 15) == date(2026, 8, 15)
+    assert recurrence.clamp_month_day(2026, 9, recurrence.LAST_DAY_OF_MONTH) == date(2026, 9, 30)

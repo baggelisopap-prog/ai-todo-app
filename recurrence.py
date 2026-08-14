@@ -1,5 +1,5 @@
-"""
-Pure date logic for recurring tasks. No I/O, no clock reads, no AI — every
+﻿"""
+Pure date logic for recurring tasks. No I/O, no clock reads, no AI β€” every
 function here is arithmetic over values it was handed, which is why "which
 days does this rule produce?" can be tested exhaustively without a database.
 
@@ -49,6 +49,37 @@ def format_date(value: date) -> str:
     return value.strftime(_DATE_FORMAT)
 
 
+
+def clamp_month_day(year: int, month: int, month_day: int) -> date:
+    """
+    The rule's day of the month, inside a month that may not have it.
+
+    "The 31st" in February becomes the 28th (29th in a leap year) rather than
+    skipping the month: a monthly obligation the user asked for must not
+    silently vanish four times a year.
+    """
+    last = calendar.monthrange(year, month)[1]
+    if month_day == LAST_DAY_OF_MONTH:
+        return date(year, month, last)
+    return date(year, month, min(month_day, last))
+
+
+def _monthly_occurrences(month_day: Optional[int], first: date, last: date) -> list[date]:
+    if month_day is None:
+        return []
+
+    out = []
+    year, month = first.year, first.month
+    while (year, month) <= (last.year, last.month):
+        candidate = clamp_month_day(year, month, month_day)
+        if first <= candidate <= last:
+            out.append(candidate)
+        month += 1
+        if month > 12:
+            year, month = year + 1, 1
+    return out
+
+
 def occurrences_between(
     *,
     freq: str,
@@ -75,6 +106,10 @@ def occurrences_between(
     if freq == WEEKLY:
         return _weekly_occurrences(weekdays, first, last)
 
+    if freq == MONTHLY:
+        return _monthly_occurrences(month_day, first, last)
+
+    logger.warning(f"[recurrence] Unknown freq {freq!r}; generating nothing")
     return []
 
 
@@ -90,3 +125,4 @@ def _weekly_occurrences(weekdays: Optional[list[int]], first: date, last: date) 
             out.append(cursor)
         cursor += timedelta(days=1)
     return out
+
