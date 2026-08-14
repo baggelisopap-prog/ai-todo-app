@@ -91,8 +91,26 @@ Calendar recurrence import/export is ever wanted; it is not the right start.
 
 ### Creating one
 
-A **"Repeat"** switch in the new-task sheet. Opened, it gives the alarm-clock
-shape:
+**In its own "Recurrences" screen inside Settings**, reached by a `SettingsRow`
+exactly as Hostaway, Notifications and Calendar already are. This is literally
+what was asked for ("μια ρύθμιση").
+
+**CORRECTED 2026-08-15, against the running code.** The first draft of this spec
+put a "Repeat" switch in the new-task sheet. There is nothing there to hang it
+on: `AddTaskModal.jsx` is a bare textarea that posts to `/extract` — the app has
+**no structured new-task form at all**, and the only caller of `createTaskManual`
+is the calendar's make-a-task flow. (`TaskDetailSheet` is the structured editor,
+but it edits a task that already exists.) A second draft error, from the stale
+`PROJECT_STATUS.md`: Settings is not collapsible sections, it is rows that open
+their own sub-screen.
+
+The consequence is worth stating, because it changes what slice 2 is for. With
+no structured create form anywhere, **natural language is the app's quick path
+for creating anything** — so "every Monday gym", typed into the box the user
+already types everything into, is not a convenience on top of the form. It is
+the ergonomic entry point, and the form is the precise one.
+
+The form, opened by "New recurrence" on that screen:
 
 - **Time** — optional. A recurrence with no time is allowed; it simply never rings.
 - **Days** — seven toggles Δ Τ Τ Π Π Σ Κ. All seven = daily.
@@ -128,8 +146,8 @@ while the list never fills with overdue.
 
 ### Managing them
 
-A **"Recurrences"** list in Settings: what exists, when it fires, an on/off switch
-per rule.
+The same **"Recurrences"** screen lists them: what exists, when it fires, an on/off
+switch per rule.
 
 - **Off** — stops now, not in a fortnight. Upcoming occurrences from tomorrow on
   are removed; today's stays, and so does the history. Turning it back on
