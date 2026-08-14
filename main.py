@@ -974,6 +974,72 @@ def _handle_outgoing_hostaway_message(user_id: str, data: dict) -> dict:
     return {"status": "ok", "task": task.record_id}
 
 
+def _create_hostaway_task(
+    user_id: str,
+    classification: dict,
+    listing_name: str,
+    reservation_details: dict,
+    message_body: str,
+    message_date: Optional[str],
+    conversation_id,
+) -> bool:
+    """
+    One colleague's copy of a guest message. Returns whether it was written.
+
+    Pulled out of the webhook when one message started producing one task per
+    connected colleague: the body is identical for each, only user_id differs.
+    """
+    now = datetime.now(ZoneInfo("Europe/Athens"))
+    now_str = now.isoformat()
+    priority = classification["priority"]
+    task_name = f"Hostaway: {reservation_details['guest_name']} - {listing_name}"
+
+    # Instant notification for every priority, then ongoing re-notification
+    # at a priority-paced interval for as long as the task stays open —
+    # see TaskService._check_hostaway_escalations / HOSTAWAY_ESCALATION_INTERVALS
+    # in services.py, run from the existing scheduler cycle.
+    priority_emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(priority, "")
+    try:
+        service.send_push_to_user(
+            user_id, title=f"{priority_emoji} {task_name}", body=classification["summary"]
+        )
+    except Exception as e:
+        logging.error(f"[hostaway webhook] Failed to send instant notification: {e}")
+
+    try:
+        service.create_task_manual(user_id, {
+            "task_name": task_name,
+            # Same shape the append path re-renders, so a threaded task and a
+            # fresh one read identically and _hostaway_meta_block has one
+            # thing to find.
+            "description": _render_hostaway_description(
+                classification["summary"],
+                f"Property: {listing_name}\n"
+                f"Dates: {reservation_details['arrival_date']} → "
+                f"{reservation_details['departure_date']}",
+                message_body,
+            ),
+            "category": "Hostaway",
+            "priority": priority,
+            "due_date": now.strftime("%Y-%m-%d"),
+            "due_time": None,
+            "checklist": [],
+            "hostaway_created_at": now_str,
+            "hostaway_last_notified_at": now_str,
+            "hostaway_conversation_id": str(conversation_id) if conversation_id else None,
+            "hostaway_last_message_at": message_date,
+            "hostaway_message_count": 1,
+            "hostaway_thread": message_body,
+        })
+        logging.info(
+            f"[hostaway webhook] Created task for {user_id}: {task_name} (priority={priority})"
+        )
+        return True
+    except Exception as e:
+        logging.error(f"[hostaway webhook] Failed to create task for {user_id}: {e}")
+        return False
+
+
 @app.post("/webhooks/hostaway")
 async def hostaway_webhook(request: Request):
     """
@@ -1020,14 +1086,15 @@ async def hostaway_webhook(request: Request):
             f"communicationId={data.get('communicationId')} "
             f"communicationEvent={data.get('communicationEvent')}"
         )
-        outgoing_user_id = hostaway_integration.get_user_id_for_hostaway_account(
-            payload.get("accountId")
-        )
-        try:
-            return _handle_outgoing_hostaway_message(outgoing_user_id, data)
-        except Exception as e:
-            logging.error(f"[hostaway webhook] Outgoing handling failed: {e}")
-            return {"status": "error", "note": "outgoing handling failed, see logs"}
+        # Every colleague on the account holds their own copy of this
+        # conversation's task, so one outgoing message answers all of them.
+        results = []
+        for connection in repository.get_hostaway_connections_for_account(payload.get("accountId")):
+            try:
+                results.append(_handle_outgoing_hostaway_message(connection["user_id"], data))
+            except Exception as e:
+                logging.error(f"[hostaway webhook] Outgoing handling failed: {e}")
+        return {"status": "ok", "handled": len(results)}
 
     message_body = (data.get("body") or "").strip()
     if not message_body:
@@ -1038,128 +1105,114 @@ async def hostaway_webhook(request: Request):
     conversation_id = data.get("conversationId")
     message_date = data.get("date")
 
-    hostaway_account_id = payload.get("accountId")
-    user_id = hostaway_integration.get_user_id_for_hostaway_account(hostaway_account_id)
+    connections = repository.get_hostaway_connections_for_account(payload.get("accountId"))
+    recipients = [c for c in connections if c.get("tasks_enabled")]
+    if not recipients:
+        # Nobody has connected this account, or everyone switched task
+        # creation off. Both are ordinary, and neither costs a Gemini call —
+        # which is why this check sits ABOVE the classification.
+        logging.info(
+            f"[hostaway webhook] No recipient for account {payload.get('accountId')} "
+            f"({len(connections)} connected, {len(recipients)} with tasks enabled)"
+        )
+        return {"status": "ignored", "reason": "no connection wants this message"}
 
     # Is this message part of a burst an open task already covers? The
     # comparison uses HOSTAWAY's dates on both sides, never now() — so it
     # behaves identically whether the webhook was instant or the message was
-    # picked up minutes later. Spec §3.1.
-    existing_task = None
-    if conversation_id:
-        for candidate in repository.get_open_tasks_for_conversation(user_id, str(conversation_id)):
+    # picked up minutes later. Spec §3.1. Asked per colleague, because they
+    # close their copies independently.
+    existing_by_user = {}
+    for connection in recipients:
+        for candidate in repository.get_open_tasks_for_conversation(
+            connection["user_id"], str(conversation_id)
+        ) if conversation_id else []:
             if hostaway_threading.should_append_to_thread(
                 candidate.hostaway_last_message_at, message_date
             ):
-                existing_task = candidate
+                existing_by_user[connection["user_id"]] = candidate
                 break
 
     # Classify the whole thread when appending, the single message otherwise:
     # the messages that get merged are exactly the ones that mean nothing on
     # their own, so classifying the new one alone would produce noise.
+    #
+    # ONE classification for everyone. The thread belongs to the
+    # CONVERSATION, not to a colleague — every copy holds the same messages —
+    # so the first open task found supplies it and the verdict applies to all.
     text_to_classify = message_body
-    if existing_task:
-        previous = existing_task.hostaway_thread or ""
-        text_to_classify = (
-            f"{previous}{HOSTAWAY_THREAD_SEPARATOR}{message_body}" if previous else message_body
-        )
+    for task in existing_by_user.values():
+        if task.hostaway_thread:
+            text_to_classify = f"{task.hostaway_thread}{HOSTAWAY_THREAD_SEPARATOR}{message_body}"
+            break
 
     try:
-        classification = hostaway_integration.classify_message(text_to_classify, user_id=user_id)
+        classification = hostaway_integration.classify_message(
+            text_to_classify, user_id=recipients[0]["user_id"]
+        )
     except Exception as e:
         logging.error(f"[hostaway webhook] Classification failed unexpectedly: {e}")
         classification = {"summary": message_body[:200], "priority": "P1"}
 
-    if existing_task:
-        previous_priority = existing_task.priority
-        updates = _append_to_hostaway_thread(
-            user_id, existing_task, message_body, message_date, classification
-        )
-        # One push per message is the rule (spec §4) — but inside a burst,
-        # three pushes in forty seconds for one thought IS the noise this
-        # feature exists to remove. So the burst notifies once, and again
-        # ONLY on an escalation: decided by the owner, 2026-08-10.
-        if hostaway_threading.is_more_urgent(updates["priority"], previous_priority):
-            emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(updates["priority"], "")
+    # Enrichment is two Hostaway round-trips for the MESSAGE, not per
+    # colleague, and only when at least one of them needs a new task: the
+    # append path uses neither the listing name nor the reservation, so a
+    # pure-burst delivery spends nothing here.
+    enrichment = None
+
+    def _enrichment():
+        nonlocal enrichment
+        if enrichment is None:
+            credentials = hostaway_integration.credentials_from_connection(recipients[0])
             try:
-                service.send_push_to_user(
-                    user_id,
-                    title=f"{emoji} {existing_task.task_name}",
-                    body=classification["summary"],
+                enrichment = (
+                    hostaway_integration.get_listing_name(listing_map_id, credentials)
+                    if listing_map_id else "Άγνωστο property",
+                    hostaway_integration.get_reservation_details(reservation_id, credentials)
+                    if reservation_id else
+                    {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"},
                 )
             except Exception as e:
-                logging.error(f"[hostaway webhook] Failed to send escalation notification: {e}")
-        return {"status": "ok", "threaded_into": existing_task.record_id}
+                logging.error(f"[hostaway webhook] Enrichment failed: {e}")
+                enrichment = ("Άγνωστο property",
+                              {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"})
+        return enrichment
 
-    # ── no open burst: create a task, exactly as before ──
-    # Enrichment lives HERE, not above the burst check: it is two Hostaway API
-    # calls and the append path uses neither the listing name nor the
-    # reservation, so enriching first would spend two round-trips per burst
-    # message to throw the answers away.
-    try:
-        listing_name = hostaway_integration.get_listing_name(listing_map_id) if listing_map_id else "Άγνωστο property"
-        reservation_details = hostaway_integration.get_reservation_details(reservation_id) if reservation_id else {
-            "guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"
-        }
-    except Exception as e:
-        logging.error(f"[hostaway webhook] Enrichment failed: {e}")
-        listing_name = "Άγνωστο property"
-        reservation_details = {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"}
+    threaded, created = 0, 0
+    for connection in recipients:
+        user_id = connection["user_id"]
+        existing_task = existing_by_user.get(user_id)
 
-    guest_name = reservation_details["guest_name"]
-    arrival = reservation_details["arrival_date"]
-    departure = reservation_details["departure_date"]
+        if existing_task:
+            previous_priority = existing_task.priority
+            updates = _append_to_hostaway_thread(
+                user_id, existing_task, message_body, message_date, classification
+            )
+            # One push per message is the rule (spec §4) — but inside a burst,
+            # three pushes in forty seconds for one thought IS the noise this
+            # feature exists to remove. So the burst notifies once, and again
+            # ONLY on an escalation: decided by the owner, 2026-08-10.
+            if hostaway_threading.is_more_urgent(updates["priority"], previous_priority):
+                emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(updates["priority"], "")
+                try:
+                    service.send_push_to_user(
+                        user_id,
+                        title=f"{emoji} {existing_task.task_name}",
+                        body=classification["summary"],
+                    )
+                except Exception as e:
+                    logging.error(f"[hostaway webhook] Failed to send escalation notification: {e}")
+            threaded += 1
+            continue
 
-    now = datetime.now(ZoneInfo("Europe/Athens"))
-    today_str = now.strftime("%Y-%m-%d")
-    now_str = now.isoformat()
-    priority = classification["priority"]
+        listing_name, reservation_details = _enrichment()
+        if _create_hostaway_task(
+            user_id, classification, listing_name, reservation_details,
+            message_body, message_date, conversation_id,
+        ):
+            created += 1
 
-    task_name = f"Hostaway: {guest_name} - {listing_name}"
-    # Same shape the append path re-renders, so a threaded task and a fresh
-    # one read identically and _hostaway_meta_block has one thing to find.
-    description = _render_hostaway_description(
-        classification["summary"],
-        f"Property: {listing_name}\nDates: {arrival} → {departure}",
-        message_body,
-    )
-
-    # Instant notification for every priority, then ongoing re-notification
-    # at a priority-paced interval for as long as the task stays open —
-    # see TaskService._check_hostaway_escalations / HOSTAWAY_ESCALATION_INTERVALS
-    # in services.py, run from the existing scheduler cycle.
-    priority_emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(priority, "")
-    try:
-        service.send_push_to_user(
-            user_id,
-            title=f"{priority_emoji} {task_name}",
-            body=classification["summary"],
-        )
-    except Exception as e:
-        logging.error(f"[hostaway webhook] Failed to send instant notification: {e}")
-
-    try:
-        service.create_task_manual(user_id, {
-            "task_name": task_name,
-            "description": description,
-            "category": "Hostaway",
-            "priority": priority,
-            "due_date": today_str,
-            "due_time": None,
-            "checklist": [],
-            "hostaway_created_at": now_str,
-            "hostaway_last_notified_at": now_str,
-            "hostaway_conversation_id": str(conversation_id) if conversation_id else None,
-            "hostaway_last_message_at": message_date,
-            "hostaway_message_count": 1,
-            "hostaway_thread": message_body,
-        })
-        logging.info(f"[hostaway webhook] Created task: {task_name} (priority={priority})")
-    except Exception as e:
-        logging.error(f"[hostaway webhook] Failed to create task: {e}")
-        return {"status": "error", "note": "task creation failed, see logs"}
-
-    return {"status": "ok", "task_created": True}
+    return {"status": "ok", "tasks_created": created, "threaded_into": threaded}
 
 
 @app.get("/dev/token-usage")
