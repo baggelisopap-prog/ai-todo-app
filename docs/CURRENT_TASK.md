@@ -10,8 +10,15 @@ Hostaway is per-user on `main` as of 2026-08-14. Design: `docs/superpowers/specs
 
 The requirement remains «σε όλα αυτά θέλω zero fail, όχι 9/10», so what follows is meant to be *run*, not read.
 
-## Before anything else
-`HOSTAWAY_ENCRYPTION_KEY` must be set in Render's environment. Without it every Hostaway path raises — deliberately, rather than silently storing plaintext. **Confirm it is there before deploying**, not after.
+## Gap 0 — a missing key breaks more than Hostaway, and this shipped before the key was set
+`f6327ce` was pushed to `main` on 2026-08-14 **while `HOSTAWAY_ENCRYPTION_KEY` did not yet exist in Render's environment.** The owner was adding it as the deploy went out. First thing to check: the log should show `[hostaway] Obtained access token for account 147809` and no traceback. `HOSTAWAY_ENCRYPTION_KEY is not set` means the variable never arrived; `InvalidToken` means a *different* key was set than the one that encrypted the row — it must be the exact value from the owner's local `.env`, since Fernet is symmetric and the row is already written. An empty value counts as missing (`crypto.py` tests `if not key`).
+
+That is the immediate item. The lasting one is that **`crypto.py`'s stated promise is currently false in two places.** Its docstring says a deploy without the key "still boots and still serves every user who has no Hostaway connection — only the Hostaway paths fail". Both of these were found by reading, not by an incident, and **neither is fixed**:
+
+1. **The webhook returns 500 instead of 200.** `main.py:1167` — `credentials_from_connection` sits *outside* the `try` inside `_enrichment()`, so `crypto`'s `RuntimeError` escapes it, and `hostaway_webhook` wraps only the JSON parse. This breaks the contract its own docstring names: *always return 200 so Hostaway doesn't disable the webhook after repeated failures.* Repeated 500s are precisely what gets a webhook disabled.
+2. **One user's missing key kills the scheduler tick for everyone.** `services.py:494` — the per-user loop in `run_notification_scheduler` has no `try`/`except` at all, and `_check_hostaway_replies` calls `credentials_from_connection` unguarded. A single user with a Hostaway row and an unusable key raises out of the whole function, so **every user processed after them** loses reminders, daily summary, escalations and calendar sync. The owner now has a connection row, so this fires on the first tick rather than someday.
+
+The fix is small and was offered but not taken: catch the credential failure in the webhook and return 200, and wrap the scheduler's per-user body so one user cannot take down the rest. Gap 2 below is worth nothing while these stand — a colleague connecting is exactly what adds a second row to that loop.
 
 ## Gap 1 — The Settings screen has never been on a screen
 Steps 1–4 of Task 9 are committed and the frontend builds, but Step 5 was never done. On a real screen, in both languages:
