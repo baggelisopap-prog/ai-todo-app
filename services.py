@@ -566,6 +566,15 @@ class TaskService:
         One HTTP call per conversation, not per task: two open tasks sharing
         a conversation are answered out of one response.
         """
+        connection = repository.get_hostaway_connection(user_id)
+        if not connection or not connection.get("auto_close_enabled"):
+            # No connection, or the user switched auto-completion off. Either
+            # way this costs nothing: the check is above the task scan and
+            # above every HTTP call.
+            return {"conversations_polled": 0, "replies_found": 0, "tasks_completed": 0}
+
+        credentials = hostaway_integration.credentials_from_connection(connection)
+
         candidates = [
             task
             for task in repository.get_active_hostaway_tasks(user_id, tasks=user_tasks)
@@ -595,7 +604,7 @@ class TaskService:
         tasks_completed = 0
 
         for conversation_id, conversation_tasks in ordered:
-            messages = hostaway_integration.get_conversation_messages(conversation_id)
+            messages = hostaway_integration.get_conversation_messages(conversation_id, credentials)
             polled += 1
             if not messages:
                 continue

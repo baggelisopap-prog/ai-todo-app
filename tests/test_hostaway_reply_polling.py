@@ -115,16 +115,36 @@ def _task(record_id="task-1", priority="P3", last_message_at=GUEST_MESSAGE_AT,
     )
 
 
-def _run(monkeypatch, open_tasks, messages=None):
+def _connection(**overrides):
+    row = {"user_id": "user-1", "account_id": "147809", "client_secret_encrypted": "c",
+           "tasks_enabled": True, "auto_close_enabled": True}
+    row.update(overrides)
+    return row
+
+
+# The connection is a parameter rather than something a test monkeypatches
+# before calling _run: _run patches the repository itself, so an earlier patch
+# from the test body would be silently overwritten by the default.
+_CONNECTED = _connection()
+
+
+def _run(monkeypatch, open_tasks, messages=None, connection=_CONNECTED):
     calls = {"updates": [], "pushes": [], "fetched": []}
     conversation = CONV_49166048 if messages is None else messages
 
+    monkeypatch.setattr(
+        services.repository, "get_hostaway_connection",
+        lambda u: connection,
+        raising=False,
+    )
+    monkeypatch.setattr(services.hostaway_integration, "credentials_from_connection",
+                        lambda c: ("147809", "secret"), raising=False)
     monkeypatch.setattr(services.repository, "get_active_hostaway_tasks",
                         lambda u, tasks=None: list(open_tasks))
     monkeypatch.setattr(services.repository, "update_hostaway_thread_fields",
                         lambda u, r, updates: calls["updates"].append((r, updates)))
 
-    def _fetch(conversation_id):
+    def _fetch(conversation_id, credentials):
         calls["fetched"].append(conversation_id)
         return conversation
 
@@ -276,3 +296,22 @@ def test_an_api_failure_leaves_everything_alone(monkeypatch):
     assert calls["updates"] == []
     assert result["replies_found"] == 0
     assert result["conversations_polled"] == 1
+
+
+def test_a_user_with_no_connection_makes_no_api_call(monkeypatch):
+    """A user who never connected Hostaway must cost nothing on every tick."""
+    calls, result, _ = _run(monkeypatch, [_task()], connection=None)
+
+    assert calls["fetched"] == []
+    assert result["conversations_polled"] == 0
+
+
+def test_auto_close_switched_off_makes_no_api_call(monkeypatch):
+    """Off means off — not 'fetch, then decide not to act'."""
+    calls, result, _ = _run(
+        monkeypatch, [_task()], connection=_connection(auto_close_enabled=False)
+    )
+
+    assert calls["fetched"] == []
+    assert calls["updates"] == []
+    assert result["conversations_polled"] == 0
