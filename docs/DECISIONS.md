@@ -81,8 +81,14 @@ The Appearance setting (2026-08-08) made the app able to disagree with the OS, a
 **Two consequences that are not optional.** `initTheme()` must listen for OS changes, because "System" is resolved once at load and phones flip themselves at sunset — without the listener it means "the system, as of whenever you last opened this". And anything that follows `prefers-color-scheme` on its own has to be repointed at the attribute or it will contradict the setting: the `theme-color` metas (rewritten by `applyTheme`), `color-scheme` (declared per theme so native controls follow), and Tailwind's `dark:` variant (`@custom-variant` — no users today, but one stray class away from a bug this app has already had once).
 **Stored in localStorage, not in `app_settings`.** It follows the Language switcher, for the same reason: it is a property of the device you are reading on, not of the account. A server-side value would force a phone in bed and a laptop at a desk to agree.
 
-### Decision: Hostaway multi-tenancy deferred to "year 2"
-Only the owner has Hostaway now. `get_user_id_for_hostaway_account()` is the single "one door" to change when others connect their own Hostaway accounts later. Nothing else needs rewriting.
+### Decision: Hostaway multi-tenancy deferred to "year 2" — SUPERSEDED 2026-08-14
+The original entry read: *"Only the owner has Hostaway now. `get_user_id_for_hostaway_account()` is the single 'one door' to change when others connect their own Hostaway accounts later. Nothing else needs rewriting."*
+
+Year 2 arrived early, and **the prediction was half right**. The one door was indeed the only place that decided *who* a message belonged to — but replacing it was not a one-function change, because the answer stopped being singular in two different ways at once:
+- **One accountId now maps to MANY users**, not one. Fifteen staff share the owner's Hostaway account. So the call site could not simply take a different user_id back; the webhook had to become a loop, and everything expensive inside it (the classification, the enrichment) had to be hoisted out so N colleagues do not cost N Gemini calls.
+- **Credentials stopped being global.** `HOSTAWAY_CLIENT_ID`/`SECRET` came from `.env` and the access token lived in one module-level variable. With two accounts connected, that variable hands one user's token to the other's requests. Every Hostaway function signature changed to take `HostawayCredentials`, which is what actually rippled through `main.py` and `services.py`.
+
+What the entry got right is that nothing *else* had to be redesigned: threading, the reply poller's decisions, escalation and the deep link were all untouched. See `docs/superpowers/specs/2026-08-13-hostaway-per-user-integration-design.md`.
 
 ### Decision: token usage has a single source of truth
 `token_usage_log` is per-user; usage summaries are computed by summing it. No cached usage column on `profiles` (two sources would drift). A future `profiles.monthly_token_quota` + Stripe billing is deferred (see BACKLOG).
