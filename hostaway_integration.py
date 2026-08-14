@@ -211,3 +211,56 @@ def classify_message(message_text: str, user_id: str) -> dict:
     # over-notify than silently drop a potentially urgent guest message)
     logging.error("[hostaway] Classification failed after retries, defaulting to P1")
     return {"summary": message_text[:200], "priority": "P1"}
+
+
+HOSTAWAY_WEBHOOK_EVENTS = ["message.received"]
+
+
+def hostaway_register_webhook(credentials: HostawayCredentials, callback_url: str) -> Optional[int]:
+    """
+    Points the user's Hostaway account at our webhook, and returns its id.
+
+    Looks before creating: reconnecting must not leave a trail of duplicate
+    webhooks all delivering the same guest message. Returns the existing id
+    when one already points at callback_url.
+
+    POST here was ASSUMED until 2026-08-14, when it was called once against
+    the owner's account: 200, with the new id at result.id (design spec,
+    "POST and DELETE, as they actually answered").
+    """
+    token = get_access_token(credentials)
+    headers = {"Authorization": f"Bearer {token}", "Content-type": "application/json"}
+
+    existing = requests.get(
+        "https://api.hostaway.com/v1/webhooks/unifiedWebhooks", headers=headers, timeout=10
+    )
+    existing.raise_for_status()
+    for webhook in existing.json().get("result") or []:
+        if webhook.get("url") == callback_url:
+            logging.info(f"[hostaway] Reusing webhook {webhook['id']} for {credentials.account_id}")
+            return webhook["id"]
+
+    created = requests.post(
+        "https://api.hostaway.com/v1/webhooks/unifiedWebhooks",
+        headers=headers, timeout=10,
+        json={"url": callback_url, "isEnabled": 1, "events": HOSTAWAY_WEBHOOK_EVENTS},
+    )
+    created.raise_for_status()
+    webhook_id = (created.json().get("result") or {}).get("id")
+    logging.info(f"[hostaway] Registered webhook {webhook_id} for {credentials.account_id}")
+    return webhook_id
+
+
+def hostaway_delete_webhook(credentials: HostawayCredentials, webhook_id: int) -> bool:
+    """
+    Removes a webhook we registered. Returns whether Hostaway accepted it.
+
+    The success body is `{"status": "success", "result": []}` — an empty list,
+    not the deleted object — so the status code is the only thing to read.
+    """
+    token = get_access_token(credentials)
+    response = requests.delete(
+        f"https://api.hostaway.com/v1/webhooks/unifiedWebhooks/{webhook_id}",
+        headers={"Authorization": f"Bearer {token}"}, timeout=10,
+    )
+    return response.status_code < 300

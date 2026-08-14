@@ -30,6 +30,7 @@ from auth import get_current_user_id
 import agent_engine
 import agent_tools
 import task_agent
+import crypto
 import google_calendar
 import hostaway_integration
 import hostaway_threading
@@ -1213,6 +1214,118 @@ async def hostaway_webhook(request: Request):
             created += 1
 
     return {"status": "ok", "tasks_created": created, "threaded_into": threaded}
+
+
+HOSTAWAY_WEBHOOK_URL = os.getenv(
+    "HOSTAWAY_WEBHOOK_URL", "https://ai-todo-app-sdq8.onrender.com/webhooks/hostaway"
+)
+
+
+class HostawayConnectRequest(BaseModel):
+    account_id: str
+    client_secret: str
+
+
+class HostawaySwitchesRequest(BaseModel):
+    tasks_enabled: Optional[bool] = None
+    auto_close_enabled: Optional[bool] = None
+
+
+@app.get("/integrations/hostaway")
+def get_hostaway_status(user_id: str = Depends(get_current_user_id)):
+    """The connection as the UI needs it. The secret is never part of that."""
+    connection = repository.get_hostaway_connection(user_id)
+    if not connection:
+        return {"connected": False, "account_id": None,
+                "tasks_enabled": False, "auto_close_enabled": False}
+    return {
+        "connected": True,
+        "account_id": connection["account_id"],
+        "tasks_enabled": bool(connection["tasks_enabled"]),
+        "auto_close_enabled": bool(connection["auto_close_enabled"]),
+    }
+
+
+@app.post("/integrations/hostaway")
+def connect_hostaway(
+    request: HostawayConnectRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Validates the credentials against Hostaway BEFORE storing anything, then
+    registers the webhook, then saves. A connection that is saved but does not
+    work is worse than no connection: it fails silently, later, on a guest
+    message nobody is watching.
+    """
+    credentials = hostaway_integration.HostawayCredentials(
+        account_id=request.account_id.strip(), client_secret=request.client_secret.strip()
+    )
+    try:
+        hostaway_integration.get_access_token(credentials)
+    except Exception as e:
+        logging.error(f"[hostaway connect] Credential check failed for {user_id}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail="Τα στοιχεία Hostaway δεν έγιναν δεκτά. Έλεγξε το Account ID και το API key.",
+        )
+
+    webhook_id = None
+    try:
+        webhook_id = hostaway_integration.hostaway_register_webhook(
+            credentials, HOSTAWAY_WEBHOOK_URL
+        )
+    except Exception as e:
+        # The credentials are good; only the webhook failed. Store the
+        # connection so the reply poller works, and tell the UI that new
+        # messages will not arrive until the webhook is added by hand.
+        logging.error(f"[hostaway connect] Webhook registration failed for {user_id}: {e}")
+
+    repository.upsert_hostaway_connection(
+        user_id, credentials.account_id, crypto.encrypt_secret(credentials.client_secret), webhook_id
+    )
+    logging.info(
+        f"[hostaway connect] {user_id} connected account {credentials.account_id} "
+        f"(webhook={webhook_id})"
+    )
+    return {
+        "connected": True,
+        "account_id": credentials.account_id,
+        "webhook_registered": webhook_id is not None,
+        "webhook_url": HOSTAWAY_WEBHOOK_URL,
+        "tasks_enabled": True,
+        "auto_close_enabled": True,
+    }
+
+
+@app.patch("/integrations/hostaway")
+def update_hostaway_switches(
+    request: HostawaySwitchesRequest, user_id: str = Depends(get_current_user_id)
+):
+    updates = {k: v for k, v in request.model_dump().items() if v is not None}
+    repository.update_hostaway_connection(user_id, updates)
+    return get_hostaway_status(user_id=user_id)
+
+
+@app.delete("/integrations/hostaway")
+def disconnect_hostaway(user_id: str = Depends(get_current_user_id)):
+    """
+    Removes the webhook from their Hostaway account, then the row. Existing
+    Hostaway tasks are deliberately left alone: they are the user's work, not
+    the connection's data.
+    """
+    connection = repository.get_hostaway_connection(user_id)
+    if connection and connection.get("webhook_id"):
+        try:
+            hostaway_integration.hostaway_delete_webhook(
+                hostaway_integration.credentials_from_connection(connection),
+                connection["webhook_id"],
+            )
+        except Exception as e:
+            # Never trap the user in a connection because Hostaway said no.
+            logging.error(f"[hostaway disconnect] Could not remove webhook for {user_id}: {e}")
+
+    repository.delete_hostaway_connection(user_id)
+    hostaway_integration.clear_token_cache()
+    return {"connected": False}
 
 
 @app.get("/dev/token-usage")
