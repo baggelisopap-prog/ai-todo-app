@@ -388,6 +388,38 @@ export async function testCalendarConnection() {
 }
 
 /**
+ * GET /integrations/hostaway — { connected, account_id, tasks_enabled, auto_close_enabled }.
+ * The client secret is never returned by the backend.
+ */
+export async function getHostawayStatus() {
+  return request('/integrations/hostaway');
+}
+
+/**
+ * POST /integrations/hostaway — validates the credentials against Hostaway,
+ * registers the webhook, stores the connection. 400 if Hostaway rejects them.
+ */
+export async function connectHostaway(accountId, clientSecret) {
+  return request('/integrations/hostaway', {
+    method: 'POST',
+    body: JSON.stringify({ account_id: accountId, client_secret: clientSecret }),
+  });
+}
+
+/** PATCH /integrations/hostaway — either switch, alone or together. */
+export async function updateHostawaySwitches(switches) {
+  return request('/integrations/hostaway', {
+    method: 'PATCH',
+    body: JSON.stringify(switches),
+  });
+}
+
+/** DELETE /integrations/hostaway — removes the webhook, then the connection. */
+export async function disconnectHostaway() {
+  return request('/integrations/hostaway', { method: 'DELETE' });
+}
+
+/**
  * GET /calendar/events — Google Calendar events pulled in by the scheduler
  * that this app didn't create and haven't been converted to a task yet.
  * Pass a YYYY-MM-DD date to filter to just that day (e.g. for the Today

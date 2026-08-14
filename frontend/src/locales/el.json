@@ -6,6 +6,22 @@
     "inbox_pending": "Εισερχόμενα, {{count}} περιμένουν έγκριση",
     "browse": "Όλα"
   },
+  "hostaway": {
+    "title": "Hostaway",
+    "not_connected": "Σύνδεσε τον λογαριασμό σου Hostaway για να γίνονται tasks τα μηνύματα των πελατών.",
+    "account_id": "Account ID",
+    "api_key": "API key",
+    "connect": "Σύνδεση",
+    "connecting": "Γίνεται σύνδεση…",
+    "connected": "Συνδεδεμένο",
+    "disconnect": "Αποσύνδεση",
+    "invalid": "Η Hostaway δεν δέχτηκε τα στοιχεία. Έλεγξε το Account ID και το API key.",
+    "webhook_manual": "Συνδέθηκε, αλλά δεν μπήκε αυτόματα το webhook. Πρόσθεσε αυτό το URL στο Hostaway, στα Settings → Webhooks, για το event message.received:",
+    "tasks_enabled": "Δημιουργία tasks από μηνύματα",
+    "tasks_enabled_description": "Κάθε νέο μήνυμα πελάτη γίνεται task.",
+    "auto_close_enabled": "Κλείσιμο task όταν απαντάς",
+    "auto_close_enabled_description": "Όταν απαντάς σε πελάτη, κλείνει το task του μέσα σε ~2 λεπτά."
+  },
   "calendar": {
     "prev_month": "Προηγούμενος μήνας",
     "next_month": "Επόμενος μήνας",

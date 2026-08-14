@@ -12,6 +12,10 @@ import {
   getTokenUsage,
   getCalendarStatus,
   disconnectGoogleCalendar,
+  getHostawayStatus,
+  connectHostaway,
+  updateHostawaySwitches,
+  disconnectHostaway,
   updateProfile,
   deleteAccount,
 } from '../api';
@@ -27,11 +31,14 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import SettingsRow, { SettingsGroup } from './SettingsRow';
 import OptionSheet from './OptionSheet';
 
-// Hardcoded owner user_id — same "one door" pattern hostaway_integration.py's
-// get_user_id_for_hostaway_account() uses to gate the Hostaway integration to
-// a single account. Used here purely for frontend visibility (hide the
-// Developer section from everyone else); the /dev/token-usage endpoint
-// itself is unchanged and still scopes data by the caller's own user_id.
+// Hardcoded owner user_id, used purely for frontend visibility: it hides the
+// Developer section from everyone else. The /dev/token-usage endpoint still
+// scopes data by the caller's own user_id, so this is not the gate.
+//
+// It used to be described as the same "one door" pattern as
+// hostaway_integration.get_user_id_for_hostaway_account(). That function is
+// gone — Hostaway is per-user now, resolved from hostaway_connections — and
+// this constant is the last hardcoded user_id in the app.
 const OWNER_USER_ID = 'fdedc7be-964b-4e75-b4a0-bd16cb6b05e7';
 
 const APP_VERSION = '1.0.0';
@@ -51,6 +58,7 @@ const SCREENS = {
   profile: 'settings.my_profile',
   notifications: 'settings.notifications',
   calendar: 'settings.calendar',
+  hostaway: 'hostaway.title',
   developer: 'settings.developer',
 };
 
@@ -171,6 +179,7 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
               <SettingsGroup>
                 <SettingsRow label={t('settings.notifications')} onClick={() => setScreen('notifications')} />
                 <SettingsRow label={t('settings.calendar')} onClick={() => setScreen('calendar')} />
+                <SettingsRow label={t('hostaway.title')} onClick={() => setScreen('hostaway')} />
               </SettingsGroup>
 
               <SettingsGroup>
@@ -218,6 +227,7 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
           {screen === 'profile' && <ProfileSection profile={profile} onProfileUpdate={onProfileUpdate} />}
           {screen === 'notifications' && <NotificationsSection onShowToast={onShowToast} />}
           {screen === 'calendar' && <CalendarConnectionView onShowToast={onShowToast} />}
+          {screen === 'hostaway' && <HostawayConnectionView onShowToast={onShowToast} />}
           {screen === 'developer' && <DeveloperUsageView />}
         </div>
       </div>
@@ -595,6 +605,129 @@ function NotificationsSection({ onShowToast }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function HostawayConnectionView({ onShowToast }) {
+  const { t } = useTranslation();
+  const [status, setStatus] = useState(null);
+  const [accountId, setAccountId] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [manualUrl, setManualUrl] = useState(null);
+
+  useEffect(() => {
+    getHostawayStatus()
+      .then(setStatus)
+      .catch(err => console.error('Failed to load Hostaway status:', err));
+  }, []);
+
+  async function handleConnect() {
+    setBusy(true);
+    try {
+      const result = await connectHostaway(accountId.trim(), apiKey.trim());
+      setStatus(result);
+      setApiKey('');
+      if (!result.webhook_registered) setManualUrl(result.webhook_url);
+    } catch (err) {
+      // The toast says "check your details", which is the common case. The
+      // log separates that from a network failure or a 500.
+      console.error('Hostaway connect failed:', err);
+      onShowToast?.(t('hostaway.invalid'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleToggle(key) {
+    const next = { [key]: !status[key] };
+    setStatus({ ...status, ...next });          // optimistic
+    try {
+      setStatus(await updateHostawaySwitches(next));
+    } catch (err) {
+      console.error('Hostaway switch failed:', err);
+      setStatus(await getHostawayStatus());     // put it back if the server said no
+    }
+  }
+
+  async function handleDisconnect() {
+    await disconnectHostaway();
+    setStatus({ connected: false });
+    setManualUrl(null);
+  }
+
+  if (!status) return null;
+
+  if (!status.connected) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-[var(--text-secondary)]">{t('hostaway.not_connected')}</p>
+        <input
+          value={accountId}
+          onChange={e => setAccountId(e.target.value)}
+          placeholder={t('hostaway.account_id')}
+          inputMode="numeric"
+          className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-hover)] p-2 text-sm"
+        />
+        <input
+          value={apiKey}
+          onChange={e => setApiKey(e.target.value)}
+          placeholder={t('hostaway.api_key')}
+          type="password"
+          autoComplete="off"
+          className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-hover)] p-2 text-sm"
+        />
+        <button
+          onClick={handleConnect}
+          disabled={busy || !accountId.trim() || !apiKey.trim()}
+          className="w-full rounded-lg bg-[var(--brand-primary)] p-2 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {busy ? t('hostaway.connecting') : t('hostaway.connect')}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm font-medium text-[var(--success)]">
+        {t('hostaway.connected')} ✓ · {status.account_id}
+      </p>
+
+      {manualUrl && (
+        <p className="text-xs text-[var(--text-secondary)] break-all">
+          {t('hostaway.webhook_manual')} {manualUrl}
+        </p>
+      )}
+
+      {['tasks_enabled', 'auto_close_enabled'].map(key => (
+        <div key={key}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm">{t(`hostaway.${key}`)}</span>
+            <button
+              onClick={() => handleToggle(key)}
+              className={`relative h-6 w-11 rounded-full transition-colors ${
+                status[key] ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-subtle)]'
+              }`}
+              aria-label={t(`hostaway.${key}`)}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                  status[key] ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {t(`hostaway.${key}_description`)}
+          </p>
+        </div>
+      ))}
+
+      <button onClick={handleDisconnect} className="text-sm text-[var(--danger)] underline">
+        {t('hostaway.disconnect')}
+      </button>
     </div>
   );
 }

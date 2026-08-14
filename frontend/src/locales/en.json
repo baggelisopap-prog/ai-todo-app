@@ -6,6 +6,22 @@
     "inbox_pending": "Inbox, {{count}} awaiting approval",
     "browse": "All"
   },
+  "hostaway": {
+    "title": "Hostaway",
+    "not_connected": "Connect your Hostaway account to turn guest messages into tasks.",
+    "account_id": "Account ID",
+    "api_key": "API key",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "connected": "Connected",
+    "disconnect": "Disconnect",
+    "invalid": "Hostaway did not accept those details. Check the Account ID and API key.",
+    "webhook_manual": "Connected, but the webhook could not be added automatically. Add this URL in Hostaway under Settings → Webhooks, for the event message.received:",
+    "tasks_enabled": "Create tasks from messages",
+    "tasks_enabled_description": "A new guest message becomes a task.",
+    "auto_close_enabled": "Close the task when you reply",
+    "auto_close_enabled_description": "Replying to a guest closes the task it belongs to, within about two minutes."
+  },
   "calendar": {
     "prev_month": "Previous month",
     "next_month": "Next month",
