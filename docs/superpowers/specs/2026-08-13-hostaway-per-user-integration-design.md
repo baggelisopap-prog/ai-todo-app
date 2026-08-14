@@ -36,10 +36,27 @@ explicitly.
 | `GET /v1/webhooks/unifiedWebhooks` lists webhooks with `id`, `url`, `isEnabled`, `events` | **Verified** — returned the account's four webhooks |
 | `message.received` is the only message event on offer | **Verified** — three unrelated integrations (Make, Zapier, GuestArrive) each enumerate the same five events, none for a sent message |
 | `cryptography==48.0.0` is already a declared dependency | **Verified** — `requirements.txt`, pulled in by pywebpush |
-| **POST and DELETE on `/v1/webhooks/unifiedWebhooks`** | **ASSUMED.** Never called. Task 1 of the plan is to confirm it with a throwaway webhook on the owner's account, deleted immediately — with the owner's explicit go-ahead |
+| **POST and DELETE on `/v1/webhooks/unifiedWebhooks`** | **Verified** 2026-08-14, by calling both against account 147809 with the owner's go-ahead. See below |
 
-If POST turns out not to exist, the fallback is §4.3 and the whole design still
-stands: the user pastes the URL into Hostaway themselves.
+### POST and DELETE, as they actually answered
+
+Run once against the live account: a throwaway webhook at
+`https://example.invalid/throwaway-probe` with `isEnabled: 0`, deleted in the
+same script. A follow-up listing showed only the four known webhooks (29491,
+29493, 33255, 34986), so nothing was left behind.
+
+- `POST /v1/webhooks/unifiedWebhooks` with
+  `{"url": ..., "isEnabled": 0, "events": ["message.received"]}` →
+  **HTTP 200**, body `{"status": "success", "result": {...}}`.
+  **The new id arrives at `result.id`** (an int — `35624` on the probe).
+  The result echoes `isEnabled`, `url`, `events`, plus `login`, `password`
+  and `alertingEmailAddress`, all `null`.
+- `DELETE /v1/webhooks/unifiedWebhooks/{id}` → **HTTP 200**,
+  body `{"status": "success", "result": []}` — an empty list, not the
+  deleted object. Success is the status code and `status`, never a body field.
+
+Both verbs exist, so §4.3 stays the fallback it was written as, not the path
+taken: the app registers the webhook itself.
 
 ## §1 Data model — `hostaway_connections`
 
