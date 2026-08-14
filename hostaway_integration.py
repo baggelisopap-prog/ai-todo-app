@@ -5,73 +5,76 @@ import requests
 from google import genai
 from google.genai import types
 from pydantic import ValidationError, BaseModel
-from typing import Literal
+from typing import Literal, NamedTuple, Optional
 from dotenv import load_dotenv
 
+import crypto
 import token_tracker
 
 load_dotenv()
-
-HOSTAWAY_CLIENT_ID = os.getenv("HOSTAWAY_CLIENT_ID")
-HOSTAWAY_CLIENT_SECRET = os.getenv("HOSTAWAY_CLIENT_SECRET")
 
 google_api_key = os.getenv("GOOGLE_API_KEY")
 client = genai.Client(api_key=google_api_key)
 
 HOSTAWAY_CLASSIFICATION_MODEL = "gemini-3.5-flash"  # deliberately the higher-accuracy model, not the cheaper agent model — misclassifying a real guest emergency has real business consequences
 
-_cached_access_token = None
-
-
-def get_user_id_for_hostaway_account(hostaway_account_id) -> str:
+class HostawayCredentials(NamedTuple):
     """
-    Maps a Hostaway accountId to the app user_id who owns that Hostaway
-    connection. Currently hardcoded to the app owner's own user_id, since
-    only they have Hostaway connected today. When multiple users each
-    connect their own Hostaway account in the future, this is the ONLY
-    function that needs to change (replace the hardcoded return with a
-    real lookup against a future hostaway_accounts mapping table) — every
-    other Hostaway-related code path (webhook handler, escalation checker)
-    calls this function and needs no changes when that day comes.
+    One account's API identity. account_id IS the client_id — verified
+    2026-08-13: HOSTAWAY_CLIENT_ID, the accountId in every webhook payload,
+    and the id the user reads off their Hostaway API settings page are all
+    147809.
     """
-    return "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7"
+    account_id: str
+    client_secret: str
 
 
-def _get_hostaway_access_token() -> str:
-    """
-    Gets (and caches in-process) an OAuth2 access token for calling back
-    into Hostaway's API. Tokens are valid 24 months per Hostaway's docs,
-    so simple in-memory caching (re-fetched on process restart/redeploy)
-    is sufficient — no need for persistent storage given this app's scale.
-    """
-    global _cached_access_token
-    if _cached_access_token:
-        return _cached_access_token
+def credentials_from_connection(connection: dict) -> HostawayCredentials:
+    return HostawayCredentials(
+        account_id=str(connection["account_id"]),
+        client_secret=crypto.decrypt_secret(connection["client_secret_encrypted"]),
+    )
 
-    if not HOSTAWAY_CLIENT_ID or not HOSTAWAY_CLIENT_SECRET:
-        raise RuntimeError("HOSTAWAY_CLIENT_ID / HOSTAWAY_CLIENT_SECRET not configured")
+
+# Tokens are valid 24 months per Hostaway's docs, so an in-process dict
+# re-filled on restart is enough. Keyed by account: the previous single
+# module global was the hardcoded single user in another form, and with two
+# accounts it would have handed one user's token to the other's requests.
+_token_cache: dict[str, str] = {}
+
+
+def clear_token_cache() -> None:
+    """For tests, and for a reconnect after the API key was rotated."""
+    _token_cache.clear()
+
+
+def get_access_token(credentials: HostawayCredentials) -> str:
+    cached = _token_cache.get(credentials.account_id)
+    if cached:
+        return cached
 
     response = requests.post(
         "https://api.hostaway.com/v1/accessTokens",
         data={
             "grant_type": "client_credentials",
-            "client_id": HOSTAWAY_CLIENT_ID,
-            "client_secret": HOSTAWAY_CLIENT_SECRET,
+            "client_id": credentials.account_id,
+            "client_secret": credentials.client_secret,
             "scope": "general",
         },
         headers={"Content-type": "application/x-www-form-urlencoded", "Cache-control": "no-cache"},
         timeout=10,
     )
     response.raise_for_status()
-    _cached_access_token = response.json()["access_token"]
-    logging.info("[hostaway] Obtained new access token")
-    return _cached_access_token
+    token = response.json()["access_token"]
+    _token_cache[credentials.account_id] = token
+    logging.info(f"[hostaway] Obtained access token for account {credentials.account_id}")
+    return token
 
 
-def get_listing_name(listing_map_id: int) -> str:
+def get_listing_name(listing_map_id: int, credentials: HostawayCredentials) -> str:
     """Fetches the listing's name from Hostaway. Confirmed field: 'name' (verified against Hostaway's documented Listing object schema)."""
     try:
-        token = _get_hostaway_access_token()
+        token = get_access_token(credentials)
         response = requests.get(
             f"https://api.hostaway.com/v1/listings/{listing_map_id}",
             headers={"Authorization": f"Bearer {token}"},
@@ -85,7 +88,7 @@ def get_listing_name(listing_map_id: int) -> str:
         return "Άγνωστο property"
 
 
-def get_reservation_details(reservation_id: int) -> dict:
+def get_reservation_details(reservation_id: int, credentials: HostawayCredentials) -> dict:
     """
     Fetches guest name and stay dates from Hostaway's reservation object.
 
@@ -95,7 +98,7 @@ def get_reservation_details(reservation_id: int) -> dict:
     naming pattern and had never been confirmed — they were right.
     """
     try:
-        token = _get_hostaway_access_token()
+        token = get_access_token(credentials)
         response = requests.get(
             f"https://api.hostaway.com/v1/reservations/{reservation_id}",
             headers={"Authorization": f"Bearer {token}"},
@@ -114,7 +117,7 @@ def get_reservation_details(reservation_id: int) -> dict:
         return {"guest_name": "Πελάτης", "arrival_date": "?", "departure_date": "?"}
 
 
-def get_conversation_messages(conversation_id) -> list[dict]:
+def get_conversation_messages(conversation_id, credentials: HostawayCredentials) -> list[dict]:
     """
     Every message in one Hostaway conversation, newest first.
 
@@ -137,7 +140,7 @@ def get_conversation_messages(conversation_id) -> list[dict]:
     hand, and the scheduler tick that calls this must not die on it.
     """
     try:
-        token = _get_hostaway_access_token()
+        token = get_access_token(credentials)
         response = requests.get(
             f"https://api.hostaway.com/v1/conversations/{conversation_id}/messages",
             headers={"Authorization": f"Bearer {token}"},
