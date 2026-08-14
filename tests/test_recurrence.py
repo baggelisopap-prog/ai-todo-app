@@ -61,6 +61,7 @@ def test_an_empty_weekday_set_generates_nothing():
 def test_a_backwards_window_generates_nothing():
     assert _weekly([1, 2, 3, 4, 5], date(2026, 8, 23), date(2026, 8, 17)) == []
 
+
 def _monthly(month_day, window_start, window_end, starts_on=None, ends_on=None):
     return recurrence.occurrences_between(
         freq=recurrence.MONTHLY,

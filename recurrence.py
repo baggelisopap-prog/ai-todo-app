@@ -1,5 +1,5 @@
-﻿"""
-Pure date logic for recurring tasks. No I/O, no clock reads, no AI β€” every
+"""
+Pure date logic for recurring tasks. No I/O, no clock reads, no AI — every
 function here is arithmetic over values it was handed, which is why "which
 days does this rule produce?" can be tested exhaustively without a database.
 
@@ -47,7 +47,6 @@ def parse_date(value: Optional[str]) -> Optional[date]:
 
 def format_date(value: date) -> str:
     return value.strftime(_DATE_FORMAT)
-
 
 
 def clamp_month_day(year: int, month: int, month_day: int) -> date:
@@ -125,4 +124,3 @@ def _weekly_occurrences(weekdays: Optional[list[int]], first: date, last: date) 
             out.append(cursor)
         cursor += timedelta(days=1)
     return out
-
