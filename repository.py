@@ -619,6 +619,87 @@ def update_hostaway_thread_fields(user_id: str, record_id: str, updates: dict) -
     supabase.table("tasks").update(updates).eq("id", record_id).eq("user_id", user_id).execute()
 
 
+# --- Hostaway connections (per-user credentials and switches) ---
+# account_id is NOT unique: fifteen staff share the owner's Hostaway account,
+# and each colleague who uses this app connects that same account under their
+# own user_id. See the 2026-08-13 design, §1.2.
+
+
+def get_hostaway_connections_for_account(account_id: str) -> list[dict]:
+    """
+    Every app user connected to one Hostaway account.
+
+    Called on every inbound webhook, which must answer 200 whatever happens —
+    so a lookup failure returns [] and the message is dropped with a log line,
+    rather than raising into a 500 that Hostaway would retry.
+    """
+    try:
+        response = (
+            supabase.table("hostaway_connections")
+            .select("*")
+            .eq("account_id", str(account_id))
+            .execute()
+        )
+        return response.data or []
+    except Exception as e:
+        logger.error(f"Failed to load Hostaway connections for account {account_id}: {e}")
+        return []
+
+
+def get_hostaway_connection(user_id: str) -> Optional[dict]:
+    """This user's Hostaway connection, or None. Never raises."""
+    try:
+        response = (
+            supabase.table("hostaway_connections")
+            .select("*")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        logger.error(f"Failed to load Hostaway connection for user {user_id}: {e}")
+        return None
+
+
+def upsert_hostaway_connection(
+    user_id: str, account_id: str, client_secret_encrypted: str, webhook_id: Optional[int]
+) -> dict:
+    """
+    Writes this user's connection, replacing any existing one.
+
+    Upsert rather than insert so reconnecting — after rotating the API key,
+    say — is the same operation as connecting, instead of a unique-violation
+    the user would see as a crash.
+    """
+    response = (
+        supabase.table("hostaway_connections")
+        .upsert(
+            {
+                "user_id": user_id,
+                "account_id": str(account_id),
+                "client_secret_encrypted": client_secret_encrypted,
+                "webhook_id": webhook_id,
+            },
+            on_conflict="user_id",
+        )
+        .execute()
+    )
+    return (response.data or [{}])[0]
+
+
+def update_hostaway_connection(user_id: str, updates: dict) -> None:
+    """Changes the switches. A no-op when there is nothing to change."""
+    if not updates:
+        return
+    supabase.table("hostaway_connections").update(updates).eq("user_id", user_id).execute()
+
+
+def delete_hostaway_connection(user_id: str) -> None:
+    supabase.table("hostaway_connections").delete().eq("user_id", user_id).execute()
+
+
 def get_tasks_for_date(
     user_id: str, date_str: str, tasks: Optional[list[TaskRecord]] = None
 ) -> list[TaskRecord]:
