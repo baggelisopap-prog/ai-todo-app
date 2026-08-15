@@ -152,6 +152,9 @@ class AirtableTaskRepository:
             hostaway_message_count=_get(row, "hostaway_message_count", 0),
             hostaway_answered_at=row.get("hostaway_answered_at"),
             hostaway_thread=row.get("hostaway_thread"),
+            recurrence_rule_id=row.get("recurrence_rule_id"),
+            occurrence_date=row.get("occurrence_date"),
+            missed_at=row.get("missed_at"),
         )
 
     def save_task(self, user_id: str, task: TaskRecord) -> TaskRecord:
@@ -1222,3 +1225,72 @@ def update_recurrence_rule(user_id: str, rule_id: str, updates: dict) -> Optiona
 
 def delete_recurrence_rule(user_id: str, rule_id: str) -> None:
     supabase.table("recurrence_rules").delete().eq("id", rule_id).eq("user_id", user_id).execute()
+
+
+def get_occurrence_dates(user_id: str, rule_id: str, from_date: str, to_date: str) -> set[str]:
+    """
+    Which occurrence dates this rule already has inside the window.
+
+    A set, because the generator's job is a set difference: produce the dates
+    the rule wants, subtract the ones already on disk, insert the rest. Windowed
+    rather than fetching every date ever, so a rule with a year of history
+    stays as cheap on day 400 as on day 1.
+    """
+    response = (
+        supabase.table("tasks")
+        .select("occurrence_date")
+        .eq("user_id", user_id)
+        .eq("recurrence_rule_id", rule_id)
+        .gte("occurrence_date", from_date)
+        .lte("occurrence_date", to_date)
+        .execute()
+    )
+    return {row["occurrence_date"] for row in (response.data or []) if row.get("occurrence_date")}
+
+
+def get_open_occurrences(user_id: str, rule_id: str) -> list[dict]:
+    """
+    This rule's occurrences that are still open — not completed, not rejected,
+    not already missed. Returns id/occurrence_date/due_date only: the callers
+    (regeneration and deletion) need to decide and then delete by id, never to
+    reconstruct a whole TaskRecord.
+    """
+    response = (
+        supabase.table("tasks")
+        .select("id, occurrence_date, due_date")
+        .eq("user_id", user_id)
+        .eq("recurrence_rule_id", rule_id)
+        .eq("is_completed", False)
+        .eq("is_rejected", False)
+        .is_("missed_at", "null")
+        .execute()
+    )
+    return response.data or []
+
+
+def delete_tasks_by_ids(user_id: str, task_ids: list[str]) -> int:
+    """Hard-deletes the given tasks, scoped to the user. Returns how many went."""
+    if not task_ids:
+        return 0
+    response = (
+        supabase.table("tasks")
+        .delete()
+        .eq("user_id", user_id)
+        .in_("id", task_ids)
+        .execute()
+    )
+    return len(response.data or [])
+
+
+def mark_task_missed(user_id: str, record_id: str, missed_at: str) -> None:
+    """
+    Stamps missed_at and nothing else.
+
+    Deliberately NOT is_rejected, even though that flag already hides a task
+    everywhere: is_rejected means "the user rejected the AI's suggestion" and
+    is preserved to feed the learning loop, so filling it with auto-closed
+    occurrences the AI never proposed would corrupt that signal.
+    """
+    supabase.table("tasks").update({"missed_at": missed_at}).eq("id", record_id).eq(
+        "user_id", user_id
+    ).execute()

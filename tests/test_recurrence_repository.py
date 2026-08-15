@@ -35,6 +35,22 @@ class _FakeQuery:
         self.sink["order"] = (col, kw)
         return self
 
+    def gte(self, col, val):
+        self.sink.setdefault("gte", []).append((col, val))
+        return self
+
+    def lte(self, col, val):
+        self.sink.setdefault("lte", []).append((col, val))
+        return self
+
+    def is_(self, col, val):
+        self.sink["is_"] = (col, val)
+        return self
+
+    def in_(self, col, vals):
+        self.sink["in_"] = (col, vals)
+        return self
+
     def execute(self):
         return type("R", (), {"data": self.rows})()
 
@@ -154,3 +170,54 @@ def test_deleting_a_rule_is_scoped_to_the_user(monkeypatch):
     assert fake.calls["delete"] is True
     assert ("user_id", "user-1") in fake.calls["eq"]
     assert ("id", "rule-1") in fake.calls["eq"]
+
+
+def test_occurrence_dates_come_back_as_a_set_for_the_difference(monkeypatch):
+    fake = _FakeSupabase([{"occurrence_date": "2026-08-17"}, {"occurrence_date": "2026-08-18"}])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    got = repository.get_occurrence_dates("user-1", "rule-1", "2026-08-17", "2026-08-31")
+
+    assert got == {"2026-08-17", "2026-08-18"}
+    assert ("user_id", "user-1") in fake.calls["eq"]
+    assert ("recurrence_rule_id", "rule-1") in fake.calls["eq"]
+
+
+def test_open_occurrences_exclude_completed_rejected_and_already_missed(monkeypatch):
+    """The filtering is in the query, so a rule with a year of history stays cheap."""
+    fake = _FakeSupabase([
+        {"id": "t1", "occurrence_date": "2026-08-17", "due_date": "2026-08-17"},
+    ])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    got = repository.get_open_occurrences("user-1", "rule-1")
+
+    assert got == [{"id": "t1", "occurrence_date": "2026-08-17", "due_date": "2026-08-17"}]
+    assert ("is_completed", False) in fake.calls["eq"]
+    assert ("is_rejected", False) in fake.calls["eq"]
+    assert fake.calls["is_"] == ("missed_at", "null")
+
+
+def test_deleting_by_ids_is_scoped_and_skips_an_empty_list(monkeypatch):
+    fake = _FakeSupabase([{"id": "t1"}, {"id": "t2"}])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    assert repository.delete_tasks_by_ids("user-1", ["t1", "t2"]) == 2
+    assert fake.calls["in_"] == ("id", ["t1", "t2"])
+    assert ("user_id", "user-1") in fake.calls["eq"]
+
+    empty = _FakeSupabase([])
+    monkeypatch.setattr(repository, "supabase", empty)
+    assert repository.delete_tasks_by_ids("user-1", []) == 0
+    assert empty.calls == {}, "an empty list must not reach the database"
+
+
+def test_marking_missed_writes_only_missed_at(monkeypatch):
+    fake = _FakeSupabase([{"id": "t1"}])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    repository.mark_task_missed("user-1", "t1", "2026-08-19T06:00:00+03:00")
+
+    assert fake.calls["update"] == {"missed_at": "2026-08-19T06:00:00+03:00"}
+    assert ("user_id", "user-1") in fake.calls["eq"]
+    assert ("id", "t1") in fake.calls["eq"]
