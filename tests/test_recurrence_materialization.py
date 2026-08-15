@@ -127,6 +127,29 @@ def test_a_rule_already_materialized_far_enough_does_no_work(monkeypatch):
     assert seen["rule_updates"] == []
 
 
+def test_the_short_circuit_compares_against_the_window_end_not_the_start(monkeypatch):
+    """
+    Pins the direction of the services.py comparison: it must be
+    already_through >= window_end, not window_start. On 2026-09-01 the
+    window is 09-01..09-15; a rule materialized through 09-10 sits INSIDE
+    that window -- not yet through the end of it. The correct comparison
+    (>= window_end) says "not done yet" and keeps generating out to 09-15.
+    A version that compared against window_start instead would see 09-10 >=
+    09-01 and call the rule already materialised, producing nothing and
+    never advancing materialized_through -- which is exactly how the horizon
+    freezes and shrinks a day at a time until the feature silently stops
+    producing after about two weeks, with no error, no log, and a green
+    suite throughout.
+    """
+    svc, seen = _wire(monkeypatch)
+
+    created = svc.materialize_recurrence_rule(
+        "user-1", _rule(materialized_through="2026-09-10"), date(2026, 9, 1))
+
+    assert created > 0
+    assert seen["rule_updates"] == [{"materialized_through": "2026-09-15"}]
+
+
 # --- regeneration -----------------------------------------------------------
 
 def test_regeneration_drops_open_future_occurrences_only(monkeypatch):
@@ -136,9 +159,13 @@ def test_regeneration_drops_open_future_occurrences_only(monkeypatch):
         {"id": "future", "occurrence_date": "2026-08-18", "due_date": "2026-08-18"},
     ])
 
-    svc.regenerate_recurrence_rule("user-1", _rule(), date(2026, 8, 17))
+    svc.regenerate_recurrence_rule(
+        "user-1", _rule(materialized_through="2026-08-31"), date(2026, 8, 17))
 
     assert seen["deleted"] == ["future"], "today's may already be half-done or have rung"
+    assert seen["rule_updates"][0] == {"materialized_through": None}, \
+        "the horizon must be cleared before recomputing, or an edited rule " \
+        "short-circuits out of regenerating for up to 14 days"
 
 
 def test_regeneration_spares_an_occurrence_the_user_moved_by_hand(monkeypatch):
