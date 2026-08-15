@@ -43,8 +43,14 @@ create table if not exists recurrence_rules (
 
   -- An incoherent rule cannot be stored, so the generator never has to defend
   -- against one at four in the morning.
+  --
+  -- cardinality(), not array_length(): array_length('{}',1) is NULL, and a
+  -- CHECK only rejects on an explicit FALSE, so the empty-weekday rule this
+  -- constraint exists to forbid would have passed straight through.
   constraint recurrence_rules_shape check (
-    (freq = 'weekly'  and weekdays is not null and array_length(weekdays, 1) > 0)
+    (freq = 'weekly'  and weekdays is not null
+                      and cardinality(weekdays) > 0
+                      and weekdays <@ array[1,2,3,4,5,6,7])
     or
     (freq = 'monthly' and month_day is not null
                       and (month_day = -1 or (month_day >= 1 and month_day <= 31)))
