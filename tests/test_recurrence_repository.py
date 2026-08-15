@@ -122,14 +122,17 @@ def test_getting_a_missing_rule_returns_none(monkeypatch):
     assert repository.get_recurrence_rule("user-1", "nope") is None
 
 
-def test_updating_a_rule_is_scoped_and_returns_the_new_state(monkeypatch):
+def test_updating_a_rule_filters_on_both_id_and_user(monkeypatch):
     fake = _FakeSupabase([_row(is_active=False)])
     monkeypatch.setattr(repository, "supabase", fake)
 
     got = repository.update_recurrence_rule("user-1", "rule-1", {"is_active": False})
 
     assert fake.calls["update"] == {"is_active": False}
+    # Both filters, not just user_id: dropping the id filter alone would make
+    # one edit rewrite every rule this user owns.
     assert ("user_id", "user-1") in fake.calls["eq"]
+    assert ("id", "rule-1") in fake.calls["eq"]
     assert got.is_active is False
 
 
