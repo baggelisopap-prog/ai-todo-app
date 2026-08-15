@@ -310,6 +310,8 @@ class TaskService:
             hostaway_last_message_at=fields.get("hostaway_last_message_at"),
             hostaway_message_count=fields.get("hostaway_message_count", 0),
             hostaway_thread=fields.get("hostaway_thread"),
+            recurrence_rule_id=fields.get("recurrence_rule_id"),
+            occurrence_date=fields.get("occurrence_date"),
         )
         return self.repository.save_task(user_id, task)
 
