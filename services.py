@@ -3,16 +3,17 @@ import json
 import logging
 import os
 import tempfile
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 from pywebpush import webpush, WebPushException
-from models import SingleTask, TaskList, TaskRecord
+from models import RecurrenceRule, SingleTask, TaskList, TaskRecord
 from ai_engine import extract_tasks, extract_tasks_from_audio, extract_tasks_from_image
 from repository import AirtableTaskRepository
 import google_calendar
 import hostaway_integration
 import hostaway_threading
+import recurrence
 import repository
 
 logger = logging.getLogger(__name__)
@@ -472,6 +473,169 @@ class TaskService:
                 logger.error(f"Push failed for {sub.endpoint[:50]}...: {e}")
 
         return {"sent": sent, "failed": failed, "total": len(subscriptions)}
+
+    # =========================================================
+    # Recurring tasks (2026-08-15)
+    # =========================================================
+
+    def _occurrence_fields(self, rule: RecurrenceRule, occurrence: "date") -> dict:
+        """
+        The template, copied fresh for one day.
+
+        The checklist is copied with every item undone: this is a new day's
+        work, not a continuation of yesterday's. ai_suggested_* mirror the
+        rule's chosen values — the same thing the Google-event conversion in
+        repository.py does, and for the same reason: the columns are
+        non-nullable and no AI suggested anything here.
+        """
+        occurrence_str = recurrence.format_date(occurrence)
+        return {
+            "task_name": rule.task_name,
+            "description": rule.description,
+            "category": rule.category,
+            "priority": rule.priority,
+            "due_date": occurrence_str,
+            "due_time": rule.due_time,
+            "checklist": [{"text": item.text, "done": False} for item in (rule.checklist or [])],
+            "notify_enabled": rule.notify_enabled,
+            "recurrence_rule_id": rule.record_id,
+            "occurrence_date": occurrence_str,
+            "approval_status": True,
+        }
+
+    def materialize_recurrence_rule(self, user_id: str, rule: RecurrenceRule, today: "date") -> int:
+        """
+        Makes sure this rule's next fortnight exists as real task rows.
+
+        Idempotent by construction: it inserts the set difference between what
+        the rule wants and what is already on disk, and the UNIQUE constraint
+        on (recurrence_rule_id, occurrence_date) is the backstop if two ticks
+        ever overlap. Running it twice is a no-op, which matters because the
+        scheduler runs it every ~2 minutes.
+
+        Occurrences are created ALREADY APPROVED. The human approved the rule;
+        a Monday-to-Friday duty producing five Inbox items a week to approve
+        would make the feature unusable.
+        """
+        if not rule.is_active or not rule.approval_status or not rule.record_id:
+            return 0
+
+        window_start, window_end = recurrence.materialization_window(today)
+
+        # The cheap short-circuit: one field comparison, no query. Real work
+        # happens about once a day per rule, not every two minutes. Same
+        # pattern as daily_summary_last_sent_date.
+        already_through = recurrence.parse_date(rule.materialized_through)
+        if already_through is not None and already_through >= window_end:
+            return 0
+
+        wanted = recurrence.occurrences_between(
+            freq=rule.freq,
+            weekdays=rule.weekdays,
+            month_day=rule.month_day,
+            window_start=window_start,
+            window_end=window_end,
+            starts_on=recurrence.parse_date(rule.starts_on) or window_start,
+            ends_on=recurrence.parse_date(rule.ends_on),
+        )
+
+        existing = repository.get_occurrence_dates(
+            user_id,
+            rule.record_id,
+            recurrence.format_date(window_start),
+            recurrence.format_date(window_end),
+        )
+
+        created = 0
+        for occurrence in wanted:
+            if recurrence.format_date(occurrence) in existing:
+                continue
+            try:
+                self.create_task_manual(
+                    user_id, self._occurrence_fields(rule, occurrence), approval_status=True
+                )
+                created += 1
+            except Exception as e:
+                # A single day failing must not cost the rule its other
+                # thirteen, and must not cost the user the rest of their tick.
+                logger.error(
+                    f"[recurrence] Rule {rule.record_id} failed on {occurrence}: {e}"
+                )
+
+        repository.update_recurrence_rule(
+            user_id,
+            rule.record_id,
+            {"materialized_through": recurrence.format_date(window_end)},
+        )
+        return created
+
+    def regenerate_recurrence_rule(self, user_id: str, rule: RecurrenceRule, today: "date") -> int:
+        """
+        Applies a changed (or paused, or resumed) rule from TOMORROW on.
+
+        Today's occurrence is deliberately left alone: it may already be
+        half-done or have rung, and it is an ordinary task the user can edit
+        directly. Two other things survive: completed occurrences, and any
+        occurrence the user moved by hand (due_date no longer equals
+        occurrence_date) — deliberately shifting next Tuesday must not be
+        undone because the rule's time changed.
+        """
+        if not rule.record_id:
+            return 0
+
+        today_str = recurrence.format_date(today)
+        doomed = [
+            row["id"]
+            for row in repository.get_open_occurrences(user_id, rule.record_id)
+            if (row.get("occurrence_date") or "") > today_str
+            and row.get("due_date") == row.get("occurrence_date")
+        ]
+        repository.delete_tasks_by_ids(user_id, doomed)
+
+        # The horizon must be recomputed from scratch, so the short-circuit is
+        # cleared first — otherwise the rule would look already-materialised.
+        repository.update_recurrence_rule(user_id, rule.record_id, {"materialized_through": None})
+        rule.materialized_through = None
+        return self.materialize_recurrence_rule(user_id, rule, today)
+
+    def close_missed_occurrences(
+        self, user_id: str, user_tasks: list[TaskRecord], today: "date", rules_by_id: dict
+    ) -> int:
+        """
+        Stamps missed_at on occurrences that outlived their grace.
+
+        Only recurrence occurrences forget themselves — an ordinary overdue
+        task is the user's business and stays until they deal with it. An
+        orphaned occurrence (its rule deleted, so ON DELETE SET NULL cleared
+        the link) is an ordinary task too, and is left alone.
+        """
+        closed = 0
+        now_iso = datetime.now(ZoneInfo("Europe/Athens")).isoformat()
+
+        for task in user_tasks:
+            if not task.recurrence_rule_id or not task.occurrence_date:
+                continue
+            if task.is_completed or task.is_rejected or task.missed_at:
+                continue
+
+            rule = rules_by_id.get(task.recurrence_rule_id)
+            if rule is None:
+                continue
+
+            occurrence = recurrence.parse_date(task.occurrence_date)
+            if occurrence is None:
+                continue
+
+            if recurrence.is_missed(
+                occurrence_date=occurrence, today=today, grace_days=rule.grace_days
+            ):
+                try:
+                    repository.mark_task_missed(user_id, task.record_id, now_iso)
+                    closed += 1
+                except Exception as e:
+                    logger.error(f"[recurrence] Could not close {task.record_id}: {e}")
+
+        return closed
 
     def run_notification_scheduler(self) -> dict:
         """
