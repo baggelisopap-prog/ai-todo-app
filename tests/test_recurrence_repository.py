@@ -2,6 +2,8 @@
 import repository
 from models import RecurrenceRule
 
+_task_repo = repository._get_shared_tasks_repo()
+
 
 class _FakeQuery:
     def __init__(self, sink, rows):
@@ -221,3 +223,30 @@ def test_marking_missed_writes_only_missed_at(monkeypatch):
     assert fake.calls["update"] == {"missed_at": "2026-08-19T06:00:00+03:00"}
     assert ("user_id", "user-1") in fake.calls["eq"]
     assert ("id", "t1") in fake.calls["eq"]
+
+
+def test_the_recurrence_columns_are_read_back_off_a_task_row():
+    """
+    Without the three lines in _supabase_row_to_task these come back None,
+    every later task reads None for recurrence_rule_id, and the feature is
+    inert while the whole suite stays green. This test is the tripwire.
+    """
+    row = {
+        "id": "task-1",
+        "task_name": "Χάπι",
+        "description": "",
+        "category": "Personal",
+        "priority": "P2",
+        "checklist": [],
+        "ai_suggested_category": "Personal",
+        "ai_suggested_priority": "P2",
+        "recurrence_rule_id": "rule-1",
+        "occurrence_date": "2026-08-17",
+        "missed_at": "2026-08-19T06:00:00+03:00",
+    }
+
+    task = _task_repo._supabase_row_to_task(row)
+
+    assert task.recurrence_rule_id == "rule-1"
+    assert task.occurrence_date == "2026-08-17"
+    assert task.missed_at == "2026-08-19T06:00:00+03:00"
