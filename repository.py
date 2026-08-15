@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
 from supabase import create_client
-from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings
+from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings, RecurrenceRule
 
 # Set up module-level logging
 logger = logging.getLogger(__name__)
@@ -1119,3 +1119,106 @@ def get_all_token_usage_logs(user_id: str) -> list[dict]:
         }
         for r in response.data
     ]
+
+
+# =========================================================
+# Recurrence rules (2026-08-15)
+# =========================================================
+
+def _supabase_row_to_rule(row: dict) -> RecurrenceRule:
+    """A recurrence_rules row as the Pydantic model. user_id is not surfaced,
+    the same ownership-is-a-data-layer-concern rule _supabase_row_to_task follows."""
+    checklist = []
+    for item in row.get("checklist") or []:
+        if isinstance(item, str):
+            checklist.append({"text": item, "done": False})
+        elif isinstance(item, dict) and "text" in item:
+            checklist.append({"text": item["text"], "done": item.get("done", False)})
+
+    return RecurrenceRule(
+        record_id=row.get("id"),
+        task_name=_get(row, "task_name", ""),
+        description=_get(row, "description", ""),
+        category=_get(row, "category", "Unknown"),
+        priority=_get(row, "priority", "P3"),
+        due_time=row.get("due_time"),
+        checklist=checklist,
+        freq=_get(row, "freq", "weekly"),
+        weekdays=row.get("weekdays"),
+        month_day=row.get("month_day"),
+        starts_on=_get(row, "starts_on", "1970-01-01"),
+        ends_on=row.get("ends_on"),
+        is_active=_get(row, "is_active", True),
+        approval_status=_get(row, "approval_status", True),
+        notify_enabled=_get(row, "notify_enabled", False),
+        calendar_sync_enabled=_get(row, "calendar_sync_enabled", False),
+        grace_days=_get(row, "grace_days", 1),
+        materialized_through=row.get("materialized_through"),
+        created_at=row.get("created_at"),
+    )
+
+
+def _rule_to_supabase_fields(rule: RecurrenceRule) -> dict:
+    """Strips the server-generated fields, same as _task_to_supabase_fields."""
+    fields = rule.model_dump()
+    fields.pop("record_id", None)
+    fields.pop("created_at", None)
+    fields["checklist"] = [
+        item if isinstance(item, dict) else item.model_dump()
+        for item in (rule.checklist or [])
+    ]
+    return fields
+
+
+def create_recurrence_rule(user_id: str, rule: RecurrenceRule) -> RecurrenceRule:
+    fields = _rule_to_supabase_fields(rule)
+    fields["user_id"] = user_id
+    response = supabase.table("recurrence_rules").insert(fields).execute()
+    row = (response.data or [{}])[0]
+    logger.info(f"[recurrence] Created rule {row.get('id')} for user {user_id}")
+    return _supabase_row_to_rule(row)
+
+
+def get_recurrence_rules(user_id: str) -> list[RecurrenceRule]:
+    response = (
+        supabase.table("recurrence_rules")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return [_supabase_row_to_rule(row) for row in (response.data or [])]
+
+
+def get_recurrence_rule(user_id: str, rule_id: str) -> Optional[RecurrenceRule]:
+    """Both filters are required. A rule id alone must never read another
+    user's rule — the backend uses the service key and bypasses RLS, so
+    app-code scoping is the primary protection."""
+    response = (
+        supabase.table("recurrence_rules")
+        .select("*")
+        .eq("id", rule_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return _supabase_row_to_rule(rows[0]) if rows else None
+
+
+def update_recurrence_rule(user_id: str, rule_id: str, updates: dict) -> Optional[RecurrenceRule]:
+    if not updates:
+        return get_recurrence_rule(user_id, rule_id)
+    response = (
+        supabase.table("recurrence_rules")
+        .update(updates)
+        .eq("id", rule_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    rows = response.data or []
+    return _supabase_row_to_rule(rows[0]) if rows else None
+
+
+def delete_recurrence_rule(user_id: str, rule_id: str) -> None:
+    supabase.table("recurrence_rules").delete().eq("id", rule_id).eq("user_id", user_id).execute()
