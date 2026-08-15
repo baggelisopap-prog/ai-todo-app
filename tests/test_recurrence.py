@@ -168,3 +168,70 @@ def test_parse_date_reads_the_stored_format_and_rejects_everything_else():
 def test_format_date_round_trips_through_parse_date():
     assert recurrence.format_date(date(2026, 8, 17)) == "2026-08-17"
     assert recurrence.parse_date(recurrence.format_date(date(2028, 2, 29))) == date(2028, 2, 29)
+
+
+import pytest
+from pydantic import ValidationError
+
+from models import RecurrenceRule, TaskRecord
+
+
+def _rule(**overrides):
+    base = dict(task_name="Χάπι", freq="weekly", weekdays=[1, 2, 3, 4, 5],
+                starts_on="2026-08-17")
+    base.update(overrides)
+    return RecurrenceRule(**base)
+
+
+def test_a_weekly_rule_needs_weekdays():
+    with pytest.raises(ValidationError):
+        _rule(weekdays=None)
+    with pytest.raises(ValidationError):
+        _rule(weekdays=[])
+
+
+def test_weekdays_must_be_iso_one_to_seven():
+    with pytest.raises(ValidationError):
+        _rule(weekdays=[0])
+    with pytest.raises(ValidationError):
+        _rule(weekdays=[8])
+    assert _rule(weekdays=[7]).weekdays == [7]
+
+
+def test_a_monthly_rule_needs_a_month_day():
+    with pytest.raises(ValidationError):
+        RecurrenceRule(task_name="ΦΠΑ", freq="monthly", starts_on="2026-08-17")
+    ok = RecurrenceRule(task_name="ΦΠΑ", freq="monthly", month_day=-1, starts_on="2026-08-17")
+    assert ok.month_day == -1
+
+
+def test_a_month_day_out_of_range_is_refused():
+    with pytest.raises(ValidationError):
+        RecurrenceRule(task_name="ΦΠΑ", freq="monthly", month_day=32, starts_on="2026-08-17")
+    with pytest.raises(ValidationError):
+        RecurrenceRule(task_name="ΦΠΑ", freq="monthly", month_day=0, starts_on="2026-08-17")
+
+
+def test_hostaway_is_not_a_category_a_human_can_choose():
+    """That category belongs to the integration and its escalation logic."""
+    with pytest.raises(ValidationError):
+        _rule(category="Hostaway")
+
+
+def test_dates_and_times_are_validated_like_everywhere_else():
+    with pytest.raises(ValidationError):
+        _rule(starts_on="17/08/2026")
+    with pytest.raises(ValidationError):
+        _rule(due_time="7pm")
+    assert _rule(due_time="19:00").due_time == "19:00"
+
+
+def test_a_rule_defaults_to_active_approved_and_one_day_of_grace():
+    r = _rule()
+    assert (r.is_active, r.approval_status, r.grace_days) == (True, True, 1)
+
+
+def test_task_record_carries_the_three_new_fields():
+    t = TaskRecord(task_name="x", description="", category="Personal", priority="P3",
+                   ai_suggested_category="Personal", ai_suggested_priority="P3")
+    assert (t.recurrence_rule_id, t.occurrence_date, t.missed_at) == (None, None, None)

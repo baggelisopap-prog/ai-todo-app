@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, Literal
 
 
@@ -94,6 +94,15 @@ class TaskRecord(SingleTask):
     hostaway_answered_at: Optional[str] = None
     hostaway_thread: Optional[str] = None
 
+    # Recurrence (2026-08-15). recurrence_rule_id is which rule produced this
+    # row; occurrence_date is WHICH occurrence it is and never changes, even
+    # when the user drags the task to another day — see DATABASE_SCHEMA.md for
+    # why keying on due_date instead would duplicate a task on every reschedule.
+    # missed_at is set when an occurrence outlived its grace and closed itself.
+    recurrence_rule_id: Optional[str] = None
+    occurrence_date: Optional[str] = None
+    missed_at: Optional[str] = None
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str
@@ -121,3 +130,83 @@ class AppSettings(BaseModel):
     daily_summary_last_sent_date: str = ""
     calendar_sync_all_enabled: bool = False
     calendar_show_events: bool = True
+
+
+class RecurrenceRule(BaseModel):
+    """
+    A standing commitment: this task, on these days, until further notice.
+
+    The occurrences it produces are ORDINARY TaskRecords — that is the whole
+    design. See docs/superpowers/specs/2026-08-15-recurring-tasks-design.md.
+    """
+    record_id: Optional[str] = None
+
+    # The template copied into every occurrence.
+    task_name: str = Field(max_length=80)
+    description: str = ""
+    # Hostaway is deliberately absent: that category is owned by the
+    # integration and its escalation intervals, and a hand-made recurrence
+    # must not be able to enter it.
+    category: Literal["Business", "Personal", "Unknown"] = "Unknown"
+    priority: Literal["P1", "P2", "P3"] = "P3"
+    due_time: Optional[str] = None
+    checklist: list[ChecklistItem] = Field(default_factory=list)
+
+    # The rule. weekdays is ISO: 1 = Monday .. 7 = Sunday.
+    freq: Literal["weekly", "monthly"]
+    weekdays: Optional[list[int]] = None
+    # -1 means "the last day of the month" — a different request from "the
+    # 31st", which clamps to the last day only in months that are shorter.
+    month_day: Optional[int] = None
+
+    starts_on: str
+    ends_on: Optional[str] = None
+    is_active: bool = True
+    approval_status: bool = True
+
+    notify_enabled: bool = False
+    calendar_sync_enabled: bool = False
+
+    grace_days: int = 1
+    materialized_through: Optional[str] = None
+    created_at: Optional[str] = None
+
+    @field_validator("starts_on", "ends_on")
+    @classmethod
+    def validate_dates(cls, v):
+        if v is None:
+            return v
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("dates must be YYYY-MM-DD")
+        return v
+
+    @field_validator("due_time")
+    @classmethod
+    def validate_due_time(cls, v):
+        if v is None:
+            return v
+        try:
+            datetime.strptime(v, "%H:%M")
+        except ValueError:
+            raise ValueError("due_time must be HH:MM 24-hour format")
+        return v
+
+    @model_validator(mode="after")
+    def validate_shape(self):
+        """
+        Mirrors the recurrence_rules_shape CHECK constraint. Both exist on
+        purpose: the database is the guarantee, this is the error message.
+        """
+        if self.freq == "weekly":
+            if not self.weekdays:
+                raise ValueError("a weekly rule needs at least one weekday")
+            if any(d < 1 or d > 7 for d in self.weekdays):
+                raise ValueError("weekdays are ISO 1 (Monday) to 7 (Sunday)")
+        else:
+            if self.month_day is None:
+                raise ValueError("a monthly rule needs a month_day")
+            if self.month_day != -1 and not (1 <= self.month_day <= 31):
+                raise ValueError("month_day must be 1-31, or -1 for the last day")
+        return self
