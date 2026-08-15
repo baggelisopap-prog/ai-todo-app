@@ -124,3 +124,35 @@ def _weekly_occurrences(weekdays: Optional[list[int]], first: date, last: date) 
             out.append(cursor)
         cursor += timedelta(days=1)
     return out
+
+
+def is_missed(
+    *,
+    occurrence_date: date,
+    today: date,
+    grace_days: int = DEFAULT_GRACE_DAYS,
+) -> bool:
+    """
+    True when this occurrence has outlived its grace and should close itself.
+
+    With grace_days = 1: Monday's occurrence is NOT missed on Tuesday (it is
+    merely overdue, and still on the list), and IS missed on Wednesday. The
+    comparison is strictly greater-than, which is what makes the day of grace
+    a full day rather than a partial one.
+    """
+    return (today - occurrence_date).days > grace_days
+
+
+def materialization_window(
+    today: date,
+    horizon_days: int = MATERIALIZATION_HORIZON_DAYS,
+) -> tuple[date, date]:
+    """
+    The span real rows must exist for, both ends inclusive.
+
+    It starts at today and NEVER in the past. A rule created at 18:00 whose
+    time is 09:00 still gets today's occurrence, arriving already overdue —
+    deliberately, because the day was part of what the user asked for and
+    skipping it would be the app deciding the day is a write-off.
+    """
+    return today, today + timedelta(days=horizon_days)

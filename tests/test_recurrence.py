@@ -114,3 +114,57 @@ def test_clamp_month_day_directly():
     assert recurrence.clamp_month_day(2028, 2, 31) == date(2028, 2, 29)
     assert recurrence.clamp_month_day(2026, 8, 15) == date(2026, 8, 15)
     assert recurrence.clamp_month_day(2026, 9, recurrence.LAST_DAY_OF_MONTH) == date(2026, 9, 30)
+
+
+MONDAY = date(2026, 8, 17)
+TUESDAY = date(2026, 8, 18)
+WEDNESDAY = date(2026, 8, 19)
+
+
+def test_todays_occurrence_is_never_missed():
+    assert recurrence.is_missed(occurrence_date=MONDAY, today=MONDAY) is False
+
+
+def test_yesterdays_occurrence_survives_one_day_of_grace():
+    """Tuesday: Monday's pill is still on the list, overdue."""
+    assert recurrence.is_missed(occurrence_date=MONDAY, today=TUESDAY) is False
+
+
+def test_the_day_after_grace_it_is_missed():
+    """Wednesday: Monday's leaves by itself."""
+    assert recurrence.is_missed(occurrence_date=MONDAY, today=WEDNESDAY) is True
+
+
+def test_zero_grace_misses_it_the_very_next_day():
+    assert recurrence.is_missed(occurrence_date=MONDAY, today=MONDAY, grace_days=0) is False
+    assert recurrence.is_missed(occurrence_date=MONDAY, today=TUESDAY, grace_days=0) is True
+
+
+def test_a_future_occurrence_is_not_missed():
+    assert recurrence.is_missed(occurrence_date=WEDNESDAY, today=MONDAY) is False
+
+
+def test_the_window_starts_today_and_never_in_the_past():
+    start, end = recurrence.materialization_window(MONDAY)
+    assert start == MONDAY
+    assert end == date(2026, 8, 31)  # 17 + 14
+
+
+def test_the_window_horizon_is_configurable():
+    start, end = recurrence.materialization_window(MONDAY, horizon_days=2)
+    assert (start, end) == (MONDAY, date(2026, 8, 19))
+
+
+def test_parse_date_reads_the_stored_format_and_rejects_everything_else():
+    assert recurrence.parse_date("2026-08-17") == date(2026, 8, 17)
+    # Every unusable input is None rather than a raise: this parses values that
+    # came out of a TEXT column, and a scheduler tick must not die on one bad row.
+    assert recurrence.parse_date(None) is None
+    assert recurrence.parse_date("") is None
+    assert recurrence.parse_date("17/08/2026") is None
+    assert recurrence.parse_date("not a date") is None
+
+
+def test_format_date_round_trips_through_parse_date():
+    assert recurrence.format_date(date(2026, 8, 17)) == "2026-08-17"
+    assert recurrence.parse_date(recurrence.format_date(date(2028, 2, 29))) == date(2028, 2, 29)
