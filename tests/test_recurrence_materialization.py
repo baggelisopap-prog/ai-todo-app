@@ -376,3 +376,61 @@ def test_the_agent_does_not_see_a_cancelled_occurrence():
 def test_a_cancelled_occurrence_stays_invisible_even_when_completed_are_included():
     cancelled = _occurrence("gone", "2026-08-17", cancelled_at="2026-08-17T09:00:00+03:00")
     assert agent_tools.is_open_task(cancelled, include_completed=True) is False
+
+
+# --- delete routing -----------------------------------------------------------
+
+class _FakeTaskRepo:
+    """Stands in for AirtableTaskRepository: only the two methods
+    services.TaskService.delete_task calls through self.repository."""
+
+    def __init__(self, task):
+        self._task = task
+        self.delete_calls = []
+
+    def get_task(self, user_id, record_id):
+        return self._task
+
+    def delete_task(self, user_id, record_id):
+        self.delete_calls.append((user_id, record_id))
+        return True
+
+
+def _wire_delete(monkeypatch, task):
+    seen = {"cancelled": []}
+    monkeypatch.setattr(services.repository, "get_task_calendar_fields", lambda u, r: None)
+    monkeypatch.setattr(services.repository, "cancel_task",
+                        lambda u, r, at: seen["cancelled"].append((u, r, at)))
+
+    svc = services.TaskService.__new__(services.TaskService)
+    fake_repo = _FakeTaskRepo(task)
+    svc.repository = fake_repo
+    return svc, fake_repo, seen
+
+
+def test_deleting_a_recurring_occurrence_cancels_instead_of_hard_deleting(monkeypatch):
+    """A hard delete would make the date go missing and the next ~2-minute
+    tick would recreate the task -- the exact bug this feature exists to fix."""
+    task = _occurrence("t1", "2026-08-17")
+    svc, fake_repo, seen = _wire_delete(monkeypatch, task)
+
+    svc.delete_task("user-1", "t1")
+
+    assert len(seen["cancelled"]) == 1
+    assert seen["cancelled"][0][:2] == ("user-1", "t1")
+    assert fake_repo.delete_calls == [], "a recurring occurrence must never be hard-deleted"
+
+
+def test_deleting_an_ordinary_task_still_hard_deletes(monkeypatch):
+    """No recurrence_rule_id means no rule could ever resurrect it -- turning
+    every delete into a soft delete would mean the app never frees a row."""
+    ordinary = TaskRecord(task_name="plain", description="", category="Business",
+                          priority="P1", ai_suggested_category="Business",
+                          ai_suggested_priority="P1", approval_status=True,
+                          record_id="t2")
+    svc, fake_repo, seen = _wire_delete(monkeypatch, ordinary)
+
+    svc.delete_task("user-1", "t2")
+
+    assert fake_repo.delete_calls == [("user-1", "t2")]
+    assert seen["cancelled"] == [], "an ordinary task must never be soft-cancelled"

@@ -384,6 +384,13 @@ class TaskService:
         """
         Permanently deletes a task, scoped to user_id. Raises on failure.
 
+        A recurring occurrence (non-null recurrence_rule_id) is the one
+        exception: it is cancelled instead of hard-deleted, because
+        get_occurrence_dates skips any occurrence_date that already exists,
+        so removing the row would make the generator recreate it on the next
+        ~2-minute tick. An ordinary task has no rule that could resurrect it
+        and keeps the hard delete below.
+
         Origin-aware calendar cleanup: only deletes the linked Google
         Calendar event if this task originated in the app
         (calendar_origin == 'app'). A task converted FROM a Google event
@@ -407,9 +414,16 @@ class TaskService:
         except Exception as e:
             logger.error(f"[calendar sync] Failed to look up linked calendar event before deleting task {record_id}: {e}")
 
-        success = self.repository.delete_task(user_id, record_id)
-        if not success:
-            raise RuntimeError(f"Failed to delete task {record_id}")
+        task = self.repository.get_task(user_id, record_id)
+        if task and task.recurrence_rule_id:
+            # The row must survive: get_occurrence_dates skips any date that
+            # already exists, so a hard delete here would make the generator
+            # recreate this task on the next ~2-minute tick.
+            repository.cancel_task(user_id, record_id, datetime.now(ZoneInfo("Europe/Athens")).isoformat())
+        else:
+            success = self.repository.delete_task(user_id, record_id)
+            if not success:
+                raise RuntimeError(f"Failed to delete task {record_id}")
         logger.info(f"Deleted task {record_id}.")
 
         if not calendar_fields or not calendar_fields.get("google_event_id"):
