@@ -6,6 +6,8 @@ is not a nicety here — it is the correctness property.
 """
 from datetime import date
 
+import logging
+
 import pytest
 
 import services
@@ -500,3 +502,35 @@ def test_a_genuinely_absent_row_still_takes_the_hard_delete_path(monkeypatch):
     svc.delete_task("user-1", "t1")
 
     assert fake_repo.delete_calls == [("user-1", "t1")]
+
+
+def test_the_cancel_log_line_does_not_claim_a_delete(monkeypatch, caplog):
+    """
+    The repo has already been bitten once by a diagnostic that could not
+    distinguish two outcomes (the Hostaway webhook silence, where an
+    investigation was nearly decided on it). A cancel must not log
+    "Deleted", and must name the rule that caused it.
+    """
+    task = _occurrence("t1", "2026-08-17")
+    svc, fake_repo, seen = _wire_delete(monkeypatch, task)
+
+    with caplog.at_level(logging.INFO):
+        svc.delete_task("user-1", "t1")
+
+    line = "\n".join(caplog.messages)
+    assert "cancel" in line.lower()
+    assert "rule-1" in line, "the rule id names which rule caused the cancellation"
+    assert "Deleted task t1." not in line
+
+
+def test_the_ordinary_delete_log_line_is_unchanged(monkeypatch, caplog):
+    ordinary = TaskRecord(task_name="plain", description="", category="Business",
+                          priority="P1", ai_suggested_category="Business",
+                          ai_suggested_priority="P1", approval_status=True,
+                          record_id="t2")
+    svc, fake_repo, seen = _wire_delete(monkeypatch, ordinary)
+
+    with caplog.at_level(logging.INFO):
+        svc.delete_task("user-1", "t2")
+
+    assert "Deleted task t2." in "\n".join(caplog.messages)

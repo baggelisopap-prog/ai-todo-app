@@ -382,7 +382,8 @@ class TaskService:
 
     def delete_task(self, user_id: str, record_id: str) -> str:
         """
-        Permanently deletes a task, scoped to user_id. Raises on failure.
+        Disposes of a task, scoped to user_id, permanently: hard-deletes an
+        ordinary task, cancels a recurring occurrence. Raises on failure.
 
         A recurring occurrence (non-null recurrence_rule_id) is the one
         exception: it is cancelled instead of hard-deleted, because
@@ -422,11 +423,16 @@ class TaskService:
             cancelled = repository.cancel_task(user_id, record_id, datetime.now(ZoneInfo("Europe/Athens")).isoformat())
             if not cancelled:
                 raise RuntimeError(f"Failed to cancel task {record_id}")
+            logger.info(
+                f"Cancelled recurring occurrence {record_id} (rule "
+                f"{recurrence_fields.get('recurrence_rule_id')}) instead of deleting it, "
+                f"so the generator will not recreate it."
+            )
         else:
             success = self.repository.delete_task(user_id, record_id)
             if not success:
                 raise RuntimeError(f"Failed to delete task {record_id}")
-        logger.info(f"Deleted task {record_id}.")
+            logger.info(f"Deleted task {record_id}.")
 
         if not calendar_fields or not calendar_fields.get("google_event_id"):
             return "none"
