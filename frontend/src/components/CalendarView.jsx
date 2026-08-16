@@ -27,6 +27,7 @@ import { getEventLabel } from '../utils/eventType';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { isVisibleTask } from '../utils/taskDisplay';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7); // 07:00-22:00
@@ -131,7 +132,7 @@ function statusRank(task) {
 }
 
 function isTaskDraggable(task) {
-  return !task.is_completed && !task.is_rejected;
+  return !task.is_completed && isVisibleTask(task);
 }
 
 export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskCreated }) {
@@ -373,7 +374,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
 
   const tasksByDate = filteredTasks.reduce((acc, task) => {
     if (!task.due_date) return acc;
-    if (task.is_rejected) return acc;
+    if (!isVisibleTask(task)) return acc;
     if (task.is_completed) return acc;
     const key = task.due_date;
     if (!acc[key]) acc[key] = [];
@@ -814,7 +815,7 @@ function WeeklyGrid({ currentWeekStart, onPrevWeek, onNextWeek, tasks, calendarE
   const allDayTasksByDate = {};
   for (const task of tasks) {
     if (!task.due_date) continue;
-    if (task.is_rejected) continue;
+    if (!isVisibleTask(task)) continue;
     if (task.is_completed) continue;
 
     const dateKey = task.due_date;

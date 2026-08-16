@@ -15,6 +15,7 @@ import SettingsModal from './components/SettingsModal';
 import { AgentChatModal } from './components/AgentChatModal';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
 import AppBar from './components/AppBar';
+import { isVisibleTask } from './utils/taskDisplay';
 
 // The AppBar shows the current screen's name, so the title each view used to
 // print inside its own scroll container now lives in one place. Calendar covers
@@ -208,7 +209,7 @@ function App() {
   // Must stay identical to InboxView's own filter — a badge that disagrees with
   // the list it points at is worse than no badge.
   const pendingCount = tasks.filter(
-    (task) => !task.is_rejected && !task.is_completed && !task.approval_status
+    (task) => isVisibleTask(task) && !task.is_completed && !task.approval_status
   ).length;
 
   const viewProps = {

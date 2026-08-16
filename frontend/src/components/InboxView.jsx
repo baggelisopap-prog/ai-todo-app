@@ -1,12 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
+import { isVisibleTask } from '../utils/taskDisplay';
 
 function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
 
   const inboxTasks = tasks.filter((task) =>
-    !task.is_rejected && !task.is_completed && !task.approval_status
+    isVisibleTask(task) && !task.is_completed && !task.approval_status
   );
 
   return (

@@ -72,3 +72,23 @@ export function checklistProgress(checklist) {
   if (!checklist || checklist.length === 0) return null;
   return { done: checklist.filter((item) => item.done).length, total: checklist.length };
 }
+
+/**
+ * Whether a task belongs on a list at all.
+ *
+ * The backend has had `is_open_task()` as its declared single source of truth
+ * for this since the agent overhaul. The frontend had the same rule hand-copied
+ * into five files, which was survivable while the rule was one clause long.
+ * Recurrence adds two more, so it is centralised here rather than pasted
+ * a sixth time — the sixth view someone writes would forget it.
+ *
+ * `missed_at` is a recurrence occurrence that outlived its grace window and
+ * closed itself. `cancelled_at` is one the user deleted; the row survives
+ * (rather than being removed) so the generator does not recreate it on the
+ * next tick. Both are deliberately NOT `is_rejected`: rejection means the
+ * user turned down the AI's suggestion, and that column is preserved to feed
+ * the learning loop.
+ */
+export function isVisibleTask(task) {
+  return !task.is_rejected && !task.missed_at && !task.cancelled_at;
+}

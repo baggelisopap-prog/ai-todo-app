@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import { toLocalISODate } from '../utils/formatDate';
+import { isVisibleTask } from '../utils/taskDisplay';
 
 /**
  * The next seven days as day-headed sections, plus everything with no date.
@@ -25,7 +26,7 @@ function getSectionLabel(t, daysFromNow, date) {
 
 function computeSections(tasks, t) {
   const baseFilter = (task) =>
-    task.approval_status && !task.is_completed && !task.is_rejected;
+    task.approval_status && !task.is_completed && isVisibleTask(task);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

@@ -7,6 +7,7 @@ import { toLocalISODate } from '../utils/formatDate';
 import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent } from '../api';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { isVisibleTask } from '../utils/taskDisplay';
 
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
@@ -57,14 +58,14 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const todayTasks = filteredTasks.filter((task) =>
     task.approval_status &&
     !task.is_completed &&
-    !task.is_rejected &&
+    isVisibleTask(task) &&
     task.due_date === today
   );
 
   const overdueTasks = filteredTasks.filter((task) =>
     task.approval_status &&
     !task.is_completed &&
-    !task.is_rejected &&
+    isVisibleTask(task) &&
     task.due_date &&
     task.due_date < today
   );
@@ -72,7 +73,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const pendingTodayTasks = filteredTasks.filter((task) =>
     task.due_date === today &&
     !task.approval_status &&
-    !task.is_rejected
+    isVisibleTask(task)
   );
 
   const isEmpty = todayTasks.length === 0 && overdueTasks.length === 0 && pendingTodayTasks.length === 0;

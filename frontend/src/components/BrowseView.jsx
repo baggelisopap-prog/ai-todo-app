@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import { searchTasks } from '../utils/searchTasks';
+import { isVisibleTask } from '../utils/taskDisplay';
 
 function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
@@ -15,7 +16,11 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
   const categoryCounts = useMemo(() => {
     let base = tasks;
     if (!showCompleted) base = base.filter((t) => !t.is_completed);
-    if (!showRejected) base = base.filter((t) => !t.is_rejected);
+    // Missed and cancelled occurrences are never browsable in v1: there is no
+    // history view yet (see the spec's "what v1 does not do"), and they are
+    // not rejections — so this stays even when showRejected is on.
+    base = base.filter((t) => !t.missed_at && !t.cancelled_at);
+    if (!showRejected) base = base.filter(isVisibleTask);
     return {
       All: base.length,
       Business: base.filter((t) => t.category === 'Business').length,
@@ -31,7 +36,11 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
   const filteredTasks = useMemo(() => {
     let result = tasks;
     if (!showCompleted) result = result.filter((t) => !t.is_completed);
-    if (!showRejected) result = result.filter((t) => !t.is_rejected);
+    // Missed and cancelled occurrences are never browsable in v1: there is no
+    // history view yet (see the spec's "what v1 does not do"), and they are
+    // not rejections — so this stays even when showRejected is on.
+    result = result.filter((t) => !t.missed_at && !t.cancelled_at);
+    if (!showRejected) result = result.filter(isVisibleTask);
     if (selectedCategory !== 'All') result = result.filter((t) => t.category === selectedCategory);
     // Last, so the search runs over the smallest set — and so the counts on the
     // category cards keep describing the whole library rather than the search.
