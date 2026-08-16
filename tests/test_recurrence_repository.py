@@ -225,9 +225,22 @@ def test_marking_missed_writes_only_missed_at(monkeypatch):
     assert ("id", "t1") in fake.calls["eq"]
 
 
+def test_cancelling_writes_only_cancelled_at(monkeypatch):
+    fake = _FakeSupabase([{"id": "t1"}])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    repository.cancel_task("user-1", "t1", "2026-08-20T06:00:00+03:00")
+
+    # Exact equality, not membership: an `in` check would still pass even if
+    # some other field were also written alongside cancelled_at.
+    assert fake.calls["update"] == {"cancelled_at": "2026-08-20T06:00:00+03:00"}
+    assert ("user_id", "user-1") in fake.calls["eq"]
+    assert ("id", "t1") in fake.calls["eq"]
+
+
 def test_the_recurrence_columns_are_read_back_off_a_task_row():
     """
-    Without the three lines in _supabase_row_to_task these come back None,
+    Without the four lines in _supabase_row_to_task these come back None,
     every later task reads None for recurrence_rule_id, and the feature is
     inert while the whole suite stays green. This test is the tripwire.
     """
@@ -243,6 +256,7 @@ def test_the_recurrence_columns_are_read_back_off_a_task_row():
         "recurrence_rule_id": "rule-1",
         "occurrence_date": "2026-08-17",
         "missed_at": "2026-08-19T06:00:00+03:00",
+        "cancelled_at": "2026-08-20T06:00:00+03:00",
     }
 
     task = _task_repo._supabase_row_to_task(row)
@@ -250,3 +264,4 @@ def test_the_recurrence_columns_are_read_back_off_a_task_row():
     assert task.recurrence_rule_id == "rule-1"
     assert task.occurrence_date == "2026-08-17"
     assert task.missed_at == "2026-08-19T06:00:00+03:00"
+    assert task.cancelled_at == "2026-08-20T06:00:00+03:00"

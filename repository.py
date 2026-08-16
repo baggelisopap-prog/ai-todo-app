@@ -155,6 +155,7 @@ class AirtableTaskRepository:
             recurrence_rule_id=row.get("recurrence_rule_id"),
             occurrence_date=row.get("occurrence_date"),
             missed_at=row.get("missed_at"),
+            cancelled_at=row.get("cancelled_at"),
         )
 
     def save_task(self, user_id: str, task: TaskRecord) -> TaskRecord:
@@ -1292,5 +1293,18 @@ def mark_task_missed(user_id: str, record_id: str, missed_at: str) -> None:
     occurrences the AI never proposed would corrupt that signal.
     """
     supabase.table("tasks").update({"missed_at": missed_at}).eq("id", record_id).eq(
+        "user_id", user_id
+    ).execute()
+
+
+def cancel_task(user_id: str, record_id: str, cancelled_at: str) -> None:
+    """
+    Marks one occurrence as cancelled by the user, leaving the row in place.
+
+    The row must survive: get_occurrence_dates skips any date that already
+    exists, so a hard delete would make the generator recreate this task on
+    the next ~2-minute tick.
+    """
+    supabase.table("tasks").update({"cancelled_at": cancelled_at}).eq("id", record_id).eq(
         "user_id", user_id
     ).execute()

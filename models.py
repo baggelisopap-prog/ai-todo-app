@@ -102,6 +102,12 @@ class TaskRecord(SingleTask):
     recurrence_rule_id: Optional[str] = None
     occurrence_date: Optional[str] = None
     missed_at: Optional[str] = None
+    # Set when the user deleted THIS occurrence. Deliberately not is_rejected
+    # (that means "rejected the AI's suggestion" and feeds the learning loop)
+    # and deliberately not missed_at (that means the day passed unfinished).
+    # The row survives so the generator, which skips any occurrence_date that
+    # already exists, does not recreate the task on the next tick.
+    cancelled_at: Optional[str] = None
 
 
 class PushSubscriptionKeys(BaseModel):
