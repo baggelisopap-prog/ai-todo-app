@@ -315,4 +315,14 @@ def test_a_broken_rule_does_not_cost_the_user_the_rest_of_the_tick(monkeypatch):
     result = svc.run_notification_scheduler()
 
     assert calendar_ran == ["user-1"], "recurrence took down the rest of the tick"
-    assert result["results"][0]["recurrences_created"] == 0
+    row = result["results"][0]
+    assert row["status"] == "ok", "a user whose recurrences failed must still be an ok tick"
+    assert row["recurrences_created"] == 0
+    assert row["recurrences_missed"] is None, "not attempted is not the same fact as 0 missed"
+    # Each spared subsystem named explicitly, not just inferred from calendar
+    # sync running last in the chain: a future reorder could keep this test
+    # green while quietly breaking one of the others.
+    assert row["sent"] == 0
+    assert row["daily_summary_sent"] is False
+    assert row["hostaway_checked"] == 0
+    assert row["hostaway_escalations_sent"] == 0

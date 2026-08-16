@@ -686,13 +686,17 @@ class TaskService:
                 # user's reminders, and the fix is cheaper applied in advance.
                 recurrences_created = 0
                 recurrence_rules = []
+                recurrence_rules_loaded = False
                 try:
                     recurrence_rules = repository.get_recurrence_rules(user_id)
+                    recurrence_rules_loaded = True
                     for rule in recurrence_rules:
                         recurrences_created += self.materialize_recurrence_rule(
                             user_id, rule, now.date()
                         )
                 except Exception as e:
+                    # Deliberate: one broken rule aborts the remaining rules this
+                    # tick rather than skipping past it and continuing.
                     logger.exception(f"[recurrence] Generation failed for user {user_id}: {e}")
 
                 # Fetched once per user per tick, then filtered multiple ways in
@@ -700,16 +704,33 @@ class TaskService:
                 # just scoped per user now instead of across everyone at once.
                 user_tasks = self.repository.get_all_tasks(user_id)
 
-                recurrences_missed = 0
-                try:
-                    recurrences_missed = self.close_missed_occurrences(
-                        user_id,
-                        user_tasks,
-                        now.date(),
-                        {r.record_id: r for r in recurrence_rules},
+                # `recurrence_rules_loaded` tells apart "the fetch failed" from
+                # "the fetch found nothing": when the fetch above failed,
+                # `recurrence_rules` is `[]` for the same reason a genuinely
+                # rule-free account is `[]`. Running close_missed_occurrences
+                # against that empty map would route every real occurrence
+                # through the same "orphaned, rule deleted" branch legitimate
+                # orphans take, and report recurrences_missed=0 — structurally
+                # identical to "this user had nothing missed". So when the
+                # fetch did not load, missed-closure is skipped rather than run
+                # on data it cannot trust, and `recurrences_missed` stays `None`
+                # — "not attempted" is a different fact from "attempted, found
+                # nothing".
+                recurrences_missed = None
+                if recurrence_rules_loaded:
+                    try:
+                        recurrences_missed = self.close_missed_occurrences(
+                            user_id,
+                            user_tasks,
+                            now.date(),
+                            {r.record_id: r for r in recurrence_rules},
+                        )
+                    except Exception as e:
+                        logger.exception(f"[recurrence] Missed-closure failed for {user_id}: {e}")
+                else:
+                    logger.warning(
+                        f"[recurrence] Missed-closure skipped for user {user_id}: rules fetch failed this tick"
                     )
-                except Exception as e:
-                    logger.exception(f"[recurrence] Missed-closure failed for {user_id}: {e}")
 
                 window_start = now
                 window_end = now + timedelta(minutes=REMINDER_OFFSET_MINUTES)
