@@ -33,10 +33,11 @@ def is_open_task(t, include_completed: bool = False) -> bool:
     """SINGLE SOURCE OF TRUTH for 'counts as an open task'.
     Any change to the pending-approval policy happens HERE and nowhere else."""
     # missed_at is a recurrence occurrence that outlived its grace and closed
-    # itself. It is kept as a record — "was Monday's check done?" must have an
-    # answer — but it is not work anybody can still do, so it is not open, not
-    # even with include_completed.
-    if t.is_rejected or t.missed_at or not t.approval_status:
+    # itself. cancelled_at is one the user deliberately deleted. Both are kept
+    # as a record — "was Monday's check done?" must have an answer — but
+    # neither is work anybody can still do, so neither is open, not even with
+    # include_completed.
+    if t.is_rejected or t.missed_at or t.cancelled_at or not t.approval_status:
         return False
     if not include_completed and t.is_completed:
         return False

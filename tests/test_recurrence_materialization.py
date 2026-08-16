@@ -358,3 +358,21 @@ def test_the_agent_does_not_see_a_missed_occurrence():
 def test_a_missed_occurrence_stays_invisible_even_when_completed_are_included():
     missed = _occurrence("gone", "2026-08-17", missed_at="2026-08-19T06:00:00+03:00")
     assert agent_tools.is_open_task(missed, include_completed=True) is False
+
+
+def test_the_agent_does_not_see_a_cancelled_occurrence():
+    """
+    is_open_task is the declared single source of truth for the whole agent --
+    day view, search, and every write guard -- so this is the one line that
+    has to change on the backend.
+    """
+    cancelled = _occurrence("gone", "2026-08-17", cancelled_at="2026-08-17T09:00:00+03:00")
+    live = _occurrence("here", "2026-08-19")
+
+    assert agent_tools.is_open_task(cancelled) is False
+    assert agent_tools.is_open_task(live) is True
+
+
+def test_a_cancelled_occurrence_stays_invisible_even_when_completed_are_included():
+    cancelled = _occurrence("gone", "2026-08-17", cancelled_at="2026-08-17T09:00:00+03:00")
+    assert agent_tools.is_open_task(cancelled, include_completed=True) is False
