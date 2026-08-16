@@ -383,8 +383,9 @@ def test_a_cancelled_occurrence_stays_invisible_even_when_completed_are_included
 # --- delete routing -----------------------------------------------------------
 
 class _FakeTaskRepo:
-    """Stands in for AirtableTaskRepository: only the two methods
-    services.TaskService.delete_task calls through self.repository."""
+    """Stands in for AirtableTaskRepository: only the one method
+    services.TaskService.delete_task calls through self.repository for the
+    hard-delete path."""
 
     def __init__(self, task):
         self._task = task
@@ -401,6 +402,9 @@ class _FakeTaskRepo:
 def _wire_delete(monkeypatch, task, cancel_succeeds=True):
     seen = {"cancelled": []}
     monkeypatch.setattr(services.repository, "get_task_calendar_fields", lambda u, r: None)
+    monkeypatch.setattr(services.repository, "get_task_recurrence_fields",
+                        lambda u, r: {"recurrence_rule_id": task.recurrence_rule_id} if task else None,
+                        raising=False)
     monkeypatch.setattr(services.repository, "cancel_task",
                         lambda u, r, at: seen["cancelled"].append((u, r, at)) or cancel_succeeds)
 
@@ -450,3 +454,49 @@ def test_deleting_a_recurring_occurrence_raises_when_the_cancel_fails(monkeypatc
 
     with pytest.raises(RuntimeError):
         svc.delete_task("user-1", "t1")
+
+
+def test_a_failed_recurrence_lookup_never_falls_through_to_a_hard_delete(monkeypatch):
+    """
+    get_task swallows every exception and returns None on failure -- the same
+    value it returns for "no such row". A transient Supabase timeout must
+    not be read as "no rule", or a recurring occurrence gets hard-deleted and
+    the generator recreates it on the next tick -- the exact bug cancellation
+    exists to prevent. get_task_recurrence_fields deliberately does not
+    catch, so the exception has to propagate rather than silently choosing
+    the wrong branch.
+    """
+    monkeypatch.setattr(services.repository, "get_task_calendar_fields", lambda u, r: None)
+
+    def _boom(u, r):
+        raise RuntimeError("supabase timeout")
+
+    monkeypatch.setattr(services.repository, "get_task_recurrence_fields", _boom, raising=False)
+
+    svc = services.TaskService.__new__(services.TaskService)
+    fake_repo = _FakeTaskRepo(None)
+    svc.repository = fake_repo
+
+    with pytest.raises(RuntimeError):
+        svc.delete_task("user-1", "t1")
+
+    assert fake_repo.delete_calls == [], "a failed lookup must not fall through to a hard delete"
+
+
+def test_a_genuinely_absent_row_still_takes_the_hard_delete_path(monkeypatch):
+    """
+    The other half of the same distinction: None because the row really
+    isn't there is a legitimate, honest answer and must still resolve --
+    falling through to the hard-delete branch, which itself raises on a
+    zero-row response.
+    """
+    monkeypatch.setattr(services.repository, "get_task_calendar_fields", lambda u, r: None)
+    monkeypatch.setattr(services.repository, "get_task_recurrence_fields", lambda u, r: None, raising=False)
+
+    svc = services.TaskService.__new__(services.TaskService)
+    fake_repo = _FakeTaskRepo(None)
+    svc.repository = fake_repo
+
+    svc.delete_task("user-1", "t1")
+
+    assert fake_repo.delete_calls == [("user-1", "t1")]

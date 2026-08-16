@@ -1040,6 +1040,28 @@ def get_task_calendar_fields(user_id: str, record_id: str) -> Optional[dict]:
     return result.data[0]
 
 
+def get_task_recurrence_fields(user_id: str, record_id: str) -> Optional[dict]:
+    """
+    This task's recurrence link, or None if the row genuinely does not exist.
+
+    Deliberately does NOT catch exceptions, unlike get_task: the caller
+    (delete_task) must be able to tell "no such row" from "the lookup
+    failed". Conflating them turns a transient database blip into a hard
+    delete of a recurring occurrence, which the generator then recreates on
+    the next tick — the exact resurrection cancellation exists to prevent.
+    """
+    response = (
+        supabase.table("tasks")
+        .select("recurrence_rule_id")
+        .eq("id", record_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
 # --- Agent conversation memory + run diagnostics (one table, agent_runs) ---
 # A row in agent_runs IS one question/answer pair, so the same table serves
 # BOTH the developer debug archive (log_agent_run, every column) and the Q&A

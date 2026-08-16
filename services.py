@@ -414,8 +414,8 @@ class TaskService:
         except Exception as e:
             logger.error(f"[calendar sync] Failed to look up linked calendar event before deleting task {record_id}: {e}")
 
-        task = self.repository.get_task(user_id, record_id)
-        if task and task.recurrence_rule_id:
+        recurrence_fields = repository.get_task_recurrence_fields(user_id, record_id)
+        if recurrence_fields and recurrence_fields.get("recurrence_rule_id"):
             # The row must survive: get_occurrence_dates skips any date that
             # already exists, so a hard delete here would make the generator
             # recreate this task on the next ~2-minute tick.
