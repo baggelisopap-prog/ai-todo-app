@@ -256,6 +256,22 @@ def test_cancelling_writes_only_cancelled_at(monkeypatch):
     assert ("id", "t1") in fake.calls["eq"]
 
 
+def test_cancelling_reports_whether_a_row_was_actually_updated(monkeypatch):
+    """
+    Same shape as the hard-delete branch: a PostgREST UPDATE matching zero
+    rows returns 200 with empty data, not an exception. Without a real
+    success signal here, a race or an RLS edge case would leave the row
+    untouched while the caller reports success.
+    """
+    matched = _FakeSupabase([{"id": "t1"}])
+    monkeypatch.setattr(repository, "supabase", matched)
+    assert repository.cancel_task("user-1", "t1", "2026-08-20T06:00:00+03:00") is True
+
+    unmatched = _FakeSupabase([])
+    monkeypatch.setattr(repository, "supabase", unmatched)
+    assert repository.cancel_task("user-1", "t1", "2026-08-20T06:00:00+03:00") is False
+
+
 def test_the_recurrence_columns_are_read_back_off_a_task_row():
     """
     Without the four lines in _supabase_row_to_task these come back None,

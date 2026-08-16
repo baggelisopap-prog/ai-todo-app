@@ -6,6 +6,8 @@ is not a nicety here — it is the correctness property.
 """
 from datetime import date
 
+import pytest
+
 import services
 from models import RecurrenceRule, TaskRecord
 
@@ -396,11 +398,11 @@ class _FakeTaskRepo:
         return True
 
 
-def _wire_delete(monkeypatch, task):
+def _wire_delete(monkeypatch, task, cancel_succeeds=True):
     seen = {"cancelled": []}
     monkeypatch.setattr(services.repository, "get_task_calendar_fields", lambda u, r: None)
     monkeypatch.setattr(services.repository, "cancel_task",
-                        lambda u, r, at: seen["cancelled"].append((u, r, at)))
+                        lambda u, r, at: seen["cancelled"].append((u, r, at)) or cancel_succeeds)
 
     svc = services.TaskService.__new__(services.TaskService)
     fake_repo = _FakeTaskRepo(task)
@@ -434,3 +436,17 @@ def test_deleting_an_ordinary_task_still_hard_deletes(monkeypatch):
 
     assert fake_repo.delete_calls == [("user-1", "t2")]
     assert seen["cancelled"] == [], "an ordinary task must never be soft-cancelled"
+
+
+def test_deleting_a_recurring_occurrence_raises_when_the_cancel_fails(monkeypatch):
+    """
+    Symmetric with the hard-delete branch immediately below it: a PostgREST
+    UPDATE matching zero rows returns 200 with empty data, not an exception,
+    so without this check the endpoint would report the task deleted while
+    the row -- and its date -- stays untouched.
+    """
+    task = _occurrence("t1", "2026-08-17")
+    svc, fake_repo, seen = _wire_delete(monkeypatch, task, cancel_succeeds=False)
+
+    with pytest.raises(RuntimeError):
+        svc.delete_task("user-1", "t1")

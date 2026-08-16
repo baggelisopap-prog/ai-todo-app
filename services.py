@@ -419,7 +419,9 @@ class TaskService:
             # The row must survive: get_occurrence_dates skips any date that
             # already exists, so a hard delete here would make the generator
             # recreate this task on the next ~2-minute tick.
-            repository.cancel_task(user_id, record_id, datetime.now(ZoneInfo("Europe/Athens")).isoformat())
+            cancelled = repository.cancel_task(user_id, record_id, datetime.now(ZoneInfo("Europe/Athens")).isoformat())
+            if not cancelled:
+                raise RuntimeError(f"Failed to cancel task {record_id}")
         else:
             success = self.repository.delete_task(user_id, record_id)
             if not success:

@@ -1298,14 +1298,24 @@ def mark_task_missed(user_id: str, record_id: str, missed_at: str) -> None:
     ).execute()
 
 
-def cancel_task(user_id: str, record_id: str, cancelled_at: str) -> None:
+def cancel_task(user_id: str, record_id: str, cancelled_at: str) -> bool:
     """
     Marks one occurrence as cancelled by the user, leaving the row in place.
+    Returns whether a row was actually updated.
 
     The row must survive: get_occurrence_dates skips any date that already
     exists, so a hard delete would make the generator recreate this task on
-    the next ~2-minute tick.
+    the next ~2-minute tick. The bool return matters for the same reason it
+    matters on the hard-delete branch it sits beside: a PostgREST UPDATE
+    matching zero rows returns 200 with empty data, not an exception, so
+    without this signal a race or an RLS edge case would leave the row
+    untouched while the caller reports success.
     """
-    supabase.table("tasks").update({"cancelled_at": cancelled_at}).eq("id", record_id).eq(
-        "user_id", user_id
-    ).execute()
+    response = (
+        supabase.table("tasks")
+        .update({"cancelled_at": cancelled_at})
+        .eq("id", record_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return bool(response.data)
