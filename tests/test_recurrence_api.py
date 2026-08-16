@@ -83,6 +83,7 @@ def test_editing_a_rule_regenerates_the_future(client, monkeypatch):
         seen["updates"] = updates
         return _rule()
 
+    monkeypatch.setattr(main.repository, "get_recurrence_rule", lambda u, rid: _rule())
     monkeypatch.setattr(main.repository, "update_recurrence_rule", _update)
 
     def _regenerate(u, rule, today):
@@ -103,6 +104,7 @@ def test_editing_a_rule_regenerates_the_future(client, monkeypatch):
 def test_pausing_a_rule_also_regenerates_so_the_future_clears(client, monkeypatch):
     """Off must mean off now, not in a fortnight."""
     seen = {}
+    monkeypatch.setattr(main.repository, "get_recurrence_rule", lambda u, rid: _rule())
     monkeypatch.setattr(main.repository, "update_recurrence_rule",
                         lambda u, rid, updates: _rule(is_active=False))
     monkeypatch.setattr(main.service, "regenerate_recurrence_rule",
@@ -115,8 +117,43 @@ def test_pausing_a_rule_also_regenerates_so_the_future_clears(client, monkeypatc
 
 
 def test_editing_a_rule_that_is_not_yours_is_a_404(client, monkeypatch):
-    monkeypatch.setattr(main.repository, "update_recurrence_rule", lambda u, rid, updates: None)
+    monkeypatch.setattr(main.repository, "get_recurrence_rule", lambda u, rid: None)
     assert client.patch("/recurrences/someone-elses", json={"due_time": "20:00"}).status_code == 404
+
+
+def test_patching_ends_on_to_null_clears_it(client, monkeypatch):
+    """
+    exclude_unset=True already omits fields the client never sent — a second
+    filter dropping None values would ALSO discard a field sent explicitly as
+    null, which is precisely how a client says "clear this field."
+    """
+    seen = {}
+    monkeypatch.setattr(main.repository, "get_recurrence_rule",
+                        lambda u, rid: _rule(ends_on="2026-12-31"))
+
+    def _update(u, rid, updates):
+        seen["updates"] = updates
+        return _rule()
+
+    monkeypatch.setattr(main.repository, "update_recurrence_rule", _update)
+    monkeypatch.setattr(main.service, "regenerate_recurrence_rule", lambda u, rule, today: 0)
+
+    r = client.patch("/recurrences/rule-1", json={"ends_on": None})
+
+    assert r.status_code == 200
+    assert seen["updates"] == {"ends_on": None}
+
+
+def test_patching_a_weekly_rule_to_no_weekdays_is_a_422(client, monkeypatch):
+    monkeypatch.setattr(main.repository, "get_recurrence_rule", lambda u, rid: _rule())
+    r = client.patch("/recurrences/rule-1", json={"weekdays": []})
+    assert r.status_code == 422
+
+
+def test_patching_category_to_hostaway_is_a_422(client, monkeypatch):
+    monkeypatch.setattr(main.repository, "get_recurrence_rule", lambda u, rid: _rule())
+    r = client.patch("/recurrences/rule-1", json={"category": "Hostaway"})
+    assert r.status_code == 422
 
 
 def test_deleting_removes_every_open_occurrence_past_and_future(client, monkeypatch):

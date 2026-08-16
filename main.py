@@ -695,10 +695,30 @@ def update_recurrence(
     ticking off a task they just switched off. Approving an AI-made rule is
     also this call, with approval_status=true.
     """
+    existing = repository.get_recurrence_rule(user_id, rule_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Recurrence not found")
+
+    # exclude_unset only — NOT a second pass dropping None values. That
+    # second pass used to also discard fields sent explicitly as null, which
+    # is exactly how a client says "clear this" (ends_on, due_time,
+    # month_day are all Optional and legitimately nullable).
     updates = payload.model_dump(exclude_unset=True)
-    updates = {k: v for k, v in updates.items() if v is not None}
     if "checklist" in updates:
         updates["checklist"] = [item.model_dump() for item in payload.checklist or []]
+
+    # repository.update_recurrence_rule writes the raw dict straight to
+    # Supabase and never reconstructs a RecurrenceRule, so validate_shape
+    # never runs on this path — the only backstop left would be the database
+    # CHECK, whose violation arrives as a generic exception and a wrong 500
+    # instead of a 422. Validate the MERGED (existing + updates) shape here,
+    # before writing anything, the same way POST validates at creation.
+    merged = existing.model_dump()
+    merged.update(updates)
+    try:
+        RecurrenceRule(**merged)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     try:
         saved = repository.update_recurrence_rule(user_id, rule_id, updates)
