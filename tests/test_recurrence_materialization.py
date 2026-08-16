@@ -244,3 +244,75 @@ def test_an_orphaned_occurrence_whose_rule_is_gone_is_left_alone(monkeypatch):
     orphan = _occurrence("orphan", "2026-08-17", recurrence_rule_id=None)
 
     assert svc.close_missed_occurrences("user-1", [orphan], date(2026, 8, 25), {}) == 0
+
+
+from models import AppSettings
+
+
+def test_the_tick_materialises_before_it_reads_the_users_tasks(monkeypatch):
+    """
+    Order matters: a task generated for today must be in user_tasks, or its
+    reminder waits a whole extra tick for no reason.
+    """
+    order = []
+
+    monkeypatch.setattr(services.repository, "get_all_active_user_ids", lambda: ["user-1"])
+    monkeypatch.setattr(services.repository, "get_app_settings",
+                        lambda u: AppSettings(notifications_enabled=True, send_all_enabled=False))
+    monkeypatch.setattr(services.repository, "get_recurrence_rules",
+                        lambda u: order.append("rules") or [])
+    monkeypatch.setattr(services.repository, "get_all_tasks",
+                        lambda u: order.append("tasks") or [], raising=False)
+    monkeypatch.setattr(services.repository, "get_tasks_due_for_notification",
+                        lambda u, s, e, tasks=None, require_bell_enabled=False: [])
+    monkeypatch.setattr(services, "sync_google_calendar_for_user", lambda u: {"status": "ok"})
+
+    svc = services.TaskService.__new__(services.TaskService)
+    svc.repository = services.repository
+    monkeypatch.setattr(svc, "_maybe_send_daily_summary",
+                        lambda u, now, s, t: False, raising=False)
+    monkeypatch.setattr(svc, "_check_hostaway_replies",
+                        lambda u, t: {"conversations_polled": 0, "replies_found": 0,
+                                      "tasks_completed": 0}, raising=False)
+    monkeypatch.setattr(svc, "_check_hostaway_escalations",
+                        lambda u, n, t: {"checked": 0, "escalations_sent": 0}, raising=False)
+
+    result = svc.run_notification_scheduler()
+
+    assert order == ["rules", "tasks"]
+    assert result["results"][0]["recurrences_created"] == 0
+    assert result["results"][0]["recurrences_missed"] == 0
+
+
+def test_a_broken_rule_does_not_cost_the_user_the_rest_of_the_tick(monkeypatch):
+    """Same lesson the Hostaway encryption key taught, applied before it bites."""
+    calendar_ran = []
+
+    monkeypatch.setattr(services.repository, "get_all_active_user_ids", lambda: ["user-1"])
+    monkeypatch.setattr(services.repository, "get_app_settings",
+                        lambda u: AppSettings(notifications_enabled=True, send_all_enabled=False))
+
+    def _boom(user_id):
+        raise RuntimeError("recurrence_rules table is missing")
+
+    monkeypatch.setattr(services.repository, "get_recurrence_rules", _boom)
+    monkeypatch.setattr(services.repository, "get_all_tasks", lambda u: [], raising=False)
+    monkeypatch.setattr(services.repository, "get_tasks_due_for_notification",
+                        lambda u, s, e, tasks=None, require_bell_enabled=False: [])
+    monkeypatch.setattr(services, "sync_google_calendar_for_user",
+                        lambda u: calendar_ran.append(u) or {"status": "ok"})
+
+    svc = services.TaskService.__new__(services.TaskService)
+    svc.repository = services.repository
+    monkeypatch.setattr(svc, "_maybe_send_daily_summary",
+                        lambda u, now, s, t: False, raising=False)
+    monkeypatch.setattr(svc, "_check_hostaway_replies",
+                        lambda u, t: {"conversations_polled": 0, "replies_found": 0,
+                                      "tasks_completed": 0}, raising=False)
+    monkeypatch.setattr(svc, "_check_hostaway_escalations",
+                        lambda u, n, t: {"checked": 0, "escalations_sent": 0}, raising=False)
+
+    result = svc.run_notification_scheduler()
+
+    assert calendar_ran == ["user-1"], "recurrence took down the rest of the tick"
+    assert result["results"][0]["recurrences_created"] == 0

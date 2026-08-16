@@ -676,10 +676,40 @@ class TaskService:
 
                 require_bell = not settings.send_all_enabled
 
+                # Recurrences run BEFORE the task list is read, so an occurrence
+                # generated for today is in user_tasks and can have its reminder
+                # this tick rather than the next one.
+                #
+                # Wrapped separately from the per-user guard below: a broken rule
+                # must cost this user their recurrences and nothing else. The
+                # Hostaway encryption key taught this lesson at the cost of every
+                # user's reminders, and the fix is cheaper applied in advance.
+                recurrences_created = 0
+                recurrence_rules = []
+                try:
+                    recurrence_rules = repository.get_recurrence_rules(user_id)
+                    for rule in recurrence_rules:
+                        recurrences_created += self.materialize_recurrence_rule(
+                            user_id, rule, now.date()
+                        )
+                except Exception as e:
+                    logger.exception(f"[recurrence] Generation failed for user {user_id}: {e}")
+
                 # Fetched once per user per tick, then filtered multiple ways in
                 # Python — mirrors the original single-global-fetch pattern,
                 # just scoped per user now instead of across everyone at once.
                 user_tasks = self.repository.get_all_tasks(user_id)
+
+                recurrences_missed = 0
+                try:
+                    recurrences_missed = self.close_missed_occurrences(
+                        user_id,
+                        user_tasks,
+                        now.date(),
+                        {r.record_id: r for r in recurrence_rules},
+                    )
+                except Exception as e:
+                    logger.exception(f"[recurrence] Missed-closure failed for {user_id}: {e}")
 
                 window_start = now
                 window_end = now + timedelta(minutes=REMINDER_OFFSET_MINUTES)
@@ -716,6 +746,8 @@ class TaskService:
                     "status": "ok",
                     "checked": len(due_tasks),
                     "sent": sent,
+                    "recurrences_created": recurrences_created,
+                    "recurrences_missed": recurrences_missed,
                     "daily_summary_sent": daily_summary_sent,
                     "hostaway_checked": hostaway_result["checked"],
                     "hostaway_escalations_sent": hostaway_result["escalations_sent"],
