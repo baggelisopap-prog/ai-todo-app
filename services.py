@@ -619,7 +619,7 @@ class TaskService:
         for task in user_tasks:
             if not task.recurrence_rule_id or not task.occurrence_date:
                 continue
-            if task.is_completed or task.is_rejected or task.missed_at:
+            if task.is_completed or task.is_rejected or task.missed_at or task.cancelled_at:
                 continue
 
             rule = rules_by_id.get(task.recurrence_rule_id)

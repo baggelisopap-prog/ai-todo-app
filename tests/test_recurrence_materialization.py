@@ -226,6 +226,17 @@ def test_completed_rejected_and_already_missed_ones_are_skipped(monkeypatch):
     assert seen["missed"] == []
 
 
+def test_a_cancelled_occurrence_is_never_restamped_as_missed(monkeypatch):
+    """A cancelled day is a decision, not an oversight -- it must not later
+    be overwritten with a missed_at stamp."""
+    svc, seen = _wire(monkeypatch)
+    tasks = [_occurrence("cancelled", "2026-08-17", cancelled_at="2026-08-17T09:00:00+03:00")]
+
+    assert svc.close_missed_occurrences(
+        "user-1", tasks, date(2026, 8, 25), {"rule-1": _rule()}) == 0
+    assert seen["missed"] == []
+
+
 def test_an_ordinary_task_is_never_auto_closed(monkeypatch):
     """Only recurrence occurrences forget themselves. Everything else is the user's."""
     svc, seen = _wire(monkeypatch)
