@@ -1252,9 +1252,9 @@ def get_occurrence_dates(user_id: str, rule_id: str, from_date: str, to_date: st
 def get_open_occurrences(user_id: str, rule_id: str) -> list[dict]:
     """
     This rule's occurrences that are still open — not completed, not rejected,
-    not already missed. Returns id/occurrence_date/due_date only: the callers
-    (regeneration and deletion) need to decide and then delete by id, never to
-    reconstruct a whole TaskRecord.
+    not already missed, not cancelled. Returns id/occurrence_date/due_date
+    only: the callers (regeneration and deletion) need to decide and then
+    delete by id, never to reconstruct a whole TaskRecord.
     """
     response = (
         supabase.table("tasks")
@@ -1263,6 +1263,7 @@ def get_open_occurrences(user_id: str, rule_id: str) -> list[dict]:
         .eq("recurrence_rule_id", rule_id)
         .eq("is_completed", False)
         .eq("is_rejected", False)
+        .is_("cancelled_at", "null")
         .is_("missed_at", "null")
         .execute()
     )

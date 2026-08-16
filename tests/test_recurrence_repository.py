@@ -47,6 +47,7 @@ class _FakeQuery:
 
     def is_(self, col, val):
         self.sink["is_"] = (col, val)
+        self.sink.setdefault("is_calls", []).append((col, val))
         return self
 
     def in_(self, col, vals):
@@ -198,6 +199,23 @@ def test_open_occurrences_exclude_completed_rejected_and_already_missed(monkeypa
     assert ("is_completed", False) in fake.calls["eq"]
     assert ("is_rejected", False) in fake.calls["eq"]
     assert fake.calls["is_"] == ("missed_at", "null")
+
+
+def test_open_occurrences_also_exclude_a_cancelled_one(monkeypatch):
+    """
+    Without this filter, editing a rule (which deletes what get_open_occurrences
+    reports as still-open) would delete the cancelled row as an "open future
+    occurrence" -- and the generator, seeing that date missing again, would
+    recreate the task. The cancellation would survive until the first rule
+    edit and then silently vanish.
+    """
+    fake = _FakeSupabase([])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    repository.get_open_occurrences("user-1", "rule-1")
+
+    assert ("cancelled_at", "null") in fake.calls["is_calls"]
+    assert ("missed_at", "null") in fake.calls["is_calls"]
 
 
 def test_deleting_by_ids_is_scoped_and_skips_an_empty_list(monkeypatch):
