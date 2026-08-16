@@ -31,6 +31,11 @@ def _wire(monkeypatch, failing_user=None):
     svc = services.TaskService.__new__(services.TaskService)
     svc.repository = services.repository
     monkeypatch.setattr(services.repository, "get_all_tasks", lambda u: [], raising=False)
+    # The scheduler now materialises recurrences before it reads a user's
+    # tasks, so an unstubbed get_recurrence_rules would reach the real
+    # repository module here and hit the live Supabase client.
+    monkeypatch.setattr(services.repository, "get_recurrence_rules", lambda u: [],
+                        raising=False)
     monkeypatch.setattr(svc, "_maybe_send_daily_summary",
                         lambda u, now, settings, tasks: False, raising=False)
 
