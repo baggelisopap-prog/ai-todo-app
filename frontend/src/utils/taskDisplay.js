@@ -78,7 +78,7 @@ export function checklistProgress(checklist) {
  *
  * The backend has had `is_open_task()` as its declared single source of truth
  * for this since the agent overhaul. The frontend had the same rule hand-copied
- * into five files, which was survivable while the rule was one clause long.
+ * into six files, which was survivable while the rule was one clause long.
  * Recurrence adds two more, so it is centralised here rather than pasted
  * a sixth time — the sixth view someone writes would forget it.
  *

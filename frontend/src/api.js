@@ -459,3 +459,45 @@ export async function dismissCalendarEvent(eventRecordId) {
     method: 'POST',
   });
 }
+
+/**
+ * GET /recurrences — this user's recurrence rules.
+ * Returns { recurrences: [...], count: N }
+ */
+export async function getRecurrences() {
+  return request('/recurrences');
+}
+
+/**
+ * POST /recurrences — creates a rule AND materialises its window server-side.
+ * Returns { recurrence: {...}, occurrences_created: N }, status 201.
+ */
+export async function createRecurrence(payload) {
+  return request('/recurrences', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * PATCH /recurrences/{id} — edits, pauses (is_active) or approves
+ * (approval_status) a rule, regenerating from tomorrow on. This is also how
+ * an AI-created rule gets approved and how a rule gets paused — there is no
+ * separate endpoint for either.
+ * Returns { recurrence: {...}, occurrences_created: N }
+ */
+export async function updateRecurrence(recurrenceId, updates) {
+  return request(`/recurrences/${recurrenceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+/**
+ * DELETE /recurrences/{id} — removes the rule and every OPEN occurrence.
+ * Completed and missed ones stay as ordinary tasks.
+ * Returns { deleted: true, occurrences_removed: N }
+ */
+export async function deleteRecurrence(recurrenceId) {
+  return request(`/recurrences/${recurrenceId}`, { method: 'DELETE' });
+}
