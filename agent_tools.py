@@ -32,7 +32,11 @@ PRIORITY_ORDER = {"P1": 0, "P2": 1, "P3": 2}
 def is_open_task(t, include_completed: bool = False) -> bool:
     """SINGLE SOURCE OF TRUTH for 'counts as an open task'.
     Any change to the pending-approval policy happens HERE and nowhere else."""
-    if t.is_rejected or not t.approval_status:
+    # missed_at is a recurrence occurrence that outlived its grace and closed
+    # itself. It is kept as a record — "was Monday's check done?" must have an
+    # answer — but it is not work anybody can still do, so it is not open, not
+    # even with include_completed.
+    if t.is_rejected or t.missed_at or not t.approval_status:
         return False
     if not include_completed and t.is_completed:
         return False

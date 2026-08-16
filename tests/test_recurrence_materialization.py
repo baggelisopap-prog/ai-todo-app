@@ -326,3 +326,24 @@ def test_a_broken_rule_does_not_cost_the_user_the_rest_of_the_tick(monkeypatch):
     assert row["daily_summary_sent"] is False
     assert row["hostaway_checked"] == 0
     assert row["hostaway_escalations_sent"] == 0
+
+
+import agent_tools
+
+
+def test_the_agent_does_not_see_a_missed_occurrence():
+    """
+    is_open_task is the declared single source of truth for the whole agent —
+    day view, search, and every write guard — so this is the one line that has
+    to change on the backend.
+    """
+    missed = _occurrence("gone", "2026-08-17", missed_at="2026-08-19T06:00:00+03:00")
+    live = _occurrence("here", "2026-08-19")
+
+    assert agent_tools.is_open_task(missed) is False
+    assert agent_tools.is_open_task(live) is True
+
+
+def test_a_missed_occurrence_stays_invisible_even_when_completed_are_included():
+    missed = _occurrence("gone", "2026-08-17", missed_at="2026-08-19T06:00:00+03:00")
+    assert agent_tools.is_open_task(missed, include_completed=True) is False
