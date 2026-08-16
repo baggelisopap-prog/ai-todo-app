@@ -7,3 +7,9 @@
 # requirements.txt, because pointing pip at a UTF-16 file through an
 # include is the exact trap that encoding note exists to warn about.
 pytest==8.3.4
+
+# fastapi.testclient.TestClient (tests/test_recurrence_api.py) imports httpx2
+# first and falls back to httpx with a StarletteDeprecationWarning if it's
+# missing. Pinned here, not in requirements.txt, because the app itself never
+# imports it — this is a test-only transitive need of starlette.testclient.
+httpx2==2.10.0

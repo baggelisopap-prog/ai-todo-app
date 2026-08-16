@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Literal
-from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings
+from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings, RecurrenceRule
 from services import TaskService
 import services  # for HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES — one policy, both reply paths
 from repository import save_push_subscription, get_app_settings, update_app_settings
@@ -79,6 +79,58 @@ class CreateTaskRequest(BaseModel):
     due_date: Optional[str] = None
     due_time: Optional[str] = None
     checklist: Optional[list[ChecklistItem]] = None
+
+class RecurrenceCreateRequest(BaseModel):
+    """Request body for POST /recurrences. Mirrors RecurrenceRule minus the
+    server-owned fields (record_id, materialized_through, created_at)."""
+    task_name: str
+    description: str = ""
+    category: str = "Unknown"
+    priority: str = "P3"
+    due_time: Optional[str] = None
+    checklist: Optional[list[ChecklistItem]] = None
+    freq: str
+    weekdays: Optional[list[int]] = None
+    month_day: Optional[int] = None
+    starts_on: str
+    ends_on: Optional[str] = None
+    notify_enabled: bool = False
+    calendar_sync_enabled: bool = False
+
+
+class RecurrenceUpdateRequest(BaseModel):
+    """Request body for PATCH /recurrences/{id}. Every field optional; only the
+    ones actually sent are written."""
+    task_name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    priority: Optional[str] = None
+    due_time: Optional[str] = None
+    checklist: Optional[list[ChecklistItem]] = None
+    freq: Optional[str] = None
+    weekdays: Optional[list[int]] = None
+    month_day: Optional[int] = None
+    starts_on: Optional[str] = None
+    ends_on: Optional[str] = None
+    is_active: Optional[bool] = None
+    approval_status: Optional[bool] = None
+    notify_enabled: Optional[bool] = None
+    calendar_sync_enabled: Optional[bool] = None
+
+
+class RecurrencesListResponse(BaseModel):
+    recurrences: list[RecurrenceRule]
+    count: int
+
+
+class RecurrenceWriteResponse(BaseModel):
+    recurrence: RecurrenceRule
+    occurrences_created: int
+
+
+class RecurrenceDeleteResponse(BaseModel):
+    deleted: bool
+    occurrences_removed: int
 
 class HealthResponse(BaseModel):
     status: str
@@ -581,6 +633,111 @@ def update_settings(payload: AppSettings, user_id: str = Depends(get_current_use
     except Exception as e:
         logger.exception("Failed to update app settings")
         raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")
+
+
+def _athens_today():
+    """One clock read, in the same zone as everything else in this app."""
+    return datetime.now(ZoneInfo("Europe/Athens")).date()
+
+
+@app.get("/recurrences", response_model=RecurrencesListResponse)
+def list_recurrences(user_id: str = Depends(get_current_user_id)):
+    """Every recurrence rule this user owns, oldest first."""
+    try:
+        rules = repository.get_recurrence_rules(user_id)
+        return RecurrencesListResponse(recurrences=rules, count=len(rules))
+    except Exception as e:
+        logger.exception("Failed to list recurrences")
+        raise HTTPException(status_code=500, detail=f"Failed to list recurrences: {str(e)}")
+
+
+@app.post("/recurrences", response_model=RecurrenceWriteResponse, status_code=status.HTTP_201_CREATED)
+def create_recurrence(payload: RecurrenceCreateRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Creates a rule and materialises its window SYNCHRONOUSLY.
+
+    The scheduler would get there within ~2 minutes, but a user who saves a
+    recurrence and sees an empty list concludes the feature is broken. The
+    write is idempotent, so doing it here and again on the next tick costs
+    nothing.
+    """
+    try:
+        # RecurrenceRule's validators are the real gate — an incoherent rule
+        # (weekly with no weekdays, category Hostaway) raises here as a 422.
+        # exclude_none: RecurrenceCreateRequest.checklist defaults to None,
+        # but RecurrenceRule.checklist is a plain list (default_factory=list),
+        # not Optional — passing checklist=None straight through would 422
+        # every request that omits it. The other optional fields already
+        # default to None on both sides, so dropping unset Nones changes
+        # nothing for them.
+        rule = RecurrenceRule(**payload.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    try:
+        saved = repository.create_recurrence_rule(user_id, rule)
+        created = service.materialize_recurrence_rule(user_id, saved, _athens_today())
+        return RecurrenceWriteResponse(recurrence=saved, occurrences_created=created)
+    except Exception as e:
+        logger.exception("Failed to create recurrence")
+        raise HTTPException(status_code=500, detail=f"Failed to create recurrence: {str(e)}")
+
+
+@app.patch("/recurrences/{rule_id}", response_model=RecurrenceWriteResponse)
+def update_recurrence(
+    rule_id: str, payload: RecurrenceUpdateRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Changes a rule and regenerates from TOMORROW on.
+
+    Pausing goes through here too (is_active=false), and that is the point:
+    "off" must clear the fortnight already generated, not leave the user
+    ticking off a task they just switched off. Approving an AI-made rule is
+    also this call, with approval_status=true.
+    """
+    updates = payload.model_dump(exclude_unset=True)
+    updates = {k: v for k, v in updates.items() if v is not None}
+    if "checklist" in updates:
+        updates["checklist"] = [item.model_dump() for item in payload.checklist or []]
+
+    try:
+        saved = repository.update_recurrence_rule(user_id, rule_id, updates)
+    except Exception as e:
+        logger.exception("Failed to update recurrence")
+        raise HTTPException(status_code=500, detail=f"Failed to update recurrence: {str(e)}")
+
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Recurrence not found")
+
+    created = service.regenerate_recurrence_rule(user_id, saved, _athens_today())
+    return RecurrenceWriteResponse(recurrence=saved, occurrences_created=created)
+
+
+@app.delete("/recurrences/{rule_id}", response_model=RecurrenceDeleteResponse)
+def delete_recurrence(rule_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Deletes the rule and every OPEN occurrence, past and future. Completed and
+    missed ones stay — that is the history, and ON DELETE SET NULL turns them
+    into ordinary tasks.
+
+    Past open ones must go as well: with the rule row gone there is no
+    grace_days left to close them by, so they would hang overdue for ever.
+    """
+    rule = repository.get_recurrence_rule(user_id, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Recurrence not found")
+
+    try:
+        open_ids = [row["id"] for row in repository.get_open_occurrences(user_id, rule_id)]
+        # occurrences_removed is len(open_ids), not delete_tasks_by_ids's return
+        # value: we already know exactly which ids we asked to remove, so the
+        # count doesn't need to depend on what the delete call hands back.
+        repository.delete_tasks_by_ids(user_id, open_ids)
+        repository.delete_recurrence_rule(user_id, rule_id)
+        return RecurrenceDeleteResponse(deleted=True, occurrences_removed=len(open_ids))
+    except Exception as e:
+        logger.exception("Failed to delete recurrence")
+        raise HTTPException(status_code=500, detail=f"Failed to delete recurrence: {str(e)}")
 
 
 @app.get("/profile")
