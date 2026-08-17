@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getRecurrences, updateRecurrence, deleteRecurrence } from '../api';
 import { describeRecurrence } from '../utils/taskDisplay';
+import { useRecurrence } from '../hooks/useRecurrence';
 import Switch from './Switch';
 import RecurrenceForm from './RecurrenceForm';
 
@@ -33,6 +34,19 @@ function RecurrencesView({ onShowToast }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // null | 'new' | rule object
 
+  // This screen keeps its own copy of the rules — it needs one it can move
+  // optimistically under a finger on the switch — but it is no longer the only
+  // copy: every task row now reads a rule to print "↻ Repeats · Mon-Fri", from
+  // the shared one in RecurrenceProvider. So every write here has to tell that
+  // copy to catch up, or editing a rule in Settings leaves forty rows in the
+  // list behind it describing the rule as it used to be.
+  //
+  // A second copy is tolerable here in a way it was not for app settings
+  // (see AppSettingsProvider): these writes PATCH only the fields that
+  // changed, so a stale copy can show something out of date but cannot post
+  // an old value over a new one.
+  const { reload: reloadSharedRules } = useRecurrence();
+
   // A .then()/.catch()/.finally() chain, not an async function: the setState
   // calls sit inside their own nested callbacks rather than directly in
   // `load`'s own body, which is what keeps react-hooks/set-state-in-effect
@@ -60,6 +74,7 @@ function RecurrencesView({ onShowToast }) {
       r.record_id === rule.record_id ? { ...r, is_active: next } : r));
     try {
       await updateRecurrence(rule.record_id, { is_active: next });
+      reloadSharedRules();
       onShowToast?.(next ? t('recurrence.resumed') : t('recurrence.paused'), 'success');
     } catch (err) {
       onShowToast?.(err.message, 'error');
@@ -72,6 +87,7 @@ function RecurrencesView({ onShowToast }) {
     try {
       await deleteRecurrence(rule.record_id);
       setRules((prev) => prev.filter((r) => r.record_id !== rule.record_id));
+      reloadSharedRules();
       onShowToast?.(t('recurrence.deleted'), 'success');
     } catch (err) {
       onShowToast?.(err.message, 'error');
@@ -83,7 +99,12 @@ function RecurrencesView({ onShowToast }) {
       <RecurrenceForm
         rule={editing === 'new' ? null : editing}
         onCancel={() => setEditing(null)}
-        onSaved={() => { setEditing(null); onShowToast?.(t('recurrence.saved'), 'success'); load(); }}
+        onSaved={() => {
+          setEditing(null);
+          onShowToast?.(t('recurrence.saved'), 'success');
+          load();
+          reloadSharedRules();
+        }}
       />
     );
   }

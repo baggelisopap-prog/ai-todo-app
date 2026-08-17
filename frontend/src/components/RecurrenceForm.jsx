@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createRecurrence, updateRecurrence } from '../api';
+import { isoWeekday } from '../utils/formatDate';
 import Switch from './Switch';
 
 const ISO_DAYS = [1, 2, 3, 4, 5, 6, 7]; // 1 = Monday .. 7 = Sunday
@@ -12,26 +13,66 @@ function todayISO() {
 }
 
 /**
+ * An existing task read as the rule it is about to become. The keys are the
+ * rule's own field names so the form can read either source without caring
+ * which it got.
+ *
+ * Two judgements worth naming. The days default to the ONE day the task
+ * already falls on, not Mon-Fri: "repeat this" said about next Tuesday most
+ * often means every Tuesday, and a form that opens pre-armed for five days a
+ * week invites the user to save four commitments they never asked for. And
+ * Hostaway cannot come along — RecurrenceRule refuses that category outright
+ * (models.py), because it belongs to the integration and its escalation
+ * intervals. A Hostaway task can still be made to repeat; it just arrives as
+ * Unknown rather than being rejected at save time with no explanation.
+ */
+function fromTask(task) {
+  const weekday = isoWeekday(task.due_date);
+  return {
+    task_name: task.task_name || '',
+    // The AI routinely sets description to the task name verbatim, which the
+    // row already knows to hide (TaskRow's showDescription). Carrying it into
+    // the rule would print the same words twice in the Recurrences list.
+    description: task.description === task.task_name ? '' : (task.description || ''),
+    category: !task.category || task.category === 'Hostaway' ? 'Unknown' : task.category,
+    priority: task.priority || 'P3',
+    due_time: task.due_time || '',
+    weekdays: weekday ? [weekday] : [1, 2, 3, 4, 5],
+    starts_on: task.due_date || todayISO(),
+    notify_enabled: task.notify_enabled ?? false,
+    calendar_sync_enabled: task.calendar_sync_enabled ?? false,
+  };
+}
+
+/**
  * The alarm-clock shape: a time, and seven day toggles. Monthly is the second
  * mechanism, not a variation of the first, so it swaps the day toggles out
  * entirely rather than adding a mode to them.
+ *
+ * Three ways in, one form. `rule` set means edit it. `task` set means make
+ * that task repeat — the fields open filled in from it, and saving asks the
+ * server to adopt it as the rule's first occurrence rather than generating a
+ * twin beside it. Neither means a rule from scratch, which is what the
+ * Settings screen does.
  */
-function RecurrenceForm({ rule, onCancel, onSaved }) {
+function RecurrenceForm({ rule, task, onCancel, onSaved }) {
   const { t } = useTranslation();
   const isEdit = Boolean(rule);
+  const adoptTask = isEdit ? null : task;
+  const source = rule || (adoptTask ? fromTask(adoptTask) : {});
 
-  const [taskName, setTaskName] = useState(rule?.task_name || '');
-  const [description, setDescription] = useState(rule?.description || '');
-  const [category, setCategory] = useState(rule?.category || 'Personal');
-  const [priority, setPriority] = useState(rule?.priority || 'P3');
-  const [dueTime, setDueTime] = useState(rule?.due_time || '');
-  const [freq, setFreq] = useState(rule?.freq || 'weekly');
-  const [weekdays, setWeekdays] = useState(rule?.weekdays || [1, 2, 3, 4, 5]);
-  const [monthDay, setMonthDay] = useState(rule?.month_day ?? 1);
-  const [startsOn, setStartsOn] = useState(rule?.starts_on || todayISO());
-  const [endsOn, setEndsOn] = useState(rule?.ends_on || '');
-  const [notify, setNotify] = useState(rule?.notify_enabled ?? false);
-  const [calendar, setCalendar] = useState(rule?.calendar_sync_enabled ?? false);
+  const [taskName, setTaskName] = useState(source.task_name || '');
+  const [description, setDescription] = useState(source.description || '');
+  const [category, setCategory] = useState(source.category || 'Personal');
+  const [priority, setPriority] = useState(source.priority || 'P3');
+  const [dueTime, setDueTime] = useState(source.due_time || '');
+  const [freq, setFreq] = useState(source.freq || 'weekly');
+  const [weekdays, setWeekdays] = useState(source.weekdays || [1, 2, 3, 4, 5]);
+  const [monthDay, setMonthDay] = useState(source.month_day ?? 1);
+  const [startsOn, setStartsOn] = useState(source.starts_on || todayISO());
+  const [endsOn, setEndsOn] = useState(source.ends_on || '');
+  const [notify, setNotify] = useState(source.notify_enabled ?? false);
+  const [calendar, setCalendar] = useState(source.calendar_sync_enabled ?? false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -75,6 +116,11 @@ function RecurrenceForm({ rule, onCancel, onSaved }) {
       ends_on: endsOn || null,
       notify_enabled: notify,
       calendar_sync_enabled: calendar,
+      // Not part of the rule. It tells the server that this task already
+      // exists and should BECOME the first occurrence — without it the
+      // generator creates its own row for the same day and the user is
+      // looking at two identical tasks the moment they hit save.
+      ...(adoptTask ? { adopt_task_id: adoptTask.record_id } : {}),
     };
 
     try {

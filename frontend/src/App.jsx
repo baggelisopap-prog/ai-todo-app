@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAllTasks, updateTask, connectGoogleCalendar, getProfile } from './api';
 import { supabase } from './supabaseClient';
@@ -12,6 +12,7 @@ import FloatingActionButtons from './components/FloatingActionButtons';
 import AddTaskModal from './components/AddTaskModal';
 import Toast from './components/Toast';
 import SettingsModal from './components/SettingsModal';
+import RecurrenceProvider from './components/RecurrenceProvider';
 import { AgentChatModal } from './components/AgentChatModal';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
 import AppBar from './components/AppBar';
@@ -137,6 +138,19 @@ function App() {
     }
   }, []);
 
+  // A background refetch, for when something server-side created task rows the
+  // app has no way to know about — saving a recurrence materialises a
+  // fortnight of them in one POST.
+  //
+  // Deliberately does NOT touch isLoading: this runs while the user is looking
+  // at their list, and flipping the whole screen back to "Loading…" in order to
+  // add a few rows reads as the app crashing and coming back.
+  const refreshTasks = useCallback(() => {
+    return getAllTasks()
+      .then((data) => setTasks(data.tasks))
+      .catch((err) => setToast({ message: err.message, variant: 'error' }));
+  }, []);
+
   function handleTasksAdded(newTasks) {
     setTasks((current) => [...newTasks, ...current]);
     const count = newTasks.length;
@@ -237,6 +251,7 @@ function App() {
   // fire a guaranteed 401 on every visit by a logged-out user.
   return (
     <AppSettingsProvider>
+    <RecurrenceProvider onShowToast={handleShowToast} onTasksChanged={refreshTasks}>
     <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       <AppBar
         title={t(TAB_TITLE_KEYS[activeTab])}
@@ -317,6 +332,7 @@ function App() {
         <AgentChatModal onClose={() => setIsAgentOpen(false)} onTaskConfirmed={handleAgentActionConfirmed} />
       )}
     </div>
+    </RecurrenceProvider>
     </AppSettingsProvider>
   );
 }
