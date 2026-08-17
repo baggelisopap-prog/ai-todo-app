@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { agentEditTask } from '../api';
 import { formatDate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
-import { categoryColor, categoryLabel, dueTone, DUE_TONE_CLASSES, priorityLabel } from '../utils/taskDisplay';
+import { categoryColor, categoryLabel, describeRecurrence, dueTone, DUE_TONE_CLASSES, priorityLabel } from '../utils/taskDisplay';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useTaskActions } from '../hooks/useTaskActions';
+import { useRecurrence } from '../hooks/useRecurrence';
 import CustomSelect from './CustomSelect';
 import DictateButton from './DictateButton';
 import Switch from './Switch';
@@ -118,6 +119,10 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const { t } = useTranslation();
   const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast });
   const { isPending, isCompleted, isRejected, approvesOnEdit } = actions;
+  const recurrence = useRecurrence();
+  // Null while the rules are loading, or if the task simply does not repeat.
+  // The row below distinguishes the two cases by task.recurrence_rule_id.
+  const rule = recurrence.ruleFor(task);
 
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(() => draftFromTask(task));
@@ -374,6 +379,8 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             onReject={actions.reject}
             onUnreject={actions.unreject}
             onEdit={isEditing ? null : startEditing}
+            onRecurrence={() => recurrence.openEditor(task)}
+            isRecurring={Boolean(task.recurrence_rule_id)}
             onDelete={handleDelete}
             t={t}
           />
@@ -466,6 +473,30 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                   onChange={() => actions.setCalendarSync(!task.calendar_sync_enabled)}
                   disabledReason={task.due_date ? null : t('calendar.no_date_for_sync')}
                 />
+
+                {/* Not a Switch, though it sits with two of them. Repetition is
+                    not a thing you turn on — it is a pattern that has to be
+                    described — so it opens the form instead of toggling, and
+                    is drawn as a row you press rather than a lever. It states
+                    "Never" when there is none, because a setting that hides
+                    when it is off is a setting nobody finds. */}
+                <button
+                  type="button"
+                  onClick={() => recurrence.openEditor(task)}
+                  className="w-full flex items-center justify-between gap-3 text-left py-1 rounded hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <span className="text-sm text-[var(--text-primary)]">
+                    {t('recurrence.task_label')}
+                  </span>
+                  <span className="text-sm text-[var(--text-secondary)] truncate">
+                    {!task.recurrence_rule_id && t('recurrence.never')}
+                    {/* It repeats, but by what pattern is not known yet — the
+                        rules are still in flight, or their fetch failed.
+                        "Never" here would be a flat lie about the user's own
+                        data, which is worse than saying less. */}
+                    {task.recurrence_rule_id && (rule ? describeRecurrence(rule, t) : t('recurrence.repeats_unknown'))}
+                  </span>
+                </button>
               </div>
             </>
           ) : (

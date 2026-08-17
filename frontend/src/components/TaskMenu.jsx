@@ -56,6 +56,8 @@ function TaskMenu({
   onUnreject,
   onEdit,
   onReschedule,
+  onRecurrence,
+  isRecurring,
   onDelete,
   t,
 }) {
@@ -162,6 +164,15 @@ function TaskMenu({
           )}
           {onReschedule && (
             <MenuItem label={t('actions.reschedule')} onClick={run(onReschedule)} />
+          )}
+          {/* Beside Reschedule because they are the same kind of thought —
+              when does this happen — and the one that says "every week"
+              belongs next to the one that says "next Tuesday". */}
+          {onRecurrence && (
+            <MenuItem
+              label={isRecurring ? t('recurrence.menu_edit') : t('recurrence.menu_add')}
+              onClick={run(onRecurrence)}
+            />
           )}
           {!isRejected && (
             <MenuItem

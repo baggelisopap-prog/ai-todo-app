@@ -5,6 +5,8 @@ import { priorityColor } from '../utils/priorityColor';
 import {
   categoryColor,
   categoryLabel,
+  describeRecurrence,
+  describeRecurrencePattern,
   dueTone,
   DUE_TONE_CLASSES,
   priorityLabel,
@@ -12,6 +14,7 @@ import {
 } from '../utils/taskDisplay';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { useSwipeRow } from '../hooks/useSwipeRow';
+import { useRecurrence } from '../hooks/useRecurrence';
 import TaskMenu from './TaskMenu';
 import QuickReschedule from './QuickReschedule';
 import {
@@ -99,6 +102,24 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
   const showDescription = task.description && task.description !== task.task_name;
   const progress = checklistProgress(task.checklist);
   const tone = dueTone(task);
+
+  // The row carries only recurrence_rule_id — the sentence describing what
+  // repeats lives in a rule this component has never seen, which is why it
+  // comes from the shared context rather than from props.
+  //
+  // A null rule means "not loaded yet, or the fetch failed", and the badge
+  // still renders: it falls back to the bare word, because a marker that
+  // pops into a row a second after the row itself is more unsettling than a
+  // marker that says slightly less. The full sentence, time included, is on
+  // the title and the accessible name either way.
+  const recurrence = useRecurrence();
+  const rule = recurrence.ruleFor(task);
+  const recurrenceBadge = rule
+    ? t('recurrence.badge_with_pattern', { pattern: describeRecurrencePattern(rule, t) })
+    : t('recurrence.badge');
+  const recurrenceTitle = rule
+    ? t('recurrence.badge_aria', { summary: describeRecurrence(rule, t) })
+    : t('recurrence.badge');
 
   // Both are ALWAYS drawn and always tappable. An earlier pass hid them
   // whenever they were off, which removed the one-tap toggle from the list and
@@ -245,13 +266,17 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
             )}
 
             {task.recurrence_rule_id && (
-              <span
-                className="text-[var(--text-muted)] text-xs"
-                title={t('recurrence.title')}
-                aria-label={t('recurrence.title')}
+              <button
+                type="button"
+                data-no-toggle
+                onClick={(e) => { e.stopPropagation(); recurrence.openEditor(task); }}
+                title={recurrenceTitle}
+                aria-label={recurrenceTitle}
+                className="tap-40 flex items-center gap-1 px-1.5 py-0.5 -my-0.5 rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
               >
-                ↻
-              </span>
+                <span aria-hidden="true">↻</span>
+                {recurrenceBadge}
+              </button>
             )}
 
             {task.category && task.category !== 'Unknown' && (
@@ -336,6 +361,8 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
           onUnreject={actions.unreject}
           onEdit={() => onOpen(task.record_id)}
           onReschedule={() => setIsReschedulingOpen(true)}
+          onRecurrence={() => recurrence.openEditor(task)}
+          isRecurring={Boolean(task.recurrence_rule_id)}
           onDelete={handleDelete}
           t={t}
         />

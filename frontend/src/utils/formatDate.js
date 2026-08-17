@@ -10,6 +10,25 @@ export function toLocalISODate(date) {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * The ISO weekday (1 = Monday .. 7 = Sunday) of a YYYY-MM-DD string, or null
+ * if there isn't one. ISO because that is what the recurrence rules use, on
+ * both sides of the wire.
+ *
+ * The components are parsed by hand rather than handed to `new Date(str)`,
+ * which reads a bare YYYY-MM-DD as UTC midnight. That is the right date in
+ * Athens (UTC+2/+3 puts it at 02:00 or 03:00 the same day) and the WRONG one
+ * anywhere west of Greenwich, where it lands on the previous evening and this
+ * function would name the day before.
+ */
+export function isoWeekday(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const day = new Date(y, m - 1, d).getDay(); // 0 = Sunday
+  return day === 0 ? 7 : day;
+}
+
 export function formatDate(dateStr, timeStr) {
   if (!dateStr) return '';
   const date = new Date(dateStr);

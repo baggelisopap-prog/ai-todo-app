@@ -1,4 +1,8 @@
-import { toLocalISODate } from './formatDate';
+// The .js is not decoration. Vite resolves an extensionless relative import
+// happily; plain Node ESM does not, and scripts/*.test.mjs run these utils
+// under plain Node with no bundler in the way. This is the only util that
+// imports another one, which is why it is the only one that needs it.
+import { toLocalISODate } from './formatDate.js';
 
 // The card used to print the raw enum — "Business" — while the filter pills in
 // Browse showed "Επαγγελματικά" for the same thing. Same concept, two names, in
@@ -37,32 +41,44 @@ export function categoryLabel(category, t) {
  * else.
  */
 export function describeRecurrence(rule, t) {
-  const days = rule.weekdays || [];
-  let when;
-
-  if (rule.freq === 'monthly') {
-    when = rule.month_day === -1
-      ? t('recurrence.monthly_last')
-      : t('recurrence.monthly_day', { day: rule.month_day });
-  } else if (days.length === 7) {
-    when = t('recurrence.every_day');
-  } else if (days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d))) {
-    when = t('recurrence.weekdays');
-  } else if (days.length === 2 && days.includes(6) && days.includes(7)) {
-    when = t('recurrence.weekends');
-  } else {
-    // Confirmed against frontend/src/i18n.js: plain i18next + initReactI18next,
-    // no config that would make returnObjects misbehave. This is a real array,
-    // not a stringified object — [d - 1] because the key is ISO (1 = Monday)
-    // and the array is 0-indexed (Monday first).
-    const short = t('recurrence.days_short', { returnObjects: true });
-    when = days.slice().sort((a, b) => a - b).map((d) => short[d - 1]).join(' ');
-  }
-
   const time = rule.due_time
     ? t('recurrence.at_time', { time: rule.due_time })
     : t('recurrence.no_time');
-  return `${when} · ${time}`;
+  return `${describeRecurrencePattern(rule, t)} · ${time}`;
+}
+
+/**
+ * Just the "when" half: "Mon-Fri", "Every day", "Day 15 of the month".
+ *
+ * The badge on a task row uses this rather than the full sentence above. A row
+ * already prints the occurrence's own date and time a few pixels to the left,
+ * so repeating "at 09:00" inside the badge says the same thing twice in one
+ * line — and the row is the one place in the app genuinely short of width. The
+ * badge's tooltip and accessible name still carry the full sentence, so the
+ * time is available, just not shouted.
+ */
+export function describeRecurrencePattern(rule, t) {
+  const days = rule.weekdays || [];
+
+  if (rule.freq === 'monthly') {
+    return rule.month_day === -1
+      ? t('recurrence.monthly_last')
+      : t('recurrence.monthly_day', { day: rule.month_day });
+  }
+  if (days.length === 7) return t('recurrence.every_day');
+  if (days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d))) {
+    return t('recurrence.weekdays');
+  }
+  if (days.length === 2 && days.includes(6) && days.includes(7)) {
+    return t('recurrence.weekends');
+  }
+
+  // Confirmed against frontend/src/i18n.js: plain i18next + initReactI18next,
+  // no config that would make returnObjects misbehave. This is a real array,
+  // not a stringified object — [d - 1] because the key is ISO (1 = Monday)
+  // and the array is 0-indexed (Monday first).
+  const short = t('recurrence.days_short', { returnObjects: true });
+  return days.slice().sort((a, b) => a - b).map((d) => short[d - 1]).join(' ');
 }
 
 /**
