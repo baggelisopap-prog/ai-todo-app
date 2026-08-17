@@ -29,6 +29,43 @@ export function categoryLabel(category, t) {
 }
 
 /**
+ * A recurrence rule as one line of human language: "Mon-Fri at 09:00".
+ *
+ * Exported because the Inbox renders pending AI-made rules with the same
+ * sentence (a later task) — a recurrence the user is asked to approve must
+ * read exactly like one they already own, or they are approving something
+ * else.
+ */
+export function describeRecurrence(rule, t) {
+  const days = rule.weekdays || [];
+  let when;
+
+  if (rule.freq === 'monthly') {
+    when = rule.month_day === -1
+      ? t('recurrence.monthly_last')
+      : t('recurrence.monthly_day', { day: rule.month_day });
+  } else if (days.length === 7) {
+    when = t('recurrence.every_day');
+  } else if (days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d))) {
+    when = t('recurrence.weekdays');
+  } else if (days.length === 2 && days.includes(6) && days.includes(7)) {
+    when = t('recurrence.weekends');
+  } else {
+    // Confirmed against frontend/src/i18n.js: plain i18next + initReactI18next,
+    // no config that would make returnObjects misbehave. This is a real array,
+    // not a stringified object — [d - 1] because the key is ISO (1 = Monday)
+    // and the array is 0-indexed (Monday first).
+    const short = t('recurrence.days_short', { returnObjects: true });
+    when = days.slice().sort((a, b) => a - b).map((d) => short[d - 1]).join(' ');
+  }
+
+  const time = rule.due_time
+    ? t('recurrence.at_time', { time: rule.due_time })
+    : t('recurrence.no_time');
+  return `${when} · ${time}`;
+}
+
+/**
  * How urgent a due date is, as one of 'overdue' | 'today' | 'later' | 'none'.
  *
  * Exists because the row used to render every date in the same grey. Whether a

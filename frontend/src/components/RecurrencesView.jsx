@@ -1,48 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getRecurrences, updateRecurrence, deleteRecurrence } from '../api';
+import { describeRecurrence } from '../utils/taskDisplay';
 import Switch from './Switch';
 import RecurrenceForm from './RecurrenceForm';
 
-/**
- * A rule as one line of human language: "Mon-Fri at 09:00".
- *
- * Exported because the Inbox renders pending AI-made rules with the same
- * sentence (a later task) — a recurrence the user is asked to approve must
- * read exactly like one they already own, or they are approving something
- * else. (Mixing this export with the default component below trips
- * react-refresh/only-export-components; disabled deliberately rather than
- * split into a third file for one function.)
- */
-// eslint-disable-next-line react-refresh/only-export-components
-export function describeRecurrence(rule, t) {
-  const days = rule.weekdays || [];
-  let when;
-
-  if (rule.freq === 'monthly') {
-    when = rule.month_day === -1
-      ? t('recurrence.monthly_last')
-      : t('recurrence.monthly_day', { day: rule.month_day });
-  } else if (days.length === 7) {
-    when = t('recurrence.every_day');
-  } else if (days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d))) {
-    when = t('recurrence.weekdays');
-  } else if (days.length === 2 && days.includes(6) && days.includes(7)) {
-    when = t('recurrence.weekends');
-  } else {
-    // Confirmed against frontend/src/i18n.js: plain i18next + initReactI18next,
-    // no config that would make returnObjects misbehave. This is a real array,
-    // not a stringified object — [d - 1] because the key is ISO (1 = Monday)
-    // and the array is 0-indexed (Monday first).
-    const short = t('recurrence.days_short', { returnObjects: true });
-    when = days.slice().sort((a, b) => a - b).map((d) => short[d - 1]).join(' ');
-  }
-
-  const time = rule.due_time
-    ? t('recurrence.at_time', { time: rule.due_time })
-    : t('recurrence.no_time');
-  return `${when} · ${time}`;
-}
+// describeRecurrence lives in utils/taskDisplay.js, beside its sibling
+// categoryLabel — same shape (a domain object plus `t`, returns a string),
+// no React involved. The Inbox (a later task), which renders pending
+// AI-made rules with the same sentence, imports it from there too, not
+// from this file — one shared source for the sentence, not a re-export
+// chain through a component.
 
 /**
  * The Recurrences sub-screen: what repeats, when, and a switch per row.
