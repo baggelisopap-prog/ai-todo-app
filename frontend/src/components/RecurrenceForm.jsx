@@ -200,8 +200,9 @@ function RecurrenceForm({ rule, onCancel, onSaved }) {
       */}
       <Switch
         label={t('recurrence.form_notify')}
-        checked={notify}
+        checked={Boolean(notify && dueTime)}
         onChange={() => setNotify((v) => !v)}
+        disabledReason={dueTime ? null : t('task.no_time_for_reminder')}
       />
 
       <Switch

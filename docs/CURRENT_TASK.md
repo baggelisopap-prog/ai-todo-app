@@ -27,8 +27,7 @@ Handed to the owner 2026-08-17. Not yet reported back.
 - [ ] A rule-generated occurrence with the reminder bell on actually rings at the right time. The reminder path (`notification_sent`, the existing scheduler) has never been exercised against a row this feature created — only against ordinary tasks.
 
 ## Gap 5 — the reminder bell is silently inert without a time
-Found by reading, not yet decided. The reminder path requires BOTH `due_date` and `due_time` (`repository.get_tasks_due_for_notification` skips any task missing either). A recurrence rule may legitimately have no time — that is by design, "an alarm that never rings" — but the form lets the user switch the bell ON for such a rule, and nothing anywhere says it will never fire.
-- [ ] Decide: does the form disable the bell when no time is set, or warn, or is documenting it enough? This is a product call, not a bug to fix silently.
+Closed: `RecurrenceForm.jsx`'s reminder `Switch` now adopts `TaskDetailSheet.jsx`'s existing `disabledReason` pattern (`checked={Boolean(notify && dueTime)}`, `disabledReason` set to `task.no_time_for_reminder` when `dueTime` is empty), matching the same guard already used for a single task's bell.
 
 ## Slice 2 — not started
 The AI understanding "every Monday" is designed (same spec) but not implemented. **Do not start it until Slice 1 has been seen working in a browser** — the whole point of the two-slice split is that a duplicate task must be attributable to either the generator or the extractor, never ambiguously to both.
