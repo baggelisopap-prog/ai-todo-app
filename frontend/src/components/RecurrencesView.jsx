@@ -16,8 +16,16 @@ import RecurrenceForm from './RecurrenceForm';
  * The Recurrences sub-screen: what repeats, when, and a switch per row.
  *
  * Modelled on HostawayConnectionView (SettingsModal.jsx) — the closest
- * existing settings sub-screen: same space-y rhythm, same border/bg-input
- * card look for each row, same brand-primary full-width primary action.
+ * existing settings sub-screen: same space-y rhythm, same brand-primary
+ * full-width primary action. Two deliberate differences, not oversights:
+ * each row here is its own bordered bg-input card, where Hostaway's toggle
+ * rows (SettingsModal.jsx:704-726) are plain, unbordered divs — this screen
+ * needed the card to separate one rule from the next in a list, a problem
+ * Hostaway never has since it only ever shows one connection. And this view
+ * renders a visible "…" while loading, rather than Hostaway's
+ * render-nothing-until-loaded (SettingsModal.jsx:660) — arguably the better
+ * choice for a list that might otherwise flash empty, but not the same, so
+ * not claimed as the same.
  */
 function RecurrencesView({ onShowToast }) {
   const { t } = useTranslation();
@@ -28,9 +36,14 @@ function RecurrencesView({ onShowToast }) {
   // A .then()/.catch()/.finally() chain, not an async function: the setState
   // calls sit inside their own nested callbacks rather than directly in
   // `load`'s own body, which is what keeps react-hooks/set-state-in-effect
-  // quiet when `load()` is called from the mount effect below — the same
-  // shape HostawayConnectionView and CalendarConnectionView already use in
-  // SettingsModal.jsx for the same reason.
+  // quiet when `load()` is called from the mount effect below. Not the
+  // brief's shape (a deliberate deviation, made to avoid a new lint error —
+  // not one of the brief's three pre-approved corrections). It dodges the
+  // same rule the same way HostawayConnectionView and CalendarConnectionView
+  // do in SettingsModal.jsx, but not in the same shape: those two inline
+  // their .then() chain directly inside useEffect, where this one is
+  // extracted into a useCallback'd `load` so handleToggle's failure-recovery
+  // path and the post-save reload below can call it too.
   const load = useCallback(() => {
     return getRecurrences()
       .then((data) => setRules(data.recurrences || []))
@@ -113,18 +126,17 @@ function RecurrencesView({ onShowToast }) {
           </button>
 
           {/*
-            No `label`: Switch's real props are label/description/checked/
-            onChange/disabled/disabledReason (Switch.jsx:15) — it does not
-            accept aria-label. The row's own button, immediately to this
-            switch's left, already names the rule (task_name), so passing
-            label={rule.task_name} here would print the name a second time
-            next to the toggle. Omitted per the brief's own guidance: "use
-            label, or omit where surrounding text already labels the
-            control."
+            No `label`: the row's own button, immediately to this switch's
+            left, already renders rule.task_name as visible text, so passing
+            it as `label` too would print the name a second time next to the
+            toggle. `ariaLabel` (Switch.jsx) exists for exactly this case —
+            it gives the button an accessible name without duplicating the
+            visible text a second time.
           */}
           <Switch
             checked={rule.is_active}
             onChange={() => handleToggle(rule)}
+            ariaLabel={rule.task_name}
           />
 
           <button

@@ -12,7 +12,13 @@
  * cannot act is genuinely disabled AND says why, instead of leaving the user to
  * tap it and find out.
  */
-function Switch({ label, description, checked, onChange, disabled = false, disabledReason }) {
+// `ariaLabel` is optional and defaults to `label` (`aria-label={ariaLabel ||
+// label}`), so every caller written before this prop existed keeps its exact
+// behaviour. It exists for the case `label` cannot cover: a row whose
+// visible text already names the control (rendered elsewhere, next to the
+// switch, not by the switch) still needs a name for a screen reader — and
+// passing that same text as `label` here would print it a second time.
+function Switch({ label, ariaLabel, description, checked, onChange, disabled = false, disabledReason }) {
   const isDisabled = disabled || Boolean(disabledReason);
 
   return (
@@ -25,7 +31,7 @@ function Switch({ label, description, checked, onChange, disabled = false, disab
           type="button"
           role="switch"
           aria-checked={checked}
-          aria-label={label}
+          aria-label={ariaLabel || label}
           disabled={isDisabled}
           onClick={onChange}
           className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-50 ${
