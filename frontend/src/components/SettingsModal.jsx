@@ -30,6 +30,7 @@ import {
 import { useAppSettings } from '../hooks/useAppSettings';
 import SettingsRow, { SettingsGroup } from './SettingsRow';
 import OptionSheet from './OptionSheet';
+import RecurrencesView from './RecurrencesView';
 
 // Hardcoded owner user_id, used purely for frontend visibility: it hides the
 // Developer section from everyone else. The /dev/token-usage endpoint still
@@ -57,6 +58,7 @@ function getInitials(displayName, email) {
 const SCREENS = {
   profile: 'settings.my_profile',
   notifications: 'settings.notifications',
+  recurrences: 'recurrence.title',
   calendar: 'settings.calendar',
   hostaway: 'hostaway.title',
   developer: 'settings.developer',
@@ -178,6 +180,7 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
 
               <SettingsGroup>
                 <SettingsRow label={t('settings.notifications')} onClick={() => setScreen('notifications')} />
+                <SettingsRow label={t('recurrence.title')} onClick={() => setScreen('recurrences')} />
                 <SettingsRow label={t('settings.calendar')} onClick={() => setScreen('calendar')} />
                 <SettingsRow label={t('hostaway.title')} onClick={() => setScreen('hostaway')} />
               </SettingsGroup>
@@ -226,6 +229,7 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
 
           {screen === 'profile' && <ProfileSection profile={profile} onProfileUpdate={onProfileUpdate} />}
           {screen === 'notifications' && <NotificationsSection onShowToast={onShowToast} />}
+          {screen === 'recurrences' && <RecurrencesView onShowToast={onShowToast} />}
           {screen === 'calendar' && <CalendarConnectionView onShowToast={onShowToast} />}
           {screen === 'hostaway' && <HostawayConnectionView onShowToast={onShowToast} />}
           {screen === 'developer' && <DeveloperUsageView />}

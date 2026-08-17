@@ -244,6 +244,16 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
               </span>
             )}
 
+            {task.recurrence_rule_id && (
+              <span
+                className="text-[var(--text-muted)] text-xs"
+                title={t('recurrence.title')}
+                aria-label={t('recurrence.title')}
+              >
+                ↻
+              </span>
+            )}
+
             {task.category && task.category !== 'Unknown' && (
               <span className="flex items-center gap-1" style={{ color: categoryColor(task.category) }}>
                 <span
