@@ -1,46 +1,33 @@
-ACTIVE TASK — Verify per-user Hostaway against a real second colleague
+ACTIVE TASK — Verify recurring tasks against a real browser, a real midnight, and a real reminder
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 ## Context
-Hostaway is per-user on `main` as of 2026-08-14. Design: `docs/superpowers/specs/2026-08-13-hostaway-per-user-integration-design.md`. Plan: `docs/superpowers/plans/2026-08-13-hostaway-per-user-integration.md`. Migration `docs/migrations/2026-08-13-hostaway-connections.sql` already run by hand.
+Recurring tasks Slice 1 is code-complete on `main` as of 2026-08-17 (38 commits, 197 backend tests, frontend build clean, ESLint at its pre-existing baseline, zero `eslint-disable` anywhere). Design: `docs/superpowers/specs/2026-08-15-recurring-tasks-design.md`. Plan: `docs/superpowers/plans/2026-08-15-recurring-tasks.md`. Two migrations already applied and verified by the owner reading the query output, not assumed: `recurrence_rules` (2026-08-15) and `tasks.cancelled_at` (2026-08-16).
 
-**102 unit tests pass.** Two things were also checked against reality rather than asserted: Hostaway's webhook write API answered a real `POST` and `DELETE` (200 both, new id at `result.id`), and the owner's own connection round-tripped — his row was written from `.env`, and the reply poller then read its credentials out of that row, polled two conversations and wrote nothing.
+**None of that is the feature working.** 197 unit tests exercise the generator, the missed-closure, cancellation and the scheduler wiring against a fake repository; none of it has run against the live database with a real rule, and no recurring task has ever been generated in production. Nothing in the frontend has been seen running either — not the Recurrences screen, not the New/Edit form, not the ↻ marker, not the Settings row it hangs from. The build compiles and the EN/EL translations resolve; that is all that has been checked.
 
-**None of that is the feature.** The feature is: fifteen colleagues share one Hostaway account, and one guest message should become one task each. That has never happened. Nobody but the owner has connected, so the fan-out loop has only ever run with a list of one.
+## Gap 1 — the owner's six-step browser walkthrough
+Handed to the owner 2026-08-17. Not yet reported back.
+- [ ] Settings → Recurrences → empty state shows.
+- [ ] New recurrence → name "Χάπι", time 09:00, all seven days → Save.
+- [ ] Today shows a "Χάπι" task for today; Upcoming and the calendar show the next thirteen.
+- [ ] Toggle the rule off → the future ones disappear, today's stays.
+- [ ] Toggle it on → they come back.
+- [ ] Delete → confirm → they are gone.
 
-The requirement remains «σε όλα αυτά θέλω zero fail, όχι 9/10», so what follows is meant to be *run*, not read.
+## Gap 2 — a rule surviving a real midnight, unattended
+- [ ] With a rule created and its window materialized, let a real midnight pass with nothing run by hand.
+- [ ] Confirm the next day's occurrence appears from the scheduler's own ~2-minute tick, `materialized_through` having advanced by exactly one day — no jump, no gap, no duplicate row.
 
-## Gap 0 — a missing key breaks more than Hostaway, and this shipped before the key was set
-`f6327ce` was pushed to `main` on 2026-08-14 **while `HOSTAWAY_ENCRYPTION_KEY` did not yet exist in Render's environment.** The owner was adding it as the deploy went out. First thing to check: the log should show `[hostaway] Obtained access token for account 147809` and no traceback. `HOSTAWAY_ENCRYPTION_KEY is not set` means the variable never arrived; `InvalidToken` means a *different* key was set than the one that encrypted the row — it must be the exact value from the owner's local `.env`, since Fernet is symmetric and the row is already written. An empty value counts as missing (`crypto.py` tests `if not key`).
+## Gap 3 — a missed occurrence closing itself on day two
+- [ ] Let a generated occurrence go untouched past its one day of grace.
+- [ ] Confirm `missed_at` gets stamped by the tick itself, unattended — not by a test calling the function directly — and the row leaves Today/Upcoming/the calendar on its own without being deleted.
 
-That is the immediate item. Alongside it, **`crypto.py`'s stated promise was false in two places** — its docstring says a deploy without the key "still boots and still serves every user who has no Hostaway connection — only the Hostaway paths fail". Both were found by reading rather than by an incident, and **both are now FIXED (2026-08-14), each with tests that failed first**:
+## Gap 4 — a reminder firing for a generated occurrence
+- [ ] A rule-generated occurrence with the reminder bell on actually rings at the right time. The reminder path (`notification_sent`, the existing scheduler) has never been exercised against a row this feature created — only against ordinary tasks.
 
-1. **The webhook returned 500 instead of 200.** `credentials_from_connection` sat *outside* the `try` in `_enrichment()`, so `crypto`'s `RuntimeError` escaped it, the loop and the handler — breaking the contract the handler's own docstring names: *always return 200 so Hostaway doesn't disable the webhook after repeated failures.* Repeated 500s are precisely what gets a webhook disabled, so a temporary misconfiguration would have become a permanent outage needing the webhook re-enabled by hand. Now inside the `try`: the message still becomes a task, with the same `Άγνωστο property` / `Πελάτης` fallbacks a failed Hostaway call already used. The body is what matters; the guest name is decoration.
-2. **One user's missing key killed the scheduler tick for everyone.** The per-user loop in `run_notification_scheduler` had no `try`/`except` at all, and `_check_hostaway_replies` called `credentials_from_connection` unguarded — so one user with an unusable key cost **every user processed after them** their reminders, daily summary, escalations and calendar sync, every two minutes, deterministically. The loop body is now guarded per user, and a failed user is reported as `{"status": "error", "error": ...}` rather than silently skipped: a tick that quietly drops a user looks identical to a tick where that user had nothing to do, which is how this class of bug stays invisible.
-
-**The deeper point survives the fix**, and is worth remembering before adding anything to that loop: the guard is what makes the tick a batch over strangers rather than a chain. Crypto was merely the first thing in there that raised — any future per-user step that throws would have done the same.
-
-## Gap 1 — The Settings screen has never been on a screen
-Steps 1–4 of Task 9 are committed and the frontend builds, but Step 5 was never done. On a real screen, in both languages:
-- [ ] The disconnected form appears, with Account ID and a masked API key field.
-- [ ] A **wrong** API key shows the error toast and leaves you disconnected — nothing stored.
-- [ ] A correct one flips to Connected, showing the account id.
-- [ ] Both switches move, and **survive a reload** (they are optimistic; a reload is what proves the server agreed).
-- [ ] Switch the app to English and read the whole screen again.
-
-**Do not test Disconnect on the owner's account casually.** It removes webhook **34986** from the live Hostaway account — the production webhook every guest message arrives through. Reconnecting registers a *new* webhook with a new id, which works, but the id in the row and in these docs changes. Test disconnect on the colleague's connection instead.
-
-## Gap 2 — The fan-out, which is the actual feature
-- [ ] A colleague creates their own app profile and connects it to Hostaway account 147809 from Settings → Hostaway, using their own API key.
-- [ ] Confirm `hostaway_connections` now holds **two rows with the same `account_id`** and different `user_id`s. (If this is rejected by the database, `account_id` picked up a unique constraint it must not have — see DATABASE_SCHEMA.md.)
-- [ ] A guest writes. **Two tasks appear**, one in each account.
-- [ ] Check the Render log for exactly **one** `[hostaway] Classification` cost for that message, not two. The whole point of one classification serving every colleague is that fifteen colleagues do not mean fifteen Gemini calls.
-- [ ] **One** colleague replies to the guest in Hostaway. Within ~2 minutes **both** copies close (P3) or both record `hostaway_answered_at` and stop nagging (P1/P2) — each colleague's own poller sees the same reply.
-
-## Gap 3 — The switches, checked where they cost money
-- [ ] The colleague turns **Create tasks from messages** off. The next guest message produces a task for the owner and **not** for them.
-- [ ] The colleague turns **Close the task when you reply** off. Their copy stays open after a reply; the owner's still closes.
-- [ ] With every colleague's task switch off, confirm the log line `[hostaway webhook] No recipient for account ...` and **no Gemini call at all** for that message.
+## Slice 2 — not started
+The AI understanding "every Monday" is designed (same spec) but not implemented. **Do not start it until Slice 1 has been seen working in a browser** — the whole point of the two-slice split is that a duplicate task must be attributable to either the generator or the extractor, never ambiguously to both.
 
 ## How to resume
-Read this file, then PROJECT_STATUS.md's "In progress" section. The plan file's "After the plan" section says the same thing in one line: until a real guest message has produced two tasks, this is 102 passing tests and a dry run.
+Read this file, then PROJECT_STATUS.md's "In progress" section for the Recurring tasks entry it summarizes.
