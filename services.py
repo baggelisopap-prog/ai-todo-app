@@ -529,6 +529,45 @@ class TaskService:
             "approval_status": True,
         }
 
+    def adopt_task_into_rule(self, user_id: str, task: TaskRecord, rule: RecurrenceRule) -> bool:
+        """
+        Makes a task the user already has into this rule's first occurrence.
+
+        This is what "make this repeat" means when it is said about something
+        that already exists. Without it the generator would create its own row
+        for the same day and the user would be looking at two identical tasks
+        on day one — the most visible way this feature can fail.
+
+        It LINKS and nothing else. The rule's time, priority and category are
+        not copied over the task's: the user asked for this task to repeat, not
+        to be rewritten into the template. The one exception is a task with no
+        due_date, which gets the rule's starts_on — occurrence_date is what the
+        generator matches on, so an occurrence without one is invisible to the
+        dedupe, and its due_date has to agree or the task sits on no day at all.
+
+        Returns whether the task was adopted. A closed task (completed,
+        rejected, missed, cancelled) is deliberately left alone and returns
+        False: "every week from now on" is a statement about the future, and
+        relabelling a finished row as an occurrence would hand the new rule a
+        day that is already ticked off.
+        """
+        if task.is_completed or task.is_rejected or task.missed_at or task.cancelled_at:
+            logger.info(
+                f"[recurrence] Task {task.record_id} is closed; rule {rule.record_id} "
+                "starts fresh instead of adopting it"
+            )
+            return False
+
+        updates = {
+            "recurrence_rule_id": rule.record_id,
+            "occurrence_date": task.due_date or rule.starts_on,
+        }
+        if not task.due_date:
+            updates["due_date"] = rule.starts_on
+
+        self.repository.update_task(user_id, task.record_id, updates)
+        return True
+
     def materialize_recurrence_rule(self, user_id: str, rule: RecurrenceRule, today: "date") -> int:
         """
         Makes sure this rule's next fortnight exists as real task rows.

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
-from models import RecurrenceRule
+from models import RecurrenceRule, TaskRecord
 
 USER = "user-1"
 
@@ -59,6 +59,92 @@ def test_creating_a_rule_materialises_it_immediately(client, monkeypatch):
     assert r.status_code == 201
     assert seen["materialized"] == "rule-1"
     assert r.json()["occurrences_created"] == 3
+
+
+def _task(**overrides):
+    base = dict(record_id="task-1", task_name="Χάπι", description="", category="Personal",
+                priority="P2", due_date="2026-08-17",
+                ai_suggested_category="Personal", ai_suggested_priority="P2")
+    base.update(overrides)
+    return TaskRecord(**base)
+
+
+def test_adopting_a_task_happens_before_the_generator_runs(client, monkeypatch):
+    """
+    Order is the whole trick: the generator skips occurrence_dates that already
+    exist, so the link has to be on disk before it looks. Reversed, the user
+    gets two copies of today's task and the feature reads as broken.
+    """
+    calls = []
+    monkeypatch.setattr(main.service.repository, "get_task", lambda u, rid: _task())
+    monkeypatch.setattr(main.repository, "create_recurrence_rule",
+                        lambda u, rule: calls.append("created") or _rule())
+    monkeypatch.setattr(main.service, "adopt_task_into_rule",
+                        lambda u, task, rule: calls.append(f"adopted:{rule.record_id}") or True)
+    monkeypatch.setattr(main.service, "materialize_recurrence_rule",
+                        lambda u, rule, today: calls.append("materialized") or 10)
+
+    r = client.post("/recurrences", json={
+        "task_name": "Χάπι", "freq": "weekly", "weekdays": [1, 2, 3, 4, 5],
+        "starts_on": "2026-08-17", "adopt_task_id": "task-1",
+    })
+
+    assert r.status_code == 201
+    assert calls == ["created", "adopted:rule-1", "materialized"]
+
+
+def test_adopt_task_id_is_not_written_onto_the_rule(client, monkeypatch):
+    """It addresses a task; it is not part of what repeats."""
+    seen = {}
+    monkeypatch.setattr(main.service.repository, "get_task", lambda u, rid: _task())
+    monkeypatch.setattr(main.repository, "create_recurrence_rule",
+                        lambda u, rule: seen.setdefault("rule", rule) or _rule())
+    monkeypatch.setattr(main.service, "adopt_task_into_rule", lambda u, task, rule: True)
+    monkeypatch.setattr(main.service, "materialize_recurrence_rule", lambda u, rule, today: 0)
+
+    client.post("/recurrences", json={
+        "task_name": "Χάπι", "freq": "weekly", "weekdays": [1],
+        "starts_on": "2026-08-17", "adopt_task_id": "task-1",
+    })
+
+    assert not hasattr(seen["rule"], "adopt_task_id")
+
+
+def test_adopting_a_task_that_is_not_yours_is_a_404_and_creates_no_rule(client, monkeypatch):
+    """
+    Checked before the rule is written, not after. A rule created and then
+    abandoned by a failed adoption is a standing commitment the user never got
+    to see, firing every morning.
+    """
+    created = []
+    monkeypatch.setattr(main.service.repository, "get_task", lambda u, rid: None)
+    monkeypatch.setattr(main.repository, "create_recurrence_rule",
+                        lambda u, rule: created.append(rule) or _rule())
+
+    r = client.post("/recurrences", json={
+        "task_name": "Χάπι", "freq": "weekly", "weekdays": [1],
+        "starts_on": "2026-08-17", "adopt_task_id": "someone-elses",
+    })
+
+    assert r.status_code == 404
+    assert created == []
+
+
+def test_adopting_a_task_that_already_repeats_is_a_422_and_creates_no_rule(client, monkeypatch):
+    """There is no "change which rule owns this" — that would orphan the first."""
+    created = []
+    monkeypatch.setattr(main.service.repository, "get_task",
+                        lambda u, rid: _task(recurrence_rule_id="rule-0"))
+    monkeypatch.setattr(main.repository, "create_recurrence_rule",
+                        lambda u, rule: created.append(rule) or _rule())
+
+    r = client.post("/recurrences", json={
+        "task_name": "Χάπι", "freq": "weekly", "weekdays": [1],
+        "starts_on": "2026-08-17", "adopt_task_id": "task-1",
+    })
+
+    assert r.status_code == 422
+    assert created == []
 
 
 def test_an_incoherent_rule_is_refused_with_422(client):

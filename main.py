@@ -96,6 +96,11 @@ class RecurrenceCreateRequest(BaseModel):
     ends_on: Optional[str] = None
     notify_enabled: bool = False
     calendar_sync_enabled: bool = False
+    # Not part of the rule: it addresses a task that already exists and should
+    # become this rule's first occurrence ("make THIS repeat", from the task's
+    # own menu) rather than being duplicated alongside it. Excluded when the
+    # RecurrenceRule is built below.
+    adopt_task_id: Optional[str] = None
 
 
 class RecurrenceUpdateRequest(BaseModel):
@@ -670,12 +675,29 @@ def create_recurrence(payload: RecurrenceCreateRequest, user_id: str = Depends(g
         # every request that omits it. The other optional fields already
         # default to None on both sides, so dropping unset Nones changes
         # nothing for them.
-        rule = RecurrenceRule(**payload.model_dump(exclude_none=True))
+        rule = RecurrenceRule(**payload.model_dump(exclude_none=True, exclude={"adopt_task_id"}))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
+    # Resolved BEFORE the rule is written, not after. A rule created and then
+    # abandoned by a failed adoption is a standing commitment the user never
+    # got to see, firing every morning with no screen admitting it exists.
+    adopt_task = None
+    if payload.adopt_task_id:
+        adopt_task = service.repository.get_task(user_id, payload.adopt_task_id)
+        if adopt_task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if adopt_task.recurrence_rule_id:
+            raise HTTPException(
+                status_code=422, detail="Task already belongs to a recurrence"
+            )
+
     try:
         saved = repository.create_recurrence_rule(user_id, rule)
+        # Before materialising, always: the generator skips occurrence_dates
+        # that already exist, so the link has to be on disk before it looks.
+        if adopt_task is not None:
+            service.adopt_task_into_rule(user_id, adopt_task, saved)
         created = service.materialize_recurrence_rule(user_id, saved, _athens_today())
         return RecurrenceWriteResponse(recurrence=saved, occurrences_created=created)
     except Exception as e:
