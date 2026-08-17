@@ -2,7 +2,7 @@ ACTIVE TASK — Verify recurring tasks against a real browser, a real midnight, 
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 ## Context
-Recurring tasks Slice 1 is code-complete on `main` as of 2026-08-17 (38 commits, 197 backend tests, frontend build clean, ESLint at its pre-existing baseline, zero `eslint-disable` anywhere). Design: `docs/superpowers/specs/2026-08-15-recurring-tasks-design.md`. Plan: `docs/superpowers/plans/2026-08-15-recurring-tasks.md`. Two migrations already applied and verified by the owner reading the query output, not assumed: `recurrence_rules` (2026-08-15) and `tasks.cancelled_at` (2026-08-16).
+Recurring tasks Slice 1 is code-complete on `main` as of 2026-08-17 (40 commits, 197 backend tests, frontend build clean, ESLint at its pre-existing baseline, zero `eslint-disable` anywhere). Design: `docs/superpowers/specs/2026-08-15-recurring-tasks-design.md`. Plan: `docs/superpowers/plans/2026-08-15-recurring-tasks.md`. Two migrations already applied and verified by the owner reading the query output, not assumed: `recurrence_rules` (2026-08-15) and `tasks.cancelled_at` (2026-08-16).
 
 **None of that is the feature working.** 197 unit tests exercise the generator, the missed-closure, cancellation and the scheduler wiring against a fake repository; none of it has run against the live database with a real rule, and no recurring task has ever been generated in production. Nothing in the frontend has been seen running either — not the Recurrences screen, not the New/Edit form, not the ↻ marker, not the Settings row it hangs from. The build compiles and the EN/EL translations resolve; that is all that has been checked.
 
@@ -29,5 +29,14 @@ Handed to the owner 2026-08-17. Not yet reported back.
 ## Slice 2 — not started
 The AI understanding "every Monday" is designed (same spec) but not implemented. **Do not start it until Slice 1 has been seen working in a browser** — the whole point of the two-slice split is that a duplicate task must be attributable to either the generator or the extractor, never ambiguously to both.
 
+## Gap 5 — the reminder bell is silently inert without a time
+Found by reading, not yet decided. The reminder path requires BOTH `due_date` and `due_time` (`repository.get_tasks_due_for_notification` skips any task missing either). A recurrence rule may legitimately have no time — that is by design, "an alarm that never rings" — but the form lets the user switch the bell ON for such a rule, and nothing anywhere says it will never fire.
+- [ ] Decide: does the form disable the bell when no time is set, or warn, or is documenting it enough? This is a product call, not a bug to fix silently.
+
+## Slice 2 — not started
+The AI understanding "every Monday" is designed (same spec) but not implemented. **Do not start it until Slice 1 has been seen working in a browser** — the whole point of the two-slice split is that a duplicate task must be attributable to either the generator or the extractor, never ambiguously to both.
+
 ## How to resume
 Read this file, then PROJECT_STATUS.md's "In progress" section for the Recurring tasks entry it summarizes.
+
+**There is a fuller record than either.** `.superpowers/sdd/2026-08-15-recurring-tasks/progress.md` is the controller's ledger from the session that built this — every defect found and how, every plan error, every controller mistake, and what was verified by what evidence. It is git-ignored, so it exists only on the machine that built this; it is not in the repo history. Read it before continuing this feature, and do not trust a summary of it over the file itself. Highlights it records that no other doc does: the `create_task_manual` bug that would have inserted ~8,000 tasks a day, the CHECK constraint whose own comment lied about what it enforced, and the same root cause appearing three separate times — one value carrying two facts, with the failure case silently losing.
