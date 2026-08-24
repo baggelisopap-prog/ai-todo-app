@@ -319,6 +319,40 @@ export async function confirmAgentAction(action) {
 }
 
 /**
+ * POST /agent/action-cancelled — records that the user REFUSED a proposal.
+ * Executes nothing; the card is already grey by the time this is sent.
+ *
+ * Until 2026-08-23 pressing Cancel never left the phone, so "the AI proposed
+ * this and I refused it" — the sharpest signal there is about the agent's
+ * judgement — was discarded. Callers must fire this WITHOUT awaiting it and
+ * swallow any failure: nothing the user can see depends on it.
+ */
+export async function cancelAgentAction(action) {
+  return request('/agent/action-cancelled', {
+    method: 'POST',
+    body: JSON.stringify(action),
+  });
+}
+
+/**
+ * GET /agent/conversations — the past agent conversations, newest first.
+ * Returns { conversations: [{ conversation_id, title, turns, proposals,
+ * started_at, last_at }] }. Development test runs are excluded server-side.
+ */
+export async function getAgentConversations() {
+  return request('/agent/conversations');
+}
+
+/**
+ * GET /agent/conversations/:id — one past conversation in full: every question
+ * and answer oldest-first, and under each answer the proposals it made, each
+ * carrying status 'confirmed' | 'cancelled' | 'undecided'.
+ */
+export async function getAgentConversation(conversationId) {
+  return request(`/agent/conversations/${conversationId}`);
+}
+
+/**
  * GET /dev/token-usage — developer-only Gemini token usage summary
  * (recent calls plus today/this-week totals and estimated cost).
  */

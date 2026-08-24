@@ -313,7 +313,25 @@
     "searched_filter_from": "από {{value}}",
     "searched_filter_to": "έως {{value}}",
     "searched_filter_on": "στις {{value}}",
-    "searched_filter_completed": "μαζί με ολοκληρωμένα"
+    "searched_filter_completed": "μαζί με ολοκληρωμένα",
+    "history": {
+      "open": "Ιστορικό",
+      "back_to_chat": "Πίσω στη συνομιλία",
+      "back_to_list": "Πίσω στη λίστα",
+      "loading": "Φόρτωση...",
+      "load_failed": "Δεν φόρτωσε το ιστορικό.",
+      "retry": "Δοκίμασε ξανά",
+      "empty": "Δεν υπάρχουν ακόμα παλιές συζητήσεις.",
+      "no_answer": "(χωρίς απάντηση)",
+      "turns": "{{count}} ερωτήσεις",
+      "proposals": "{{count}} προτάσεις",
+      "status_confirmed": "Εγκρίθηκε",
+      "status_cancelled": "Ακυρώθηκε",
+      "status_undecided": "Δεν αποφασίστηκε",
+      "action_complete_task": "Ολοκλήρωση task",
+      "action_update_task": "Αλλαγή task",
+      "action_create_task": "Νέο task"
+    }
   },
   "auth": {
     "log_in": "Σύνδεση",
@@ -366,7 +384,15 @@
     "monthly_last": "Κάθε μήνα την τελευταία μέρα",
     "at_time": "στις {{time}}",
     "no_time": "χωρίς ώρα",
-    "days_short": ["Δ", "Τ", "Τ", "Π", "Π", "Σ", "Κ"],
+    "days_short": [
+      "Δ",
+      "Τ",
+      "Τ",
+      "Π",
+      "Π",
+      "Σ",
+      "Κ"
+    ],
     "form_name": "Όνομα",
     "form_description": "Περιγραφή",
     "form_category": "Κατηγορία",

@@ -28,6 +28,7 @@ import services  # for HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES — one policy, bo
 from repository import save_push_subscription, get_app_settings, update_app_settings
 from auth import get_current_user_id
 import agent_engine
+import agent_history
 import agent_tools
 import task_agent
 import crypto
@@ -239,6 +240,29 @@ class ConfirmActionRequest(BaseModel):
     record_id: Optional[str] = None
     task_name: Optional[str] = None
     fields: Optional[dict] = None
+    # Which conversation this card came from, so the decision can be shown
+    # beside the answer that proposed it. Optional: an older client that does
+    # not send it still gets its write executed, and the decision is simply
+    # recorded without a conversation.
+    conversation_id: Optional[str] = None
+
+
+class CancelActionRequest(BaseModel):
+    """
+    Request body for POST /agent/action-cancelled — the user pressed Cancel on
+    a proposal card.
+
+    This endpoint EXECUTES NOTHING. It exists only so the refusal is recorded:
+    until 2026-08-23 Cancel was purely local state in AgentChatModal.jsx, so
+    "the AI proposed this and I refused it" — the sharpest signal there is about
+    the agent's judgement — never left the phone.
+    """
+    action_id: Optional[str] = None
+    type: Literal["complete_task", "update_task", "create_task"]
+    record_id: Optional[str] = None
+    task_name: Optional[str] = None
+    fields: Optional[dict] = None
+    conversation_id: Optional[str] = None
 
 class ConfirmActionResponse(BaseModel):
     """Response body for POST /agent/confirm-action"""
@@ -600,7 +624,10 @@ def run_scheduler(secret: str):
     """
     Triggered externally (e.g. a free cron service) every ~5 minutes.
     Checks for tasks due soon and sends their advance reminder pushes.
-    Guarded by a shared secret query param since this app has no auth system.
+    Guarded by a shared secret query param because a cron service calls this
+    with no user to authenticate as — every other endpoint takes a bearer
+    token. (This line read "this app has no auth system" until 2026-08-23,
+    untrue since the auth migration.)
     """
     if not SCHEDULER_SECRET or secret != SCHEDULER_SECRET:
         raise HTTPException(status_code=403, detail="Invalid secret")
@@ -1007,6 +1034,7 @@ def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(g
             updated = service.update_task(
                 user_id, request.record_id, {"is_completed": True}, completed_source="agent"
             )
+            _record_agent_decision(user_id, request, "confirmed")
             return ConfirmActionResponse(status="done", message=f"Completed: {updated.task_name}", task=updated)
 
         elif request.type == "update_task":
@@ -1017,6 +1045,7 @@ def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(g
                 raise HTTPException(status_code=422, detail="No valid fields to update")
             _reject_if_pending_approval(user_id, request.record_id)
             updated = service.update_task(user_id, request.record_id, fields)
+            _record_agent_decision(user_id, request, "confirmed")
             return ConfirmActionResponse(status="done", message=f"Updated: {updated.task_name}", task=updated)
 
         elif request.type == "create_task":
@@ -1024,6 +1053,10 @@ def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(g
             if not fields.get("task_name"):
                 raise HTTPException(status_code=422, detail="task_name is required for create_task")
             created = service.create_task_manual(user_id, fields, approval_status=False)
+            # The id of the task that was actually CREATED, not the proposal's
+            # (a create proposal has no target). This is what makes "the agent
+            # made this task" answerable a month later.
+            _record_agent_decision(user_id, request, "confirmed", record_id=created.record_id)
             return ConfirmActionResponse(status="done", message=f"Added to Inbox: {created.task_name}", task=created)
 
         raise HTTPException(status_code=422, detail=f"Unsupported action type: {request.type}")
@@ -1033,6 +1066,78 @@ def confirm_agent_action(request: ConfirmActionRequest, user_id: str = Depends(g
     except Exception as e:
         logger.exception(f"Failed to execute agent action ({request.type})")
         raise HTTPException(status_code=500, detail=f"Failed to execute action: {str(e)}")
+
+
+def _record_agent_decision(request_user_id: str, request, decision: str, record_id=None) -> None:
+    """
+    One spelling of "the user decided this about an agent proposal", shared by
+    the confirm and the cancel path so the two can never disagree about the
+    shape of a row — the same reason hostaway_completion_fields() exists.
+
+    Never raises: repository.record_agent_action_decision swallows its own
+    failures, because this runs AFTER the write it describes has succeeded and
+    an audit outage must not surface as an error on an action that worked.
+    """
+    repository.record_agent_action_decision(request_user_id, {
+        "conversation_id": request.conversation_id,
+        "action_id": request.action_id,
+        "action_type": request.type,
+        "record_id": record_id if record_id is not None else request.record_id,
+        "task_name": request.task_name,
+        "fields": request.fields,
+        "decision": decision,
+    })
+
+
+@app.post("/agent/action-cancelled")
+def cancel_agent_action(request: CancelActionRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Records that the user REFUSED an agent proposal. Executes nothing.
+
+    Cancel was purely local until 2026-08-23 — the card greyed out in
+    AgentChatModal.jsx and the server never heard about it — so the single most
+    informative thing the user does with the agent was discarded on the phone.
+    This is the same signal `is_rejected` preserves for the extractor's
+    suggestions, and the same reason ai_suggested_category/ai_suggested_priority
+    are frozen on every task: the machine's guess has to survive the human's
+    correction, or there is nothing left to learn from.
+
+    Deliberately cheap and forgiving. The client fires it and does not wait, so
+    a failure here is never worth reporting: the card is already grey.
+    """
+    _record_agent_decision(user_id, request, "cancelled")
+    return {"status": "recorded"}
+
+
+@app.get("/agent/conversations")
+def list_agent_conversations(user_id: str = Depends(get_current_user_id)):
+    """
+    This user's past agent conversations, newest first, for the history screen.
+
+    Development test runs are excluded in the query itself (see
+    repository.get_agent_runs_for_history) — they were 282 of 348 rows on
+    2026-08-23, so without that filter this endpoint returns mostly noise.
+    """
+    runs = repository.get_agent_runs_for_history(user_id)
+    return {"conversations": agent_history.group_into_conversations(runs)}
+
+
+@app.get("/agent/conversations/{conversation_id}")
+def read_agent_conversation(conversation_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    One past conversation in full: every question and answer in the order they
+    were asked, and under each answer the proposals it made, each carrying
+    whether the user confirmed it, cancelled it, or never decided at all.
+
+    404 rather than an empty shell when nothing matches, so a stale link reads
+    as a stale link instead of a conversation that appears to have lost its
+    contents.
+    """
+    runs = repository.get_agent_conversation_runs(user_id, conversation_id)
+    if not runs:
+        raise HTTPException(status_code=404, detail="No such conversation")
+    decisions = repository.get_agent_action_decisions(user_id, conversation_id)
+    return agent_history.build_conversation(runs, decisions)
 
 
 HOSTAWAY_THREAD_SEPARATOR = "\n---\n"

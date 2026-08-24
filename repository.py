@@ -1127,6 +1127,103 @@ def log_agent_run(user_id: str, payload: dict) -> None:
         logger.warning(f"Failed to log agent run for user {user_id}: {e}")
 
 
+# --- Agent action decisions (what the user did about each proposal) ---------
+# See docs/migrations/2026-08-23-agent-action-decisions.sql for why this is its
+# own table rather than a column on agent_runs.
+
+_AGENT_DECISION_COLUMNS = [
+    "conversation_id", "action_id", "action_type", "record_id", "task_name",
+    "fields", "decision",
+]
+
+
+def record_agent_action_decision(user_id: str, decision: dict) -> None:
+    """
+    Records that the user confirmed or cancelled one agent proposal.
+
+    Never raises, for the same reason log_agent_run does not: this runs inside
+    the user's own Confirm, AFTER the write it describes has already succeeded.
+    If an audit failure could propagate, a logging outage would surface as a
+    user-visible error on an action that actually worked.
+
+    Whitelisted rather than splatted — a Supabase insert carrying one
+    unrecognized field is rejected wholesale, which would silently stop ALL
+    decision recording (this exact failure once broke every token log).
+    """
+    try:
+        fields = {col: decision.get(col) for col in _AGENT_DECISION_COLUMNS}
+        fields["user_id"] = user_id
+        supabase.table("agent_action_decisions").insert(fields).execute()
+    except Exception as e:
+        logger.warning(f"Failed to record agent action decision for user {user_id}: {e}")
+
+
+def get_agent_runs_for_history(user_id: str, limit: int = 200) -> list[dict]:
+    """
+    This user's most recent agent runs, for the history screen.
+
+    `test_label is null` is load-bearing, not tidiness: 282 of the 348 rows in
+    agent_runs on 2026-08-23 were tagged development test runs. Without this
+    filter the screen shows the developer's noise instead of the user's work.
+
+    Returns [] on failure — a history screen that cannot load is a blank list,
+    never an error page.
+    """
+    try:
+        response = (
+            supabase.table("agent_runs")
+            .select("id, conversation_id, question, answer, outcome, proposed_actions, created_at")
+            .eq("user_id", user_id)
+            .is_("test_label", "null")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+    except Exception as e:
+        logger.warning(f"Failed to load agent run history for user {user_id}: {e}")
+        return []
+
+
+def get_agent_conversation_runs(user_id: str, conversation_id: str) -> list[dict]:
+    """Every run of one conversation, this user's only. [] on failure."""
+    try:
+        response = (
+            supabase.table("agent_runs")
+            .select("id, conversation_id, question, answer, outcome, proposed_actions, created_at")
+            .eq("user_id", user_id)
+            .eq("conversation_id", conversation_id)
+            .is_("test_label", "null")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return response.data or []
+    except Exception as e:
+        logger.warning(f"Failed to load conversation {conversation_id} for user {user_id}: {e}")
+        return []
+
+
+def get_agent_action_decisions(user_id: str, conversation_id: str) -> list[dict]:
+    """
+    What the user decided about the proposals of one conversation. [] on
+    failure, which reads as "undecided" everywhere downstream — the safe
+    direction: the screen under-claims rather than inventing a decision.
+    """
+    try:
+        response = (
+            supabase.table("agent_action_decisions")
+            .select("action_id, action_type, record_id, decision, created_at")
+            .eq("user_id", user_id)
+            .eq("conversation_id", conversation_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return response.data or []
+    except Exception as e:
+        logger.warning(f"Failed to load agent decisions for conversation {conversation_id}: {e}")
+        return []
+
+
 def get_all_token_usage_logs(user_id: str) -> list[dict]:
     """Returns all rows from token_usage_log belonging to user_id, as a list of dicts with keys:
     call_type, timestamp, prompt_tokens, output_tokens, thinking_tokens, total_tokens, model.

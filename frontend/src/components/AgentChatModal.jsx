@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import Markdown from 'react-markdown';
-import { askAgent, confirmAgentAction } from '../api';
+import { askAgent, confirmAgentAction, cancelAgentAction } from '../api';
+import AgentHistoryView from './AgentHistoryView';
 
 // Maps a proposed action's field name to the app's existing field-label
 // translation key, so cards never hardcode English field names.
@@ -190,6 +191,10 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
   // "New conversation" is tapped) — see resetConversation below. The
   // backend reconstructs history from this id; nothing else is ever sent.
   const [conversationId, setConversationId] = useState(null);
+  // The history panel replaces the message list in place rather than opening
+  // a second modal: it is the same subject as the chat and belongs behind the
+  // same close button.
+  const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef(null);
   const inFlightActionIds = useRef(new Set());
 
@@ -280,6 +285,9 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
         record_id: action.record_id,
         task_name: action.task_name,
         fields: action.fields,
+        // So the decision can be shown beside the answer that proposed it in
+        // the history screen. The backend treats it as optional.
+        conversation_id: conversationId,
       });
       updateAction(action.action_id, { status: 'done', resultMessage: result.message });
       if (result.task) {
@@ -294,7 +302,22 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
 
   function handleCancelAction(action) {
     if (action.status !== 'idle' && action.status !== 'error') return;
+    // Grey the card FIRST. The recording below is deliberately not awaited:
+    // refusing a proposal must stay instant, and a failed audit write is not
+    // something the user can act on.
     updateAction(action.action_id, { status: 'cancelled' });
+    cancelAgentAction({
+      action_id: action.action_id,
+      type: action.type,
+      record_id: action.record_id,
+      task_name: action.task_name,
+      fields: action.fields,
+      conversation_id: conversationId,
+    }).catch(() => {
+      // Swallowed on purpose. This is the one signal we would LIKE to have,
+      // but not at the price of an error toast on a card the user already
+      // dismissed.
+    });
   }
 
   return (
@@ -309,7 +332,13 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('agent.title')}</h2>
           <div className="flex items-center gap-3">
-            {messages.length > 0 && (
+            <button
+              onClick={() => setShowHistory((shown) => !shown)}
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              {showHistory ? t('agent.history.back_to_chat') : t('agent.history.open')}
+            </button>
+            {!showHistory && messages.length > 0 && (
               <button
                 onClick={resetConversation}
                 className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
@@ -323,6 +352,12 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
           </div>
         </div>
 
+        {showHistory ? (
+          <div className="flex-1 overflow-y-auto">
+            <AgentHistoryView onBack={() => setShowHistory(false)} />
+          </div>
+        ) : (
+        <>
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {messages.length === 0 && (
             <p className="text-sm text-[var(--text-muted)] italic">{t('agent.empty_hint')}</p>
@@ -415,6 +450,8 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
             </button>
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

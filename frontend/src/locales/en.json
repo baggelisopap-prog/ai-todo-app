@@ -313,7 +313,25 @@
     "searched_filter_from": "from {{value}}",
     "searched_filter_to": "until {{value}}",
     "searched_filter_on": "on {{value}}",
-    "searched_filter_completed": "including completed"
+    "searched_filter_completed": "including completed",
+    "history": {
+      "open": "History",
+      "back_to_chat": "Back to the conversation",
+      "back_to_list": "Back to the list",
+      "loading": "Loading...",
+      "load_failed": "The history didn't load.",
+      "retry": "Try again",
+      "empty": "No past conversations yet.",
+      "no_answer": "(no answer)",
+      "turns": "{{count}} questions",
+      "proposals": "{{count}} proposals",
+      "status_confirmed": "Confirmed",
+      "status_cancelled": "Cancelled",
+      "status_undecided": "Not decided",
+      "action_complete_task": "Complete task",
+      "action_update_task": "Update task",
+      "action_create_task": "New task"
+    }
   },
   "auth": {
     "log_in": "Log In",
@@ -366,7 +384,15 @@
     "monthly_last": "Every month on the last day",
     "at_time": "at {{time}}",
     "no_time": "no time",
-    "days_short": ["M", "T", "W", "T", "F", "S", "S"],
+    "days_short": [
+      "M",
+      "T",
+      "W",
+      "T",
+      "F",
+      "S",
+      "S"
+    ],
     "form_name": "Name",
     "form_description": "Description",
     "form_category": "Category",
