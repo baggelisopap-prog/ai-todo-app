@@ -1,6 +1,6 @@
 /**
  * Returns a YYYY-MM-DD string based on the date's LOCAL time components,
- * not UTC. Use this whenever comparing against Airtable date strings
+ * not UTC. Use this whenever comparing against the API's date strings
  * (which are stored as YYYY-MM-DD and interpreted as local calendar dates).
  */
 export function toLocalISODate(date) {

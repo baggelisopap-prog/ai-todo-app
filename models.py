@@ -57,7 +57,7 @@ class TaskList(BaseModel):
 
 class TaskRecord(SingleTask):
     """
-    Schema 2 — What is stored in the database (Airtable).
+    Schema 2 — What is stored in the database (Supabase).
     Inherits from SingleTask and adds application state, AI snapshots, and database metadata.
     """
     approval_status: bool = False

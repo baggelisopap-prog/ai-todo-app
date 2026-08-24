@@ -1,6 +1,6 @@
 """
 Token usage tracking for Gemini API calls. Logs each call's token counts to
-the token_usage_log Airtable table and computes cost estimates + aggregate
+the token_usage_log Supabase table and computes cost estimates + aggregate
 summaries for the developer-only usage dashboard.
 """
 import logging
