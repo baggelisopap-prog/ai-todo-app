@@ -29,6 +29,43 @@ export function isoWeekday(dateStr) {
   return day === 0 ? 7 : day;
 }
 
+/**
+ * The language the UI is currently showing, as a locale tag for Intl.
+ *
+ * Read off <html lang> rather than imported from i18n.js on purpose. This
+ * module is also loaded by the plain-node check scripts (scripts/*.test.mjs),
+ * and importing i18n.js would drag react-i18next and React in behind it for
+ * the sake of one string. i18n.js already writes the chosen language onto
+ * <html lang> on startup and on every switch, so this is the same value with
+ * none of the dependency. Outside a browser there is no document; 'en' then,
+ * matching i18n.js's own fallback.
+ */
+export function uiLocale() {
+  if (typeof document === 'undefined') return 'en';
+  return document.documentElement.lang || 'en';
+}
+
+/**
+ * A weekday abbreviation in the UI's language, uppercased for a column header
+ * or a day divider: MON / ΔΕΥ.
+ *
+ * The accent strip is not cosmetic. Greek does not accent capitals, but
+ * toUpperCase() keeps the tonos, so the browser's own τρί / πέμ / σάβ come back as
+ * ΤΡΊ / ΠΈΜ / ΣΆΒ -- wrong in a way a Greek reader sees immediately. Only the
+ * combining acute is removed, so dialytika survive (ΑΫΛΟΣ stays ΑΫΛΟΣ).
+ *
+ * Apply this to uppercase output only: run over lowercase text it would strip
+ * accents that belong there (Αύγουστος -> Αυγουστος).
+ */
+export function weekdayShortUpper(date) {
+  return date
+    .toLocaleDateString(uiLocale(), { weekday: 'short' })
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/́/g, '')
+    .normalize('NFC');
+}
+
 export function formatDate(dateStr, timeStr) {
   if (!dateStr) return '';
   const date = new Date(dateStr);
@@ -37,7 +74,7 @@ export function formatDate(dateStr, timeStr) {
   if (date.getFullYear() !== now.getFullYear()) {
     options.year = 'numeric';
   }
-  const dateFormatted = date.toLocaleDateString('en-US', options);
+  const dateFormatted = date.toLocaleDateString(uiLocale(), options);
   return timeStr ? `${dateFormatted}, ${timeStr}` : dateFormatted;
 }
 

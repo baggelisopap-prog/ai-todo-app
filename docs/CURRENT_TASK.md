@@ -6,7 +6,7 @@ Recurring tasks Slice 1 is code-complete on `main` as of 2026-08-17. Design: `do
 
 **Gap 1 is closed.** The owner ran the six-step browser walkthrough on 2026-08-17 and reported it passed: the Recurrences screen, the New/Edit form, generation into Today/Upcoming/the calendar, pause, resume and delete all behaved. That is a person watching the feature work, which is what the rest of this file is still asking for elsewhere.
 
-A second slice of UI landed on top of it the same day (below). Backend suite is at 209 (was 197), frontend build clean, ESLint at its pre-existing baseline of 13, `npm run check` green.
+A second slice of UI landed on top of it the same day (below). Backend suite is at 209 (was 197), frontend build clean, ESLint at its pre-existing baseline of 13 (**13 as of that date; 12 since 2026-08-25**, one of them fixed by the calendar pass), `npm run check` green.
 
 ## Making an existing task repeat (2026-08-17) — code-complete, not seen running
 "Make this repeat" now exists on a task, where before a recurrence could only be born from Settings.

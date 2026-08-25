@@ -21,7 +21,7 @@ import {
   convertCalendarEventToTask,
   dismissCalendarEvent,
 } from '../api';
-import { toLocalISODate } from '../utils/formatDate';
+import { toLocalISODate, uiLocale, weekdayShortUpper } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import { getEventLabel } from '../utils/eventType';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
@@ -29,7 +29,13 @@ import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { isVisibleTask } from '../utils/taskDisplay';
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Column headers for the Monthly grid, Monday-first, named in whatever
+// language the UI is in. Derived from a week that is known to start on a
+// Monday (2024-01-01 was one) rather than written out, so a language switch
+// renames them without a second list to keep in step.
+function weekdayLabels() {
+  return Array.from({ length: 7 }, (_, i) => weekdayShortUpper(new Date(2024, 0, 1 + i)));
+}
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7); // 07:00-22:00
 const GRID_TEMPLATE = 'grid grid-cols-[36px_repeat(7,minmax(0,1fr))] gap-1';
 
@@ -37,7 +43,8 @@ function getCalendarCells(currentMonth) {
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   const firstDay = new Date(year, month, 1);
-  const firstDayWeekday = firstDay.getDay(); // 0 = Sun
+  // getDay() is Sunday-based (0 = Sun); shift it so Monday is column 0.
+  const firstDayWeekday = (firstDay.getDay() + 6) % 7;
 
   const cells = [];
 
@@ -74,18 +81,18 @@ function getWeekDays(weekStart) {
 }
 
 function formatMonthYear(date) {
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return date.toLocaleDateString(uiLocale(), { month: 'long', year: 'numeric' });
 }
 
 function formatSelectedDayLabel(date) {
-  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(uiLocale(), { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function formatWeekRange(weekStart) {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
-  const startMonth = weekStart.toLocaleDateString('en-US', { month: 'short' });
-  const endMonth = weekEnd.toLocaleDateString('en-US', { month: 'short' });
+  const startMonth = weekStart.toLocaleDateString(uiLocale(), { month: 'short' });
+  const endMonth = weekEnd.toLocaleDateString(uiLocale(), { month: 'short' });
   if (startMonth === endMonth) {
     return `${startMonth} ${weekStart.getDate()} - ${weekEnd.getDate()}`;
   }
@@ -93,7 +100,7 @@ function formatWeekRange(weekStart) {
 }
 
 function weekdayShort(date) {
-  return date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+  return weekdayShortUpper(date);
 }
 
 function formatHour(hour) {
@@ -151,7 +158,8 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
-    const day = d.getDay();
+    // getDay() is Sunday-based (0 = Sun); shift it so weeks start on Monday.
+    const day = (d.getDay() + 6) % 7;
     d.setDate(d.getDate() - day);
     return d;
   });
@@ -165,11 +173,13 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
 
   // null = the setting hasn't loaded yet — deliberately NOT defaulted to
   // true, since defaulting it would let the effect below fire an events
-  // fetch on mount before we know the real value; if that fetch resolves
-  // AFTER the settings fetch turns it off, its stale response would
-  // overwrite the just-cleared calendarEvents and events would reappear
-  // regardless of the toggle. Gating the fetch on "!== null" avoids that
-  // fetch entirely instead of racing it.
+  // fetch on mount before we know the real value, spending a request on a
+  // week nothing is going to draw. Gating the fetch on "!== null" avoids
+  // that fetch entirely instead of racing it.
+  //
+  // A stale response can no longer put events back on screen on its own:
+  // the toggle is applied at render via visibleEvents, so an off toggle
+  // hides them whatever calendarEvents happens to hold.
   //
   // The value now comes from the shared store rather than a fetch of this
   // view's own — see useAppSettings.jsx for why there is only one copy. The
@@ -187,10 +197,10 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     // would fall into the weekly branch below and fetch a week of events that
     // nothing renders.
     if (viewMode === 'list') return;
-    if (!showEventsEnabled) {
-      setCalendarEvents([]);
-      return;
-    }
+    // Nothing to fetch while the toggle is off. Whatever is already cached is
+    // not cleared here: writing state straight from an effect body costs an
+    // extra render pass, and visibleEvents below hides it just as completely.
+    if (!showEventsEnabled) return;
     let cancelled = false;
     let startISO, endISO;
     if (viewMode === 'monthly') {
@@ -382,7 +392,12 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     return acc;
   }, {});
 
-  const eventsByDate = calendarEvents.reduce((acc, event) => {
+  // What the grids actually draw. The toggle is applied here rather than by
+  // emptying calendarEvents, so turning it off costs no render and turning it
+  // back on shows the cached week again while the refetch is in flight.
+  const visibleEvents = showEventsEnabled ? calendarEvents : [];
+
+  const eventsByDate = visibleEvents.reduce((acc, event) => {
     if (!event.start_date) return acc;
     const key = event.start_date;
     if (!acc[key]) acc[key] = [];
@@ -471,7 +486,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
               onPrevWeek={handlePrevWeek}
               onNextWeek={handleNextWeek}
               tasks={filteredTasks}
-              calendarEvents={calendarEvents}
+              calendarEvents={visibleEvents}
               todayISO={todayISO}
               onTaskClick={handleTaskClick}
               onSelectDate={handleSelectDate}
@@ -598,7 +613,7 @@ function MonthlyGrid({
       </div>
 
       <div className="grid grid-cols-7 gap-1 mb-2">
-        {WEEKDAY_LABELS.map((label) => (
+        {weekdayLabels().map((label) => (
           <div key={label} className="text-center text-xs font-medium text-[var(--text-secondary)] uppercase">
             {label}
           </div>
@@ -1112,7 +1127,7 @@ function ManualCreateModal({ date, time, onClose, onCreate, t }) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const displayDate = new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+  const displayDate = new Date(`${date}T00:00:00`).toLocaleDateString(uiLocale(), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

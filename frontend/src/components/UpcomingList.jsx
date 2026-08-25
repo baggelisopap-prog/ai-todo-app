@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
-import { toLocalISODate } from '../utils/formatDate';
+import { toLocalISODate, weekdayShortUpper } from '../utils/formatDate';
 import { isVisibleTask } from '../utils/taskDisplay';
 
 /**
@@ -19,7 +19,7 @@ function getSectionLabel(t, daysFromNow, date) {
   if (daysFromNow === 1) {
     return t('sections.tomorrow');
   }
-  const weekday = date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+  const weekday = weekdayShortUpper(date);
   const day = date.getDate();
   return `${weekday} ${day}`;
 }
