@@ -157,12 +157,23 @@ class TaskService:
         """
         self.repository = repository or AirtableTaskRepository()
 
-    def _single_task_to_record(self, task: SingleTask) -> TaskRecord:
+    def _single_task_to_record(
+        self, task: SingleTask, user_id: str = None, workspace_id=None
+    ) -> TaskRecord:
         """
         Private helper. Converts a SingleTask (Schema 1) to a TaskRecord (Schema 2)
         by filling in the ai_suggested_* snapshots.
+
+        `workspace_id` is decided in code, never by the model — the model is
+        only ever shown ONE workspace's vocabulary, so asking it which
+        workspace to use would be asking a question it has no way to answer.
+        `category_name`, which it DOES answer, is resolved to an id here; an
+        unrecognised name leaves the task uncategorised rather than inventing
+        a category.
         """
         return TaskRecord(
+            workspace_id=workspace_id,
+            category_id=self.resolve_category_name(user_id, workspace_id, task.category_name),
             task_name=task.task_name,
             description=task.description,
             category=task.category,
@@ -176,7 +187,7 @@ class TaskService:
             # approval_status and is_completed use their defaults (False)
         )
 
-    def extract_and_save(self, raw_input: str, user_id: str) -> list[TaskRecord]:
+    def extract_and_save(self, raw_input: str, user_id: str, workspace_id=None) -> list[TaskRecord]:
         """
         Main business operation.
         Extracts tasks from raw text via AI, converts them to records, and saves them to the DB.
@@ -185,7 +196,7 @@ class TaskService:
         logger.info("Processing input for extraction and save...")
 
         # 1. AI Extraction
-        task_list = extract_tasks(raw_input, user_id=user_id)
+        task_list = extract_tasks(raw_input, user_id=user_id, workspace_id=workspace_id)
 
         if not task_list:
             raise RuntimeError("AI extraction failed to produce valid tasks.")
@@ -194,7 +205,7 @@ class TaskService:
 
         # 2. Conversion and Saving
         for task in task_list.items:
-            task_record = self._single_task_to_record(task)
+            task_record = self._single_task_to_record(task, user_id, workspace_id)
 
             try:
                 saved_task = self.repository.save_task(user_id, task_record)
@@ -210,7 +221,7 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks to database.")
         return saved_tasks
 
-    def extract_and_save_from_audio(self, audio_bytes: bytes, mime_type: str, user_id: str) -> list[TaskRecord]:
+    def extract_and_save_from_audio(self, audio_bytes: bytes, mime_type: str, user_id: str, workspace_id=None) -> list[TaskRecord]:
         """
         Extracts tasks from an audio recording via AI and saves them to the database.
         Mirrors extract_and_save exactly — only the AI call differs.
@@ -218,7 +229,7 @@ class TaskService:
         logger.info("Processing audio input for extraction and save...")
 
         # 1. AI Extraction
-        task_list = extract_tasks_from_audio(audio_bytes, mime_type, user_id=user_id)
+        task_list = extract_tasks_from_audio(audio_bytes, mime_type, user_id=user_id, workspace_id=workspace_id)
 
         if not task_list:
             raise RuntimeError("AI extraction failed to produce valid tasks from audio.")
@@ -227,7 +238,7 @@ class TaskService:
 
         # 2. Conversion and Saving
         for task in task_list.items:
-            task_record = self._single_task_to_record(task)
+            task_record = self._single_task_to_record(task, user_id, workspace_id)
 
             try:
                 saved_task = self.repository.save_task(user_id, task_record)
@@ -242,7 +253,7 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from audio to database.")
         return saved_tasks
 
-    def extract_and_save_from_image(self, image_bytes: bytes, mime_type: str, user_id: str, additional_context: str = None) -> list[TaskRecord]:
+    def extract_and_save_from_image(self, image_bytes: bytes, mime_type: str, user_id: str, additional_context: str = None, workspace_id=None) -> list[TaskRecord]:
         """
         Extracts tasks from an image via AI and saves them to the database.
         Mirrors extract_and_save exactly — only the AI call differs.
@@ -250,7 +261,7 @@ class TaskService:
         logger.info("Processing image input for extraction and save...")
 
         # 1. AI Extraction
-        task_list = extract_tasks_from_image(image_bytes, mime_type, user_id=user_id, additional_context=additional_context)
+        task_list = extract_tasks_from_image(image_bytes, mime_type, user_id=user_id, additional_context=additional_context, workspace_id=workspace_id)
 
         if not task_list:
             raise RuntimeError("AI extraction failed to produce valid tasks from image.")
@@ -259,7 +270,7 @@ class TaskService:
 
         # 2. Conversion and Saving
         for task in task_list.items:
-            task_record = self._single_task_to_record(task)
+            task_record = self._single_task_to_record(task, user_id, workspace_id)
 
             try:
                 saved_task = self.repository.save_task(user_id, task_record)

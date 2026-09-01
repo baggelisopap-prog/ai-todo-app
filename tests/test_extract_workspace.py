@@ -77,3 +77,45 @@ def test_an_invented_name_files_nothing(service):
 def test_no_name_and_no_workspace_are_both_safe(service):
     assert service.resolve_category_name(USER, "ws-b", None) is None
     assert service.resolve_category_name(USER, None, "μετοχές") is None
+
+
+# --------------------------------------------------- what the model is shown
+
+def test_the_prompt_lists_only_this_workspaces_categories(monkeypatch):
+    """The whole reason the extractor is scoped. Offered fifteen names across
+    three workspaces it guesses; offered five from one, it does not have to."""
+    import ai_engine
+    monkeypatch.setattr(ai_engine.repository, "get_categories_for_workspace",
+                        lambda u, w: [c for c in CATS if c.workspace_id == w])
+
+    instruction = ai_engine.build_extraction_instruction(USER, "ws-b")
+
+    assert "μετοχές" in instruction
+    assert "crypto" in instruction
+    assert "κήπος" not in instruction  # it lives in the other workspace
+
+
+def test_a_workspace_with_no_categories_says_so_rather_than_listing_nothing(monkeypatch):
+    """An empty list rendered as an empty line reads, to a model, like a
+    malformed instruction. Saying there are none is one it can obey."""
+    import ai_engine
+    monkeypatch.setattr(ai_engine.repository, "get_categories_for_workspace",
+                        lambda u, w: [])
+
+    instruction = ai_engine.build_extraction_instruction(USER, "ws-empty")
+
+    assert "category_name" in instruction
+    assert "no categories" in instruction.lower()
+
+
+def test_the_old_four_word_line_survives(monkeypatch):
+    """tasks.category is still the live column until a later slice, and the
+    model still has to fill it. Adding the new names must not remove the old
+    instruction."""
+    import ai_engine
+    monkeypatch.setattr(ai_engine.repository, "get_categories_for_workspace",
+                        lambda u, w: [])
+
+    instruction = ai_engine.build_extraction_instruction(USER, None)
+
+    assert "Business" in instruction and "Personal" in instruction

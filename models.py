@@ -23,6 +23,12 @@ class SingleTask(BaseModel):
         default_factory=list,
         description="List of checklist items. Each item is an object with 'text' (the item description) and 'done' (whether completed, defaults to false). AI should always set done=false for new tasks.",
     )
+    # What the model ANSWERS with for the user's own categories — a NAME, never
+    # an id, because models truncate and invent UUIDs.
+    # services.resolve_category_name turns it into tasks.category_id, and an
+    # unrecognised name becomes None. Not a database column: TaskRecord carries
+    # category_id instead.
+    category_name: Optional[str] = None
 
     @field_validator("due_date")
     @classmethod

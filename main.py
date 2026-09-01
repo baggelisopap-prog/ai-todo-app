@@ -45,6 +45,12 @@ load_dotenv()
 class ExtractRequest(BaseModel):
     """Request body for POST /extract"""
     text: str
+    # Where the user was standing. The extractor is scoped to ONE workspace and
+    # is shown only that workspace's category names — it is never asked to pick
+    # the workspace, because there is a right answer in code and none in the
+    # model. Omitted (or null) means "Όλα", and the service falls back to the
+    # user's default workspace.
+    workspace_id: Optional[str] = None
 
 class ExtractResponse(BaseModel):
     """Response body for POST /extract"""
@@ -391,7 +397,11 @@ def extract_and_save_tasks(request: ExtractRequest, user_id: str = Depends(get_c
         )
     
     try:
-        saved_tasks = service.extract_and_save(request.text, user_id=user_id)
+        saved_tasks = service.extract_and_save(
+            request.text,
+            user_id=user_id,
+            workspace_id=service.resolve_extraction_workspace(user_id, request.workspace_id),
+        )
         return ExtractResponse(saved_tasks=saved_tasks, count=len(saved_tasks))
     except RuntimeError as e:
         # Service raises RuntimeError when extraction fails or all saves fail
@@ -409,7 +419,7 @@ def extract_and_save_tasks(request: ExtractRequest, user_id: str = Depends(get_c
         )
 
 @app.post("/extract-voice", response_model=ExtractResponse, status_code=status.HTTP_201_CREATED)
-async def extract_voice(audio: UploadFile = File(...), user_id: str = Depends(get_current_user_id)):
+async def extract_voice(audio: UploadFile = File(...), workspace_id: str = Form(None), user_id: str = Depends(get_current_user_id)):
     """
     Extract tasks from an audio recording and save them to the database.
     Accepts any audio/* MIME type up to 10 MB. Audio is processed in memory and never stored.
@@ -439,6 +449,7 @@ async def extract_voice(audio: UploadFile = File(...), user_id: str = Depends(ge
             audio_bytes=audio_bytes,
             mime_type=audio.content_type,
             user_id=user_id,
+            workspace_id=service.resolve_extraction_workspace(user_id, workspace_id),
         )
         return ExtractResponse(saved_tasks=saved_tasks, count=len(saved_tasks))
     except RuntimeError as e:
@@ -456,7 +467,7 @@ async def extract_voice(audio: UploadFile = File(...), user_id: str = Depends(ge
 
 
 @app.post("/extract-image", response_model=ExtractResponse, status_code=status.HTTP_201_CREATED)
-async def extract_image(image: UploadFile = File(...), context: str = Form(None), user_id: str = Depends(get_current_user_id)):
+async def extract_image(image: UploadFile = File(...), context: str = Form(None), workspace_id: str = Form(None), user_id: str = Depends(get_current_user_id)):
     """
     Extract tasks from an image and save them to the database.
     Accepts any image/* MIME type up to 10 MB. Image is processed in memory and never stored.
@@ -487,6 +498,7 @@ async def extract_image(image: UploadFile = File(...), context: str = Form(None)
             mime_type=image.content_type,
             user_id=user_id,
             additional_context=context,
+            workspace_id=service.resolve_extraction_workspace(user_id, workspace_id),
         )
         return ExtractResponse(saved_tasks=saved_tasks, count=len(saved_tasks))
     except RuntimeError as e:

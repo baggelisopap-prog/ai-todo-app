@@ -9,6 +9,8 @@ from google.genai import types, errors
 from pydantic import ValidationError
 from typing import Optional
 
+import repository
+
 # Import schemas from models.py
 from models import TaskList
 import token_tracker
@@ -28,6 +30,39 @@ client = genai.Client(api_key=api_key)
 # ==========================================
 # SHARED PROMPT BUILDER
 # ==========================================
+def build_extraction_instruction(user_id: str, workspace_id=None) -> str:
+    """
+    The extraction instruction, with THIS workspace's category names appended.
+
+    Scoped to ONE workspace on purpose. A model offered fifteen names across
+    three workspaces makes mistakes a model offered five from one does not —
+    and it is never asked to pick the workspace itself, because there is
+    exactly one right answer available to us in code (the one the user is
+    standing in, or their default) and none available to it.
+
+    The old `category` line below is untouched: tasks.category is still the
+    live column and is dropped only in a later slice, so the model still has
+    to fill it.
+    """
+    base = _build_system_instruction()
+
+    categories = repository.get_categories_for_workspace(user_id, workspace_id)
+    if categories:
+        names = ", ".join(c.name for c in categories)
+        return base + (
+            "\n- category_name: the user's own category for this task, EXACTLY one of: "
+            f"{names}. Copy the name exactly as written above. If none of them fits, "
+            "leave it out entirely — never invent a category name."
+        )
+
+    # Said explicitly rather than rendered as an empty list: an empty line reads
+    # to a model like a malformed instruction, while "there are none" is one it
+    # can obey.
+    return base + (
+        "\n- category_name: this user has no categories yet. Always leave it out."
+    )
+
+
 def _build_system_instruction() -> str:
     """Builds the shared system instruction with the current Athens date injected."""
     athens_now = datetime.now(ZoneInfo("Europe/Athens"))
@@ -48,7 +83,7 @@ When extracting tasks:
 # ==========================================
 # EXTRACTION ENGINE
 # ==========================================
-def extract_tasks(raw_input: str, user_id: str) -> Optional[TaskList]:
+def extract_tasks(raw_input: str, user_id: str, workspace_id=None) -> Optional[TaskList]:
     """
     Extracts structured task data from unstructured text.
 
@@ -59,7 +94,7 @@ def extract_tasks(raw_input: str, user_id: str) -> Optional[TaskList]:
     """
     logging.info(f"Processing raw input: '{raw_input}'")
 
-    system_instruction = _build_system_instruction()
+    system_instruction = build_extraction_instruction(user_id, workspace_id)
 
     max_retries = 3
 
@@ -157,14 +192,14 @@ def extract_tasks(raw_input: str, user_id: str) -> Optional[TaskList]:
     return None
 
 
-def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str, user_id: str) -> Optional[TaskList]:
+def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str, user_id: str, workspace_id=None) -> Optional[TaskList]:
     """
     Extracts structured task data from an audio recording via Gemini multimodal input.
     Audio is sent inline and never stored to disk.
     """
     logging.info(f"Processing audio input: {len(audio_bytes)} bytes, type={mime_type}")
 
-    system_instruction = _build_system_instruction()
+    system_instruction = build_extraction_instruction(user_id, workspace_id)
 
     max_retries = 3
 
@@ -253,14 +288,14 @@ def extract_tasks_from_audio(audio_bytes: bytes, mime_type: str, user_id: str) -
     return None
 
 
-def extract_tasks_from_image(image_bytes: bytes, mime_type: str, user_id: str, additional_context: str = None) -> Optional[TaskList]:
+def extract_tasks_from_image(image_bytes: bytes, mime_type: str, user_id: str, additional_context: str = None, workspace_id=None) -> Optional[TaskList]:
     """
     Extracts structured task data from an image via Gemini multimodal input.
     Image is sent inline and never stored to disk.
     """
     logging.info(f"Processing image input: {len(image_bytes)} bytes, type={mime_type}")
 
-    system_instruction = _build_system_instruction()
+    system_instruction = build_extraction_instruction(user_id, workspace_id)
 
     parts = [
         {"inline_data": {"mime_type": mime_type, "data": image_bytes}},
