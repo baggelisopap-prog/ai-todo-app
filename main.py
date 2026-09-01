@@ -20,9 +20,9 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Literal
-from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings, RecurrenceRule
+from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings, RecurrenceRule, Workspace, Category
 from services import TaskService
 import services  # for HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES — one policy, both reply paths
 from repository import save_push_subscription, get_app_settings, update_app_settings
@@ -137,6 +137,35 @@ class RecurrenceWriteResponse(BaseModel):
 class RecurrenceDeleteResponse(BaseModel):
     deleted: bool
     occurrences_removed: int
+
+
+# ------------------------------------------------- workspaces and categories
+
+
+class WorkspacesListResponse(BaseModel):
+    workspaces: list[Workspace]
+    categories: list[Category]
+
+
+class WorkspaceWriteResponse(BaseModel):
+    workspace: Workspace
+
+
+class WorkspaceDeleteResponse(BaseModel):
+    deleted: bool
+    tasks_unfiled: int
+
+
+class WorkspaceCreateRequest(BaseModel):
+    name: str = Field(max_length=40)
+    color: Optional[str] = None
+    position: int = 0
+
+
+class WorkspaceUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=40)
+    color: Optional[str] = None
+    position: Optional[int] = None
 
 class HealthResponse(BaseModel):
     status: str
@@ -807,6 +836,84 @@ def delete_recurrence(rule_id: str, user_id: str = Depends(get_current_user_id))
     except Exception as e:
         logger.exception("Failed to delete recurrence")
         raise HTTPException(status_code=500, detail=f"Failed to delete recurrence: {str(e)}")
+
+
+# ---------------------------------------------------------------- workspaces
+
+
+@app.get("/workspaces", response_model=WorkspacesListResponse)
+def list_workspaces(user_id: str = Depends(get_current_user_id)):
+    """
+    Every workspace AND every category this user owns, in one call.
+
+    Both together because the frontend provider needs the whole set on each app
+    open — a task chip may belong to any workspace, so fetching categories per
+    workspace would be one request per workspace on every launch.
+    """
+    try:
+        return WorkspacesListResponse(
+            workspaces=repository.get_workspaces(user_id),
+            categories=repository.get_categories(user_id),
+        )
+    except Exception as e:
+        logger.exception("Failed to list workspaces")
+        raise HTTPException(status_code=500, detail=f"Failed to list workspaces: {str(e)}")
+
+
+@app.post("/workspaces", response_model=WorkspaceWriteResponse, status_code=status.HTTP_201_CREATED)
+def create_workspace(payload: WorkspaceCreateRequest, user_id: str = Depends(get_current_user_id)):
+    # Checked here rather than left to the database's unique(user_id, name),
+    # whose violation arrives as a generic exception and a wrong 500. The user
+    # typed a name that is taken; that is a 409 they can act on.
+    if any(w.name == payload.name for w in repository.get_workspaces(user_id)):
+        raise HTTPException(status_code=409, detail="A workspace with that name already exists")
+
+    workspace = repository.create_workspace(user_id, Workspace(**payload.model_dump()))
+    return WorkspaceWriteResponse(workspace=workspace)
+
+
+@app.patch("/workspaces/{workspace_id}", response_model=WorkspaceWriteResponse)
+def update_workspace(
+    workspace_id: str,
+    payload: WorkspaceUpdateRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    if repository.get_workspace(user_id, workspace_id) is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # exclude_unset only — a field sent explicitly as null is how a client says
+    # "clear this" (color is legitimately nullable).
+    updates = payload.model_dump(exclude_unset=True)
+
+    # `w.record_id != workspace_id` is load-bearing: saving a form without
+    # touching the name resends it, and comparing against every sibling
+    # INCLUDING itself would reject that as a duplicate.
+    if "name" in updates and any(
+        w.name == updates["name"] and w.record_id != workspace_id
+        for w in repository.get_workspaces(user_id)
+    ):
+        raise HTTPException(status_code=409, detail="A workspace with that name already exists")
+
+    updated = repository.update_workspace(user_id, workspace_id, updates)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return WorkspaceWriteResponse(workspace=updated)
+
+
+@app.delete("/workspaces/{workspace_id}", response_model=WorkspaceDeleteResponse)
+def delete_workspace(workspace_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Deletes the workspace and, by CASCADE, its categories. Tasks pointing at
+    either are SET NULL by the database and become unfiled — deleting a
+    container never deletes work. The count is read BEFORE the delete, because
+    afterwards the rows are already NULL and the answer would always be zero.
+    """
+    if repository.get_workspace(user_id, workspace_id) is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    affected = repository.count_tasks_in_workspace(user_id, workspace_id)
+    repository.delete_workspace(user_id, workspace_id)
+    return WorkspaceDeleteResponse(deleted=True, tasks_unfiled=affected)
 
 
 @app.get("/profile")

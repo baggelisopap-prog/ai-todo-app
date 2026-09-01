@@ -1557,6 +1557,33 @@ def delete_category(user_id: str, category_id: str) -> None:
     supabase.table("categories").delete().eq("id", category_id).eq("user_id", user_id).execute()
 
 
+def count_tasks_in_workspace(user_id: str, workspace_id: str) -> int:
+    """How many tasks would become unfiled if this workspace went away. Asked
+    before the delete, so the confirmation can say a number instead of a
+    warning nobody reads."""
+    response = (
+        supabase.table("tasks")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .eq("workspace_id", workspace_id)
+        .execute()
+    )
+    return response.count or 0
+
+
+def count_tasks_in_category(user_id: str, category_id: str) -> int:
+    """Same purpose as count_tasks_in_workspace: a number in the confirmation
+    instead of a warning nobody reads."""
+    response = (
+        supabase.table("tasks")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .eq("category_id", category_id)
+        .execute()
+    )
+    return response.count or 0
+
+
 def get_occurrence_dates(user_id: str, rule_id: str, from_date: str, to_date: str) -> set[str]:
     """
     Which occurrence dates this rule already has inside the window.
