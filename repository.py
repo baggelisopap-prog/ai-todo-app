@@ -1506,6 +1506,15 @@ def get_categories(user_id: str) -> list[Category]:
     return [_supabase_row_to_category(row) for row in (response.data or [])]
 
 
+def get_categories_for_workspace(user_id: str, workspace_id: str) -> list[Category]:
+    """One workspace's categories. Filtered in Python off the user's full set
+    rather than queried per workspace, because every caller here already needs
+    the whole set for something else in the same request."""
+    if not workspace_id:
+        return []
+    return [c for c in get_categories(user_id) if c.workspace_id == workspace_id]
+
+
 def get_category(user_id: str, category_id: str) -> Optional[Category]:
     response = (
         supabase.table("categories")

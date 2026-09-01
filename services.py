@@ -301,6 +301,44 @@ class TaskService:
         if workspace_id is not None and category.workspace_id != workspace_id:
             raise ValueError("That category belongs to a different workspace")
 
+    def resolve_extraction_workspace(self, user_id: str, requested_id) -> Optional[str]:
+        """
+        Which workspace the extractor speaks for on this request.
+
+        The one the user is standing in, or — when they are on "Ola" — their
+        default. NEVER a guess across several: a model given three workspaces
+        and fifteen category names makes mistakes a model given five does not.
+
+        Returns None when there is no default either. That means the task is
+        filed nowhere, which is honest; picking the first workspace instead
+        would quietly put work somewhere nobody chose.
+        """
+        if requested_id:
+            return requested_id
+        return repository.get_app_settings(user_id).default_workspace_id
+
+    def resolve_category_name(self, user_id: str, workspace_id, name) -> Optional[str]:
+        """
+        The id of the category with this NAME inside this workspace, or None.
+
+        The model answers with a name, never an id — models truncate UUIDs,
+        transpose them, and invent plausible-looking ones. This is the seam
+        where that is caught.
+
+        An unrecognised name resolves to None and the task is left
+        uncategorised. No category is ever auto-created from model output: a
+        hallucinated category is worse than no category, because it looks
+        deliberate and the user has no reason to distrust it.
+        """
+        if not workspace_id or not name:
+            return None
+
+        wanted = str(name).strip().casefold()
+        for category in repository.get_categories_for_workspace(user_id, workspace_id):
+            if category.name.strip().casefold() == wanted:
+                return category.record_id
+        return None
+
     def create_task_manual(self, user_id: str, fields: dict, approval_status: bool = True) -> TaskRecord:
         """
         Manually create a task. Fills in AI-suggested fields as duplicates
