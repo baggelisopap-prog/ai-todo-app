@@ -27,7 +27,7 @@ category system exist without the integration noticing.
   holds a frozen archive of the old vocabulary.
 - **Category colours are hex strings** (`'#2563eb'`), stored on the row, not CSS variable
   names.
-- Backend suite baseline: **209 passing** (2026-08-17). Run with
+- Backend suite baseline: **221 passing**, measured 2026-09-01 by running it. (CURRENT_TASK.md said 209, from 2026-08-17; it was stale and has been corrected.) Run with
   `./venv/Scripts/python.exe -m pytest tests/ -q`. The number goes up, never down.
 - Repository row-readers use `_get(row, key, default)`, never `row.get(key, default)` —
   Supabase returns explicit `None` for NULL columns and a bare `.get` default will not
@@ -397,7 +397,7 @@ Expected: 3 passed
 - [ ] **Step 6: Run the whole suite — nothing may regress**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
-Expected: 212 passed (209 + 3)
+Expected: 224 passed (221 + 3)
 
 - [ ] **Step 7: Commit**
 
@@ -921,7 +921,7 @@ In `_task_to_supabase_fields`, alongside the other optional passthrough fields:
 - [ ] **Step 6: Run the whole suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
-Expected: 222 passed
+Expected: 234 passed
 
 - [ ] **Step 7: Commit**
 
@@ -1788,7 +1788,7 @@ Add `"active_workspace_id"` to the field list in both `get_app_settings` and
 - [ ] **Step 6: Run the whole suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
-Expected: 241 passed
+Expected: 253 passed
 
 - [ ] **Step 7: Commit**
 
@@ -1893,7 +1893,7 @@ Expected: 8 passed
 - [ ] **Step 5: Run the whole suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
-Expected: 243 passed, 0 failed
+Expected: 255 passed, 0 failed
 
 - [ ] **Step 6: Commit**
 
@@ -1908,9 +1908,9 @@ git commit -m "A category cannot escape its workspace"
 
 Evidence, not claims. Paste the actual output when reporting.
 
-- [ ] `./venv/Scripts/python.exe -m pytest tests/ -q` — **243 passed**, up from 209, none failing
+- [ ] `./venv/Scripts/python.exe -m pytest tests/ -q` — **255 passed**, up from 221, none failing
 
-  The running totals in each task (212, 222, 241, 243) assume no existing test had to be
+  The running totals in each task (224, 234, 253, 255) assume no existing test had to be
   rewritten. Task 6 changes what Hostaway escalation matches on, so some existing Hostaway
   tests will need `category_id` set and `get_system_category` stubbed. Rewriting them is
   expected and keeps the count the same; **deleting** one to make the suite green is not.

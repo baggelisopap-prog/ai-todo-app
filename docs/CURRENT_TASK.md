@@ -8,6 +8,8 @@ Recurring tasks Slice 1 is code-complete on `main` as of 2026-08-17. Design: `do
 
 A second slice of UI landed on top of it the same day (below). Backend suite is at 209 (was 197), frontend build clean, ESLint at its pre-existing baseline of 13 (**13 as of that date; 12 since 2026-08-25**, one of them fixed by the calendar pass), `npm run check` green.
 
+**CORRECTED 2026-09-01**: the suite is at **221**, not 209. The 209 above was true on 2026-08-17 and was never updated as later work added tests; it is left in place because it dates the sentence around it. Measured by running `./venv/Scripts/python.exe -m pytest tests/ -q` → `221 passed in 10.63s`. Use 221 as the baseline for anything starting now.
+
 ## Making an existing task repeat (2026-08-17) — code-complete, not seen running
 "Make this repeat" now exists on a task, where before a recurrence could only be born from Settings.
 
