@@ -498,10 +498,24 @@ async def extract_image(image: UploadFile = File(...), context: str = Form(None)
 
 
 @app.get("/tasks", response_model=TasksListResponse, status_code=status.HTTP_200_OK)
-def list_tasks(user_id: str = Depends(get_current_user_id)):
-    """Retrieve all tasks from the database."""
+def list_tasks(
+    workspace_id: Optional[str] = None,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Retrieve all tasks from the database.
+
+    `workspace_id` narrows the result to one workspace. Omitting it means "Όλα"
+    and returns unfiled tasks too — an unfiled task is still the user's work and
+    must never be hidden by the absence of a choice.
+    """
     try:
         tasks = service.get_all_tasks(user_id)
+        # Filtered in Python beside the caller's other filters rather than in
+        # the query: this path already fetches the user's tasks once, and a
+        # second round trip would buy nothing.
+        if workspace_id is not None:
+            tasks = [t for t in tasks if t.workspace_id == workspace_id]
         return TasksListResponse(tasks=tasks, count=len(tasks))
     except Exception as e:
         logger.exception("Failed to retrieve tasks")
@@ -717,6 +731,9 @@ def update_settings(payload: AppSettings, user_id: str = Depends(get_current_use
             daily_summary_time=payload.daily_summary_time,
             calendar_sync_all_enabled=payload.calendar_sync_all_enabled,
             calendar_show_events=payload.calendar_show_events,
+            # NULL is not "unset" here, it is the deliberate "Όλα" position —
+            # so it is passed through rather than dropped.
+            active_workspace_id=payload.active_workspace_id,
         )
     except Exception as e:
         logger.exception("Failed to update app settings")

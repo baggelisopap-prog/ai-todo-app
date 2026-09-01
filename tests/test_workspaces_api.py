@@ -113,3 +113,83 @@ def test_the_unfiled_count_is_read_BEFORE_the_delete(client, monkeypatch):
     client.delete("/workspaces/ws-1")
 
     assert order == ["count", "delete"]
+
+
+from models import AppSettings, TaskRecord
+
+
+def _task(**overrides):
+    base = dict(record_id="t1", task_name="Χ", description="", category="Business",
+                priority="P2", ai_suggested_category="Business",
+                ai_suggested_priority="P2", approval_status=True)
+    base.update(overrides)
+    return TaskRecord(**base)
+
+
+def test_tasks_can_be_filtered_to_one_workspace(client, monkeypatch):
+    monkeypatch.setattr(main.service, "get_all_tasks", lambda u: [
+        _task(record_id="in", workspace_id="ws-1"),
+        _task(record_id="out", workspace_id="ws-2"),
+        _task(record_id="unfiled", workspace_id=None),
+    ])
+
+    r = client.get("/tasks?workspace_id=ws-1")
+
+    assert [t["record_id"] for t in r.json()["tasks"]] == ["in"]
+    assert r.json()["count"] == 1
+
+
+def test_no_filter_returns_everything_including_unfiled(client, monkeypatch):
+    """The default is 'Όλα'. An unfiled task is still the user's work and must
+    never be hidden by the absence of a choice."""
+    monkeypatch.setattr(main.service, "get_all_tasks", lambda u: [
+        _task(record_id="in", workspace_id="ws-1"),
+        _task(record_id="unfiled", workspace_id=None),
+    ])
+
+    r = client.get("/tasks")
+
+    assert len(r.json()["tasks"]) == 2
+
+
+def test_the_active_workspace_is_returned_by_settings(client, monkeypatch):
+    """The switcher's position is remembered server-side, so it is the same on
+    the phone and the laptop."""
+    monkeypatch.setattr(main, "get_app_settings",
+                        lambda u: AppSettings(active_workspace_id="ws-1"))
+
+    r = client.get("/settings")
+
+    assert r.json()["active_workspace_id"] == "ws-1"
+
+
+def test_the_active_workspace_survives_a_patch(client, monkeypatch):
+    saved = {}
+
+    def _update(user_id, **fields):
+        saved.update(fields)
+        return AppSettings(**{k: v for k, v in fields.items()})
+
+    monkeypatch.setattr(main, "update_app_settings", _update)
+
+    r = client.patch("/settings", json={"active_workspace_id": "ws-2"})
+
+    assert r.status_code == 200
+    assert saved["active_workspace_id"] == "ws-2"
+
+
+def test_clearing_the_active_workspace_means_show_everything(client, monkeypatch):
+    """NULL is not 'unset', it is the deliberate 'Όλα' position — so a null
+    sent explicitly must reach the database rather than being dropped."""
+    saved = {}
+
+    def _update(user_id, **fields):
+        saved.update(fields)
+        return AppSettings(**{k: v for k, v in fields.items()})
+
+    monkeypatch.setattr(main, "update_app_settings", _update)
+
+    client.patch("/settings", json={"active_workspace_id": None})
+
+    assert "active_workspace_id" in saved
+    assert saved["active_workspace_id"] is None

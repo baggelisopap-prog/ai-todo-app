@@ -407,6 +407,9 @@ def get_app_settings(user_id: str) -> AppSettings:
         daily_summary_last_sent_date=_get(row, "daily_summary_last_sent_date", ""),
         calendar_sync_all_enabled=_get(row, "calendar_sync_all_enabled", False),
         calendar_show_events=_get(row, "calendar_show_events", True),
+        # row.get, not _get: NULL here is the meaningful "Όλα" position, not a
+        # blank standing in for a typed default.
+        active_workspace_id=row.get("active_workspace_id"),
     )
 
 
