@@ -1916,8 +1916,16 @@ Evidence, not claims. Paste the actual output when reporting.
   expected and keeps the count the same; **deleting** one to make the suite green is not.
 - [x] `cd frontend && npm run check` — green, 7 node suites, all PASS. **CORRECTED: `check` does NOT run ESLint** (it is 7 `node scripts/*.mjs` suites); ESLint is `npm run lint`, run separately → **12 problems**, the pre-existing baseline. This slice does not
       touch the frontend; if the number moved, something unintended was edited)
-- [ ] The owner has run migration Part A in the Supabase SQL Editor and **read the four
-      count queries**. Query 3's `hostaway_MISSING_category` must be **0**.
+- [x] The owner has run migration Part A in the Supabase SQL Editor and **read the four
+      count queries**. Query 3's `hostaway_missing_category` must be **0**.
+
+  **Run and verified 2026-09-01. The numbers, so nobody has to re-derive them:**
+
+  | Query | Result | Reading |
+  |---|---|---|
+  | 3 — Hostaway | `with_category 126`, `missing_category 0` | Every one of the 126 guest tasks got the locked category. Escalation will find all of them. |
+  | 2 — totals | `total 301`, `placed 289`, `unfiled 12`, `was_unknown 12` | 289 + 12 = 301, and unfiled **equals** was_unknown. Nothing was stranded: the only unfiled tasks are exactly the ones whose old category was `Unknown`. |
+  | 4 — per account | 2 accounts, each `workspaces 2`, `hostaway_categories 1` | The per-user seeding reached the colleague's account too, not just the owner's — which is why it was written against `auth.users`. `1` and not `2` also confirms `unique (user_id, system_key)` holds. |
 - [ ] `curl -s "$API/workspaces" -H "Authorization: Bearer $TOKEN"` returns his two
       workspaces and the locked Hostaway category.
 - [ ] **Part B is NOT run.** `tasks.category` still exists and still holds its old values.
