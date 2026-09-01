@@ -565,15 +565,33 @@ def get_active_hostaway_tasks(
     user_id: str, tasks: Optional[list[TaskRecord]] = None
 ) -> list[TaskRecord]:
     """
-    Returns all not-completed, not-rejected category="Hostaway" tasks
-    belonging to user_id — the candidate set for escalation
-    re-notification. Pass a pre-fetched `tasks` list to avoid a second
-    table scan; omit it to fetch fresh via user_id.
+    Returns all not-completed, not-rejected guest-message tasks belonging to
+    user_id — the candidate set for escalation re-notification. Pass a
+    pre-fetched `tasks` list to avoid a second table scan; omit it to fetch
+    fresh via user_id.
+
+    Matched on the category whose system_key is 'hostaway', NOT on the literal
+    word: since 2026-09-01 categories are rows the user names, and the label on
+    this one is theirs to rename. The key is not.
+
+    Deliberately NOT keyed on hostaway_conversation_id, which is also set on
+    every such task: that column is written as `str(conversation_id) if
+    conversation_id else None` and can legitimately be NULL, and a NULL there
+    would silently drop a P1 guest task out of escalation.
+
+    An account with no such category (one that predates the migration)
+    escalates nothing rather than raising — this runs inside the scheduler's
+    per-user loop, where a raise costs every later user their tick.
     """
+    system_category = get_system_category(user_id, "hostaway")
+    if system_category is None:
+        return []
+
     all_tasks = tasks if tasks is not None else get_tasks_for_user(user_id)
     return [
         t for t in all_tasks
-        if t.category == "Hostaway" and not t.is_completed and not t.is_rejected
+        if t.category_id == system_category.record_id
+        and not t.is_completed and not t.is_rejected
     ]
 
 
