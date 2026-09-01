@@ -274,6 +274,33 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from image to database.")
         return saved_tasks
 
+    def validate_workspace_placement(self, user_id: str, workspace_id, category_id) -> None:
+        """
+        A task's category must live inside the task's own workspace.
+
+        Enforced here rather than by a database CHECK, which cannot see another
+        table, and centrally rather than at each caller because Slice 3 adds two
+        more writers (the extractor and the chat agent) that resolve a category
+        by NAME and would each otherwise have to repeat it.
+
+        A NULL category_id is always allowed: moving a task to Unfiled is the
+        escape hatch from any bad placement, including one this rule would
+        otherwise refuse.
+
+        Raises ValueError; the routes turn that into a 422.
+        """
+        if category_id is None:
+            return
+
+        category = repository.get_category(user_id, category_id)
+        if category is None:
+            # A stale id from a client whose category was deleted on another
+            # device — the user's data being out of date, not a server fault.
+            raise ValueError("That category no longer exists")
+
+        if workspace_id is not None and category.workspace_id != workspace_id:
+            raise ValueError("That category belongs to a different workspace")
+
     def create_task_manual(self, user_id: str, fields: dict, approval_status: bool = True) -> TaskRecord:
         """
         Manually create a task. Fills in AI-suggested fields as duplicates

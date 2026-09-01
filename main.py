@@ -70,6 +70,10 @@ class UpdateTaskRequest(BaseModel):
     checklist: Optional[list[ChecklistItem]] = None
     notify_enabled: Optional[bool] = None
     calendar_sync_enabled: Optional[bool] = None
+    # Sent as an explicit null to clear — exclude_unset keeps that distinct
+    # from "not mentioned", which is how a client moves a task to Unfiled.
+    workspace_id: Optional[str] = None
+    category_id: Optional[str] = None
 
 class CreateTaskRequest(BaseModel):
     """Request body for manual task creation via POST /tasks"""
@@ -80,6 +84,8 @@ class CreateTaskRequest(BaseModel):
     due_date: Optional[str] = None
     due_time: Optional[str] = None
     checklist: Optional[list[ChecklistItem]] = None
+    workspace_id: Optional[str] = None
+    category_id: Optional[str] = None
 
 class RecurrenceCreateRequest(BaseModel):
     """Request body for POST /recurrences. Mirrors RecurrenceRule minus the
@@ -536,6 +542,14 @@ def create_task_manual(request: CreateTaskRequest, user_id: str = Depends(get_cu
             detail="task_name cannot be empty"
         )
 
+    # Same rule as PATCH: a category must live inside the task's workspace.
+    try:
+        service.validate_workspace_placement(
+            user_id, request.workspace_id, request.category_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     try:
         saved = service.create_task_manual(user_id, request.model_dump())
         return saved
@@ -560,7 +574,30 @@ def update_task(record_id: str, request: UpdateTaskRequest, user_id: str = Depen
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="No fields provided to update"
         )
-    
+
+    # A category must live inside the task's own workspace. When the client
+    # sends a category WITHOUT a workspace — which is what a UI that only
+    # changes the category does, so the common case, not an edge one — compare
+    # against the workspace the task already has, or the rule is bypassed by
+    # simply omitting a field.
+    # `is not None` guards the read: clearing a category (moving the task to
+    # Unfiled) is always allowed, and fetching the task to compare a workspace
+    # that will not be checked is a round trip bought for nothing.
+    if updates.get("category_id") is not None:
+        target_workspace = updates.get("workspace_id")
+        if "workspace_id" not in updates:
+            existing = service.repository.get_task(user_id, record_id)
+            target_workspace = existing.workspace_id if existing else None
+        try:
+            service.validate_workspace_placement(
+                user_id, target_workspace, updates["category_id"]
+            )
+        except ValueError as e:
+            # Raised before the generic handler below, which turns everything
+            # into a 500. This is the user's data being out of date, not a
+            # server fault.
+            raise HTTPException(status_code=422, detail=str(e))
+
     try:
         updated_task = service.update_task(user_id, record_id, updates)
         return updated_task
