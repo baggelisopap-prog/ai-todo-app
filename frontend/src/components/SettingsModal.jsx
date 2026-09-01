@@ -11,6 +11,7 @@ import {
   registerPushSubscription,
   getTokenUsage,
   getCalendarStatus,
+  testCalendarConnection,
   disconnectGoogleCalendar,
   getHostawayStatus,
   connectHostaway,
@@ -740,6 +741,14 @@ function CalendarConnectionView({ onShowToast }) {
   const { t } = useTranslation();
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [statusLoaded, setStatusLoaded] = useState(false);
+  // 'checking' | 'ok' | 'broken'. Separate from calendarConnected on purpose:
+  // that one only says a connection is STORED, which is a different fact from
+  // the connection working. A refresh token Google has invalidated leaves the
+  // row untouched, so the screen said "Connected" while every sync failed —
+  // reported by the owner on 2026-08-26 and fixed by reconnecting, with
+  // nothing anywhere having said what was wrong.
+  const [health, setHealth] = useState('checking');
+  const [calendarName, setCalendarName] = useState(null);
 
   // This view used to keep its own copy of app settings, with a comment
   // claiming the untouched fields "just ride along unchanged". They did not:
@@ -751,10 +760,27 @@ function CalendarConnectionView({ onShowToast }) {
   // Fires automatically on mount (no button needed) — this is what makes
   // "Connected" show immediately whenever the user opens the Settings modal.
   useEffect(() => {
+    let cancelled = false;
     getCalendarStatus()
-      .then(s => setCalendarConnected(s.connected))
+      .then(async (s) => {
+        if (cancelled) return;
+        setCalendarConnected(s.connected);
+        if (!s.connected) return;
+        // Only now ask Google itself. One API call, and only when a connection
+        // is actually stored — /calendar/test has existed on the server since
+        // Phase 1 with no caller anywhere in the app.
+        try {
+          const result = await testCalendarConnection();
+          if (cancelled) return;
+          setCalendarName(result.calendar_name || null);
+          setHealth('ok');
+        } catch {
+          if (!cancelled) setHealth('broken');
+        }
+      })
       .catch(err => console.error('Failed to load calendar status:', err))
-      .finally(() => setStatusLoaded(true));
+      .finally(() => { if (!cancelled) setStatusLoaded(true); });
+    return () => { cancelled = true; };
   }, []);
 
   async function applyChange(patch) {
@@ -813,7 +839,29 @@ function CalendarConnectionView({ onShowToast }) {
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="text-sm text-[var(--success)] font-medium">{t('calendar.connected')} ✓</p>
+          {health === 'checking' && (
+            <p className="text-sm text-[var(--text-secondary)]">{t('calendar.checking')}</p>
+          )}
+          {health === 'ok' && (
+            <div>
+              <p className="text-sm text-[var(--success)] font-medium">{t('calendar.connected')} ✓</p>
+              {calendarName && (
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  {t('calendar.connected_as', { name: calendarName })}
+                </p>
+              )}
+            </div>
+          )}
+          {health === 'broken' && (
+            <div className="rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] p-3">
+              <p className="text-sm font-medium text-[var(--danger-text)]">
+                {t('calendar.connection_broken')}
+              </p>
+              <p className="text-xs text-[var(--danger-text)] mt-1">
+                {t('calendar.connection_broken_help')}
+              </p>
+            </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between">
