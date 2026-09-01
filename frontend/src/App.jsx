@@ -16,6 +16,10 @@ import RecurrenceProvider from './components/RecurrenceProvider';
 import { AgentChatModal } from './components/AgentChatModal';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
 import AppBar from './components/AppBar';
+import WorkspaceProvider from './components/WorkspaceProvider';
+import WorkspaceBar from './components/WorkspaceBar';
+import { useWorkspaces } from './hooks/useWorkspaces';
+import { filterTasksByWorkspace } from './utils/workspaces';
 import { isVisibleTask } from './utils/taskDisplay';
 
 // The AppBar shows the current screen's name, so the title each view used to
@@ -27,6 +31,33 @@ const TAB_TITLE_KEYS = {
   calendar: 'nav.calendar',
   browse: 'nav.browse',
 };
+
+/**
+ * The four screens, with the task list already narrowed to the active workspace.
+ *
+ * A component rather than a few lines inside App, for a mechanical reason: App
+ * RENDERS WorkspaceProvider, so App's own body sits above that context and
+ * useWorkspaces() would throw there. This is the smallest piece that can be
+ * inside it.
+ *
+ * Filtering here rather than in each view means all four obey the switcher
+ * without any of them being edited. It is a client-side filter over the list
+ * already in memory — the switcher changes what you LOOK AT, never what the
+ * system does, so reminders, calendar sync and Hostaway are untouched by it.
+ */
+function TaskViews({ activeTab, viewProps, onTaskCreated }) {
+  const { activeId } = useWorkspaces();
+  const scoped = { ...viewProps, tasks: filterTasksByWorkspace(viewProps.tasks, activeId) };
+
+  return (
+    <>
+      {activeTab === 'inbox' && <InboxView {...scoped} />}
+      {activeTab === 'today' && <TodayView {...scoped} />}
+      {activeTab === 'calendar' && <CalendarView {...scoped} onTaskCreated={onTaskCreated} />}
+      {activeTab === 'browse' && <BrowseView {...scoped} />}
+    </>
+  );
+}
 
 function App() {
   const { t } = useTranslation();
@@ -251,6 +282,9 @@ function App() {
   // fire a guaranteed 401 on every visit by a logged-out user.
   return (
     <AppSettingsProvider>
+    {/* Below AppSettingsProvider because it reads and writes
+        app_settings.active_workspace_id through useAppSettings. */}
+    <WorkspaceProvider onShowToast={handleShowToast}>
     <RecurrenceProvider onShowToast={handleShowToast} onTasksChanged={refreshTasks}>
     <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       <AppBar
@@ -259,6 +293,8 @@ function App() {
         onOpenAgent={() => setIsAgentOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
+
+      <WorkspaceBar />
 
       {/* No pt-* here any more. The old one existed only to push content out
           from under two fixed circular buttons; AppBar is sticky and in flow,
@@ -280,12 +316,11 @@ function App() {
         )}
 
         {!isLoading && !error && (
-          <>
-            {activeTab === 'inbox' && <InboxView {...viewProps} />}
-            {activeTab === 'today' && <TodayView {...viewProps} />}
-            {activeTab === 'calendar' && <CalendarView {...viewProps} onTaskCreated={handleTaskCreated} />}
-            {activeTab === 'browse' && <BrowseView {...viewProps} />}
-          </>
+          <TaskViews
+            activeTab={activeTab}
+            viewProps={viewProps}
+            onTaskCreated={handleTaskCreated}
+          />
         )}
       </main>
 
@@ -333,6 +368,7 @@ function App() {
       )}
     </div>
     </RecurrenceProvider>
+    </WorkspaceProvider>
     </AppSettingsProvider>
   );
 }
