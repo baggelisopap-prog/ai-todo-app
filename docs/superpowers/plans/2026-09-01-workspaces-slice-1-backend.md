@@ -66,7 +66,7 @@ category system exist without the integration noticing.
 This task writes a file. **It does not run it.** The owner runs it in the Supabase SQL
 Editor and reads the counts it prints.
 
-- [ ] **Step 1: Write the migration file**
+- [x] **Step 1: Write the migration file**
 
 ```sql
 -- Workspaces and user-defined categories — PART A of 2.
@@ -248,13 +248,13 @@ group by u.email
 order by u.email;
 ```
 
-- [ ] **Step 2: Verify the file parses as SQL and drops nothing**
+- [x] **Step 2: Verify the file parses as SQL and drops nothing**
 
 Run: `grep -n -i "drop table\|drop column\|delete from\|truncate" docs/migrations/2026-09-01-workspaces-and-categories.sql`
 Expected: only the two `drop policy if exists` lines. **No** `drop table`, `drop column`,
 `delete from` or `truncate`. If any appear, the file is wrong — Part A never destroys.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/migrations/2026-09-01-workspaces-and-categories.sql
@@ -277,7 +277,7 @@ git commit -m "Migration part A: the containers exist, and nothing is dropped ye
   the same two on `RecurrenceRule`, and `AppSettings.active_workspace_id: Optional[str]`.
   Every later task uses these exact names.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_workspaces_repository.py`:
 
@@ -316,12 +316,12 @@ def test_the_hostaway_category_carries_its_system_key():
     assert c.system_key == "hostaway"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_repository.py -q`
 Expected: FAIL with `ImportError: cannot import name 'Category' from 'models'`
 
-- [ ] **Step 3: Add the two models to `models.py`**
+- [x] **Step 3: Add the two models to `models.py`**
 
 Insert after `class AppSettings` and before `class RecurrenceRule`:
 
@@ -360,7 +360,7 @@ class Category(BaseModel):
     created_at: Optional[str] = None
 ```
 
-- [ ] **Step 4: Add the new fields to the existing models**
+- [x] **Step 4: Add the new fields to the existing models**
 
 In `TaskRecord`, after the `cancelled_at` field:
 
@@ -389,17 +389,17 @@ In `AppSettings`, after `calendar_show_events`:
     active_workspace_id: Optional[str] = None
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_repository.py -q`
 Expected: 3 passed
 
-- [ ] **Step 6: Run the whole suite — nothing may regress**
+- [x] **Step 6: Run the whole suite — nothing may regress**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
 Expected: 224 passed (221 + 3)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add models.py tests/test_workspaces_repository.py
@@ -422,7 +422,7 @@ git commit -m "The workspace and the category become models"
   `update_workspace(user_id, workspace_id, updates: dict) -> Optional[Workspace]`,
   `delete_workspace(user_id, workspace_id) -> None`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_workspaces_repository.py`:
 
@@ -532,12 +532,12 @@ def test_deleting_a_workspace_is_scoped_to_the_user(monkeypatch):
     assert ("user_id", "user-1") in fake.sink["eq"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_repository.py -q`
 Expected: FAIL with `AttributeError: module 'repository' has no attribute 'get_workspaces'`
 
-- [ ] **Step 3: Implement in `repository.py`**
+- [x] **Step 3: Implement in `repository.py`**
 
 Add after `delete_recurrence_rule` (around line 1348):
 
@@ -626,12 +626,12 @@ def delete_workspace(user_id: str, workspace_id: str) -> None:
 Add `Workspace` and `Category` to the existing `from models import ...` line at the top of
 `repository.py`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_repository.py -q`
 Expected: 7 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add repository.py tests/test_workspaces_repository.py
@@ -656,7 +656,7 @@ git commit -m "Workspaces can be written and read, always scoped to their owner"
   `get_system_category(user_id, system_key: str) -> Optional[Category]`.
   Task 6 and Task 7 both depend on `get_system_category`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_workspaces_repository.py`:
 
@@ -718,12 +718,12 @@ def test_a_missing_system_category_returns_None_rather_than_raising(monkeypatch)
     assert repository.get_system_category("user-1", "hostaway") is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_repository.py -q`
 Expected: FAIL with `AttributeError: module 'repository' has no attribute 'get_categories'`
 
-- [ ] **Step 3: Implement in `repository.py`**
+- [x] **Step 3: Implement in `repository.py`**
 
 Add directly after `delete_workspace`:
 
@@ -832,12 +832,12 @@ def delete_category(user_id: str, category_id: str) -> None:
     supabase.table("categories").delete().eq("id", category_id).eq("user_id", user_id).execute()
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_repository.py -q`
 Expected: 11 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add repository.py tests/test_workspaces_repository.py
@@ -857,13 +857,13 @@ git commit -m "Categories become rows, and the system one is found by key"
 - Produces: tasks round-trip both columns. Tasks 6-10 assume a `TaskRecord` read from
   the database already carries them.
 
-- [ ] **Step 1: Find the two functions**
+- [x] **Step 1: Find the two functions**
 
 Run: `grep -n "def _supabase_row_to_task\|def _task_to_supabase_fields" repository.py`
 Read both completely before editing. The writer's exact name is whatever that grep
 reports; the steps below call it `_task_to_supabase_fields`.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Append to `tests/test_workspaces_repository.py`:
 
@@ -892,12 +892,12 @@ def test_an_unfiled_task_keeps_None_and_is_not_defaulted():
     assert task.category_id is None
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_repository.py -q`
 Expected: FAIL — `assert None == 'ws-1'` (the reader ignores the columns)
 
-- [ ] **Step 4: Add both columns to the reader**
+- [x] **Step 4: Add both columns to the reader**
 
 In `_supabase_row_to_task`, alongside the other `row.get(...)` lines:
 
@@ -909,7 +909,7 @@ In `_supabase_row_to_task`, alongside the other `row.get(...)` lines:
 `row.get`, deliberately not `_get(row, key, default)`: NULL here is a real value meaning
 "unfiled", not a blank standing in for a typed default.
 
-- [ ] **Step 5: Add both columns to the writer**
+- [x] **Step 5: Add both columns to the writer**
 
 In `_task_to_supabase_fields`, alongside the other optional passthrough fields:
 
@@ -918,12 +918,12 @@ In `_task_to_supabase_fields`, alongside the other optional passthrough fields:
         "category_id": task.category_id,
 ```
 
-- [ ] **Step 6: Run the whole suite**
+- [x] **Step 6: Run the whole suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
 Expected: 234 passed
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add repository.py tests/test_workspaces_repository.py
@@ -948,7 +948,7 @@ git commit -m "A task remembers which box it is in"
 be NULL. A NULL there would silently drop a P1 guest task out of escalation. `system_key`
 cannot be NULL by accident.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_hostaway_system_category.py`:
 
@@ -1017,14 +1017,14 @@ def test_an_account_with_no_system_category_escalates_nothing(monkeypatch):
     assert repository.get_active_hostaway_tasks("user-1", tasks=[_task(category_id="cat-h")]) == []
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_hostaway_system_category.py -q`
 Expected: FAIL — the current implementation matches `t.category == "Hostaway"`, so
 `test_an_account_with_no_system_category_escalates_nothing` returns one task instead of
 none.
 
-- [ ] **Step 3: Rewrite `get_active_hostaway_tasks`**
+- [x] **Step 3: Rewrite `get_active_hostaway_tasks`**
 
 ```python
 def get_active_hostaway_tasks(
@@ -1055,19 +1055,19 @@ def get_active_hostaway_tasks(
     ]
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_hostaway_system_category.py -q`
 Expected: 4 passed
 
-- [ ] **Step 5: Run the Hostaway suite — nothing may regress**
+- [x] **Step 5: Run the Hostaway suite — nothing may regress**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q -k "hostaway or scheduler"`
 Expected: all pass. If an existing test builds a `TaskRecord` with `category="Hostaway"`
 and no `category_id`, it must be updated to set `category_id` and to stub
 `get_system_category` — the word is no longer what matches.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add repository.py tests/test_hostaway_system_category.py
@@ -1087,7 +1087,7 @@ git commit -m "Escalation follows the key, not the label"
 - Produces: a webhook-created task carries `workspace_id` and `category_id`. Task 6's
   escalation depends on this; without it, new guest tasks would never escalate.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_hostaway_system_category.py`:
 
@@ -1125,12 +1125,12 @@ def test_a_webhook_task_lands_in_the_system_category(monkeypatch):
 and read the enclosing function completely. Its real name and parameter list are whatever
 that grep reports — match them exactly rather than the placeholder above.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_hostaway_system_category.py -q`
 Expected: FAIL with `KeyError: 'category_id'`
 
-- [ ] **Step 3: Set both columns at `main.py:1327`**
+- [x] **Step 3: Set both columns at `main.py:1327`**
 
 Replace the single `"category": "Hostaway",` line with:
 
@@ -1156,12 +1156,12 @@ and above the `service.create_task_manual(...)` call:
         )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_hostaway_system_category.py -q`
 Expected: 5 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add main.py tests/test_hostaway_system_category.py
@@ -1185,7 +1185,7 @@ git commit -m "A guest message lands in the box escalation is watching"
 category on each app open — a task chip may belong to any workspace, so a per-workspace
 fetch would be one request per workspace on every launch.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_workspaces_api.py`:
 
@@ -1276,12 +1276,12 @@ def test_deleting_a_workspace_reports_what_became_unfiled(client, monkeypatch):
     assert r.json()["tasks_unfiled"] == 12
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_api.py -q`
 Expected: FAIL — 404 on `/workspaces` (route does not exist)
 
-- [ ] **Step 3: Add `count_tasks_in_workspace` to `repository.py`**
+- [x] **Step 3: Add `count_tasks_in_workspace` to `repository.py`**
 
 ```python
 def count_tasks_in_workspace(user_id: str, workspace_id: str) -> int:
@@ -1298,7 +1298,7 @@ def count_tasks_in_workspace(user_id: str, workspace_id: str) -> int:
     return response.count or 0
 ```
 
-- [ ] **Step 4: Add the response models to `main.py`** (beside `RecurrencesListResponse`, ~line 127)
+- [x] **Step 4: Add the response models to `main.py`** (beside `RecurrencesListResponse`, ~line 127)
 
 ```python
 class WorkspacesListResponse(BaseModel):
@@ -1327,7 +1327,7 @@ class WorkspaceUpdateRequest(BaseModel):
     position: Optional[int] = None
 ```
 
-- [ ] **Step 5: Add the four endpoints to `main.py`** (after the `/recurrences` block)
+- [x] **Step 5: Add the four endpoints to `main.py`** (after the `/recurrences` block)
 
 ```python
 # ---------------------------------------------------------------- workspaces
@@ -1407,12 +1407,12 @@ def delete_workspace(workspace_id: str, user_id: str = Depends(get_current_user_
 
 Add `Workspace` and `Category` to `main.py`'s `from models import ...` line.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_api.py -q`
 Expected: 5 passed
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add main.py repository.py tests/test_workspaces_api.py
@@ -1436,7 +1436,7 @@ Three guards, each a spec requirement:
 2. A category in a workspace that is not yours → **404**.
 3. A duplicate name inside one workspace → **409**.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_category_invariants.py`:
 
@@ -1535,12 +1535,12 @@ def test_the_same_name_in_a_DIFFERENT_workspace_is_allowed(client, monkeypatch):
     assert r.status_code == 201
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_category_invariants.py -q`
 Expected: FAIL — 404 on `/categories` (routes do not exist)
 
-- [ ] **Step 3: Add the request/response models to `main.py`**
+- [x] **Step 3: Add the request/response models to `main.py`**
 
 ```python
 class CategoryWriteResponse(BaseModel):
@@ -1568,7 +1568,7 @@ class CategoryUpdateRequest(BaseModel):
 `CategoryCreateRequest` deliberately has no `system_key` field: the system category is
 created by the migration and by nothing else, so the API has no way to mint one.
 
-- [ ] **Step 4: Add the three endpoints to `main.py`**
+- [x] **Step 4: Add the three endpoints to `main.py`**
 
 ```python
 # ---------------------------------------------------------------- categories
@@ -1646,7 +1646,7 @@ def delete_category(category_id: str, user_id: str = Depends(get_current_user_id
     return CategoryDeleteResponse(deleted=True, tasks_unfiled=affected)
 ```
 
-- [ ] **Step 5: Add `count_tasks_in_category` to `repository.py`**
+- [x] **Step 5: Add `count_tasks_in_category` to `repository.py`**
 
 ```python
 def count_tasks_in_category(user_id: str, category_id: str) -> int:
@@ -1662,12 +1662,12 @@ def count_tasks_in_category(user_id: str, category_id: str) -> int:
     return response.count or 0
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_category_invariants.py -q`
 Expected: 6 passed
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add main.py repository.py tests/test_category_invariants.py
@@ -1688,7 +1688,7 @@ git commit -m "Categories get a front door, and three doors that stay shut"
 - Produces: `GET /tasks?workspace_id=<id>` filtering; `active_workspace_id` round-tripping
   through the existing app-settings endpoints. Slice 2's switcher consumes both.
 
-- [ ] **Step 1: Read the existing route and settings path**
+- [x] **Step 1: Read the existing route and settings path**
 
 Run: `grep -n '@app.get("/tasks"' -A 20 main.py`
 Run: `grep -n "def get_app_settings\|def update_app_settings" -A 25 repository.py`
@@ -1696,7 +1696,7 @@ Run: `grep -n "def get_app_settings\|def update_app_settings" -A 25 repository.p
 `active_workspace_id` is added to the same field list every other settings column already
 travels through — it is not a new mechanism.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Append to `tests/test_workspaces_api.py`:
 
@@ -1755,13 +1755,13 @@ def test_the_active_workspace_survives_a_round_trip(client, monkeypatch):
 The exact route names and response shapes for `/tasks` and `/settings` are whatever
 Step 1's greps report — match them rather than the placeholders above.
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_api.py -q`
 Expected: FAIL — the filter is ignored, so `test_tasks_can_be_filtered_to_one_workspace`
 returns three tasks.
 
-- [ ] **Step 4: Add the query parameter to `GET /tasks`**
+- [x] **Step 4: Add the query parameter to `GET /tasks`**
 
 ```python
 def list_tasks(
@@ -1780,17 +1780,17 @@ def list_tasks(
         tasks = [t for t in tasks if t.workspace_id == workspace_id]
 ```
 
-- [ ] **Step 5: Carry `active_workspace_id` through app settings**
+- [x] **Step 5: Carry `active_workspace_id` through app settings**
 
 Add `"active_workspace_id"` to the field list in both `get_app_settings` and
 `update_app_settings` in `repository.py`, alongside `calendar_show_events`.
 
-- [ ] **Step 6: Run the whole suite**
+- [x] **Step 6: Run the whole suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
 Expected: 253 passed
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add main.py repository.py tests/test_workspaces_api.py
@@ -1814,7 +1814,7 @@ git commit -m "Look at one workspace, and be remembered doing it"
 This is the spec's parked invariant, made real. Enforced in the service layer because a
 database CHECK cannot see another table.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_category_invariants.py`:
 
@@ -1850,12 +1850,12 @@ def test_a_matching_pair_is_accepted(client, monkeypatch):
 Read the real `PATCH /tasks/{id}` route first (`grep -n '@app.patch("/tasks' -A 25 main.py`)
 and match its response shape.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_category_invariants.py -q`
 Expected: FAIL — the mismatched pair is accepted, returning 200 instead of 422.
 
-- [ ] **Step 3: Add the check to `services.py`**
+- [x] **Step 3: Add the check to `services.py`**
 
 ```python
     def validate_workspace_placement(self, user_id: str, workspace_id, category_id) -> None:
@@ -1885,17 +1885,17 @@ Expected: FAIL — the mismatched pair is accepted, returning 200 instead of 422
 Call it from the task create and update paths, wrapping the raise as a 422 the same way
 `POST /recurrences` already does with `RecurrenceRule`'s validators (`main.py:706-707`).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_category_invariants.py -q`
 Expected: 8 passed
 
-- [ ] **Step 5: Run the whole suite**
+- [x] **Step 5: Run the whole suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
 Expected: 255 passed, 0 failed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add services.py main.py tests/test_category_invariants.py
@@ -1908,13 +1908,13 @@ git commit -m "A category cannot escape its workspace"
 
 Evidence, not claims. Paste the actual output when reporting.
 
-- [ ] `./venv/Scripts/python.exe -m pytest tests/ -q` — **255 passed**, up from 221, none failing
+- [x] `./venv/Scripts/python.exe -m pytest tests/ -q` — **266 passed** (planned 255; the extra 11 are tests added beyond the plan where the real code differed from what the plan assumed), up from 221, none failing
 
   The running totals in each task (224, 234, 253, 255) assume no existing test had to be
   rewritten. Task 6 changes what Hostaway escalation matches on, so some existing Hostaway
   tests will need `category_id` set and `get_system_category` stubbed. Rewriting them is
   expected and keeps the count the same; **deleting** one to make the suite green is not.
-- [ ] `cd frontend && npm run check` — still green, ESLint still at 12 (this slice does not
+- [x] `cd frontend && npm run check` — green, 7 node suites, all PASS. **CORRECTED: `check` does NOT run ESLint** (it is 7 `node scripts/*.mjs` suites); ESLint is `npm run lint`, run separately → **12 problems**, the pre-existing baseline. This slice does not
       touch the frontend; if the number moved, something unintended was edited)
 - [ ] The owner has run migration Part A in the Supabase SQL Editor and **read the four
       count queries**. Query 3's `hostaway_MISSING_category` must be **0**.
