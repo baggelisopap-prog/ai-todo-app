@@ -179,7 +179,15 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         # system_instruction + tools form a byte-identical, cacheable prefix
         # across requests. today_iso/now_hhmm reach the model via time_header
         # and the day view instead — see build_system_instruction's docstring.
-        system_instruction = agent_tools.build_system_instruction()
+        # The user's own workspace and category names, APPENDED to the constant
+        # instruction rather than interpolated into it — see
+        # build_vocabulary_block for why that distinction is a budget line.
+        system_instruction = agent_tools.build_system_instruction(
+            agent_tools.build_vocabulary_block(
+                repository.get_workspaces(user_id),
+                repository.get_categories(user_id),
+            )
+        )
         run["system_instruction_sha"] = agent_tools.system_instruction_sha(system_instruction)
 
         try:

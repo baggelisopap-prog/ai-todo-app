@@ -315,9 +315,49 @@ def build_conversation_refs_block(runs: list[dict]) -> str:
     )
 
 
-def build_system_instruction() -> str:
-    """Builds the agent's system instruction. Takes NO arguments and returns a
-    CONSTANT string on purpose.
+def build_vocabulary_block(workspaces, categories) -> str:
+    """
+    The user's own workspace and category names, as a block to APPEND to the
+    system instruction.
+
+    Appended, never interpolated. build_system_instruction's docstring below
+    records what happened the last time that block stopped being constant: the
+    cacheable prefix changed every minute and caching fell to 0.4%, on ~2,900
+    tokens that were 74% of every prompt token ever billed. A category list is
+    not a clock — it changes weekly — so it stays stable across one user's
+    consecutive requests. Keeping it at the END means the long static part
+    above stays a shared prefix regardless, and one test asserts exactly that.
+
+    The AGENT gets every workspace, unlike the extractor which gets one. Their
+    jobs are opposite: the extractor classifies a single new thing, so a narrow
+    menu makes it accurate; the agent answers "what do I have", so a narrow
+    menu would make it wrong.
+
+    Returns "" for a user with nothing, so their instruction stays byte-identical
+    to the old constant and nothing about their billing changes.
+    """
+    if not workspaces:
+        return ""
+
+    lines = []
+    for workspace in workspaces:
+        own = [c.name for c in categories if c.workspace_id == workspace.record_id]
+        lines.append(f"- {workspace.name}: " + (", ".join(own) if own else "(no categories)"))
+
+    newline = chr(10)
+    return (
+        newline + newline + "THE USER'S OWN WORKSPACES AND CATEGORIES:" + newline
+        + newline.join(lines)
+        + newline
+        + "When the user names one of these, pass it to search_tasks as `workspace` or "
+          "`category`, copied exactly. Tasks may have neither; those are 'unfiled'."
+    )
+
+
+def build_system_instruction(vocabulary: str = "") -> str:
+    """Builds the agent's system instruction. The base text takes NO arguments
+    and is a CONSTANT on purpose; `vocabulary` is APPENDED to it, never
+    interpolated into it.
 
     The current date and time used to be interpolated in here. That made this
     text — and therefore the entire cacheable prompt prefix, system instruction
@@ -396,7 +436,7 @@ For tasks due TODAY, compare due_time against the current time in the [Now:] lin
 
 record_id values are INTERNAL identifiers. Never print, quote or mention one in your answer — refer to every task by its name.
 
-Always answer in the SAME LANGUAGE as the question. For any scope the day view does not cover, use search_tasks before answering — never invent task data. Keep answers concise and conversational. If nothing matches, say so plainly."""
+Always answer in the SAME LANGUAGE as the question. For any scope the day view does not cover, use search_tasks before answering — never invent task data. Keep answers concise and conversational. If nothing matches, say so plainly.""" + vocabulary
 
 
 def render_task_rows(tasks) -> list[dict]:
