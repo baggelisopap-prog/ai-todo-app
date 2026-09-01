@@ -415,5 +415,24 @@
     "form_cancel": "Cancel",
     "error_no_days": "Pick at least one day.",
     "error_no_name": "Give it a name."
+  },
+  "workspace": {
+    "all": "All",
+    "unfiled": "Unfiled",
+    "label": "Workspace",
+    "category_label": "Category",
+    "manage": "Workspaces and categories",
+    "manage_hint": "Create workspaces (e.g. Business, Personal) and categories inside them.",
+    "new_workspace": "New workspace",
+    "new_category": "New category",
+    "name_placeholder": "Name",
+    "no_categories": "No categories yet",
+    "system_locked": "Managed by the Hostaway integration — it cannot be renamed or deleted.",
+    "delete_workspace_confirm": "Delete the workspace “{{name}}”? Its categories go with it. Its tasks are NOT deleted — they become Unfiled.",
+    "delete_category_confirm": "Delete the category “{{name}}”? Its tasks are NOT deleted — they stay in their workspace with no category.",
+    "saved": "Saved",
+    "deleted": "Deleted",
+    "name_taken": "That name is already taken",
+    "remove": "Delete"
   }
 }
