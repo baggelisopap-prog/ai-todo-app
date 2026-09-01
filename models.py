@@ -109,6 +109,14 @@ class TaskRecord(SingleTask):
     # already exists, does not recreate the task on the next tick.
     cancelled_at: Optional[str] = None
 
+    # Workspaces (2026-09-01). Both nullable and both ON DELETE SET NULL in the
+    # database: deleting a container must never delete work, so a task whose
+    # workspace or category is removed becomes unfiled rather than vanishing.
+    # `category` (the old TEXT column) is still the live one throughout Slice 1
+    # and is dropped only by migration Part B.
+    workspace_id: Optional[str] = None
+    category_id: Optional[str] = None
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str
@@ -136,6 +144,43 @@ class AppSettings(BaseModel):
     daily_summary_last_sent_date: str = ""
     calendar_sync_all_enabled: bool = False
     calendar_show_events: bool = True
+    # NULL means "Όλα" — every workspace at once, and the default for a user
+    # who has never touched the switcher.
+    active_workspace_id: Optional[str] = None
+
+
+class Workspace(BaseModel):
+    """
+    A top-level container the user creates and names. Categories live inside it;
+    tasks point at it.
+
+    `user_id` is not a field here, the same ownership-is-a-data-layer-concern
+    rule TaskRecord follows — the repository scopes every query and never
+    surfaces the owner to the API.
+    """
+    record_id: Optional[str] = None
+    name: str = Field(max_length=40)
+    color: Optional[str] = None
+    position: int = 0
+    created_at: Optional[str] = None
+
+
+class Category(BaseModel):
+    """
+    A user-named grouping inside one workspace.
+
+    `system_key` is NULL for everything the user creates and 'hostaway' on
+    exactly one row per account. That row is fed by the integration, cannot be
+    renamed or deleted, and is what the escalation query keys on — see
+    repository.get_active_hostaway_tasks.
+    """
+    record_id: Optional[str] = None
+    workspace_id: str
+    name: str = Field(max_length=40)
+    color: Optional[str] = None
+    position: int = 0
+    system_key: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 class RecurrenceRule(BaseModel):
@@ -176,6 +221,12 @@ class RecurrenceRule(BaseModel):
     grace_days: int = 1
     materialized_through: Optional[str] = None
     created_at: Optional[str] = None
+
+    # Workspaces (2026-09-01). Added here so the columns exist end-to-end, but
+    # nothing writes them until Slice 4 — the `category` field above is still
+    # what a rule copies into each occurrence.
+    workspace_id: Optional[str] = None
+    category_id: Optional[str] = None
 
     @field_validator("starts_on", "ends_on")
     @classmethod
