@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
 from supabase import create_client
-from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings, RecurrenceRule
+from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings, RecurrenceRule, Workspace, Category
 
 # Set up module-level logging
 logger = logging.getLogger(__name__)
@@ -1345,6 +1345,87 @@ def update_recurrence_rule(user_id: str, rule_id: str, updates: dict) -> Optiona
 
 def delete_recurrence_rule(user_id: str, rule_id: str) -> None:
     supabase.table("recurrence_rules").delete().eq("id", rule_id).eq("user_id", user_id).execute()
+
+
+# --------------------------------------------------------------- workspaces
+# Two tables added 2026-09-01 that turn the category from a fixed word into a
+# row the user owns. See
+# docs/superpowers/specs/2026-08-31-workspaces-and-categories-design.md.
+
+
+def _supabase_row_to_workspace(row: dict) -> Workspace:
+    """A workspaces row as the Pydantic model. user_id is not surfaced, the
+    same rule _supabase_row_to_task and _supabase_row_to_rule follow."""
+    return Workspace(
+        record_id=row.get("id"),
+        name=_get(row, "name", ""),
+        color=row.get("color"),
+        position=_get(row, "position", 0),
+        created_at=row.get("created_at"),
+    )
+
+
+def create_workspace(user_id: str, workspace: Workspace) -> Workspace:
+    fields = {
+        "user_id": user_id,
+        "name": workspace.name,
+        "color": workspace.color,
+        "position": workspace.position,
+    }
+    response = supabase.table("workspaces").insert(fields).execute()
+    row = (response.data or [{}])[0]
+    logger.info(f"[workspaces] Created workspace {row.get('id')} for user {user_id}")
+    return _supabase_row_to_workspace(row)
+
+
+def get_workspaces(user_id: str) -> list[Workspace]:
+    """Ordered by position, then created_at — position is what the user drags,
+    created_at only breaks ties between two rows never reordered."""
+    response = (
+        supabase.table("workspaces")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("position", desc=False)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return [_supabase_row_to_workspace(row) for row in (response.data or [])]
+
+
+def get_workspace(user_id: str, workspace_id: str) -> Optional[Workspace]:
+    """Both filters are required. A workspace id alone must never read another
+    user's row — the backend uses the service key and bypasses RLS."""
+    response = (
+        supabase.table("workspaces")
+        .select("*")
+        .eq("id", workspace_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return _supabase_row_to_workspace(rows[0]) if rows else None
+
+
+def update_workspace(user_id: str, workspace_id: str, updates: dict) -> Optional[Workspace]:
+    if not updates:
+        return get_workspace(user_id, workspace_id)
+    response = (
+        supabase.table("workspaces")
+        .update(updates)
+        .eq("id", workspace_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    rows = response.data or []
+    return _supabase_row_to_workspace(rows[0]) if rows else None
+
+
+def delete_workspace(user_id: str, workspace_id: str) -> None:
+    """The database does the rest: categories CASCADE with the workspace, while
+    tasks pointing at either are SET NULL and become unfiled. Deleting a
+    container never deletes work."""
+    supabase.table("workspaces").delete().eq("id", workspace_id).eq("user_id", user_id).execute()
 
 
 def get_occurrence_dates(user_id: str, rule_id: str, from_date: str, to_date: str) -> set[str]:
