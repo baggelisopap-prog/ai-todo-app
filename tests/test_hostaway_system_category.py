@@ -73,3 +73,52 @@ def test_an_account_with_no_system_category_escalates_nothing(monkeypatch):
     monkeypatch.setattr(repository, "get_system_category", lambda u, k: None)
 
     assert repository.get_active_hostaway_tasks("user-1", tasks=[_task(category_id="cat-h")]) == []
+
+
+import main
+
+
+def _run_webhook_create(monkeypatch, system_category):
+    """Drives the real _create_hostaway_task and returns the fields dict it
+    handed to create_task_manual."""
+    captured = {}
+    monkeypatch.setattr(main.repository, "get_system_category", lambda u, k: system_category)
+    monkeypatch.setattr(main.service, "send_push_to_user",
+                        lambda *a, **kw: {"sent": 1})
+    monkeypatch.setattr(main.service, "create_task_manual",
+                        lambda u, fields: captured.update(fields))
+
+    main._create_hostaway_task(
+        user_id="user-1",
+        classification={"summary": "asks about check-in", "priority": "P1"},
+        listing_name="Apartment A",
+        reservation_details={"guest_name": "Μαρία", "arrival_date": "2026-09-02",
+                             "departure_date": "2026-09-05"},
+        message_body="What time is check-in?",
+        message_date="2026-09-01T10:00:00Z",
+        conversation_id="conv-1",
+    )
+    return captured
+
+
+def test_a_webhook_task_lands_in_the_system_category(monkeypatch):
+    """Task 6 made escalation match on category_id. If the webhook did not set
+    it, every NEW guest task would be created already invisible to escalation —
+    the two changes only work as a pair."""
+    captured = _run_webhook_create(monkeypatch, _HOSTAWAY_CAT)
+
+    assert captured["category_id"] == "cat-h"
+    assert captured["workspace_id"] == "ws-1"
+    # The old column is still live for the whole of Slice 1.
+    assert captured["category"] == "Hostaway"
+
+
+def test_a_webhook_task_is_still_created_when_the_category_is_missing(monkeypatch):
+    """An unfiled guest task is worse than a filed one, but far better than no
+    task at all: the message would otherwise be lost outright. The warning in
+    the log is what makes the degraded state findable."""
+    captured = _run_webhook_create(monkeypatch, None)
+
+    assert captured["task_name"].startswith("Hostaway:")
+    assert captured["category_id"] is None
+    assert captured["workspace_id"] is None

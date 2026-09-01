@@ -1311,6 +1311,16 @@ def _create_hostaway_task(
     except Exception as e:
         logging.error(f"[hostaway webhook] Failed to send instant notification: {e}")
 
+    # Which box this lands in. Escalation matches on this category's id (see
+    # repository.get_active_hostaway_tasks), so a task created without it is
+    # created already invisible to the escalation loop.
+    system_category = repository.get_system_category(user_id, "hostaway")
+    if system_category is None:
+        logging.warning(
+            f"[hostaway webhook] No 'hostaway' system category for {user_id} — "
+            "task will be created unfiled and will NOT escalate"
+        )
+
     try:
         service.create_task_manual(user_id, {
             "task_name": task_name,
@@ -1324,7 +1334,13 @@ def _create_hostaway_task(
                 f"{reservation_details['departure_date']}",
                 message_body,
             ),
+            # Both the old word and the new pair, for the whole of Slice 1: the
+            # `category` column is still live and is dropped only by migration
+            # Part B. An unfiled guest task is far better than no task at all,
+            # so a missing system category degrades rather than refuses.
             "category": "Hostaway",
+            "workspace_id": system_category.workspace_id if system_category else None,
+            "category_id": system_category.record_id if system_category else None,
             "priority": priority,
             "due_date": now.strftime("%Y-%m-%d"),
             "due_time": None,

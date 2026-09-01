@@ -7,6 +7,7 @@ copy closes on its own, because each colleague's poller sees the same reply.
 import asyncio
 
 import main
+from models import Category
 
 
 class _FakeRequest:
@@ -48,6 +49,12 @@ def _wire(monkeypatch, connections):
     monkeypatch.setattr(main.repository, "get_hostaway_connections_for_account",
                         lambda account_id: list(connections))
     monkeypatch.setattr(main.repository, "get_open_tasks_for_conversation", lambda u, c: [])
+    # Which box the guest task lands in (2026-09-01). Stubbed like every other
+    # repository call here: unstubbed, it falls through to the real Supabase
+    # client and this file stops being an offline test.
+    monkeypatch.setattr(main.repository, "get_system_category",
+                        lambda u, k: Category(record_id="cat-h", workspace_id="ws-1",
+                                              name="Hostaway", system_key="hostaway"))
     monkeypatch.setattr(main.hostaway_integration, "credentials_from_connection",
                         lambda c: main.hostaway_integration.HostawayCredentials(c["account_id"], "s"))
 
