@@ -420,7 +420,7 @@
     "all": "All",
     "unfiled": "Unfiled",
     "label": "Workspace",
-    "category_label": "Category",
+    "category_label": "Workspace category",
     "manage": "Workspaces and categories",
     "manage_hint": "Create workspaces (e.g. Business, Personal) and categories inside them.",
     "new_workspace": "New workspace",

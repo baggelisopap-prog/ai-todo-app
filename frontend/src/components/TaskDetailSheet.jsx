@@ -8,6 +8,7 @@ import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { useRecurrence } from '../hooks/useRecurrence';
 import CustomSelect from './CustomSelect';
+import { useWorkspaces } from '../hooks/useWorkspaces';
 import DictateButton from './DictateButton';
 import Switch from './Switch';
 import TaskMenu from './TaskMenu';
@@ -80,6 +81,11 @@ function draftFromTask(task) {
     due_date: task.due_date || '',
     due_time: task.due_time || '',
     checklist: [...(task.checklist || [])],
+    // '' rather than null, because CustomSelect's options are strings and an
+    // empty value is how "Unfiled" is expressed in a <select>. handleSave
+    // turns it back into a real null on the way out.
+    workspace_id: task.workspace_id || '',
+    category_id: task.category_id || '',
   };
 }
 
@@ -119,6 +125,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const { t } = useTranslation();
   const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast });
   const { isPending, isCompleted, isRejected, approvesOnEdit } = actions;
+  const { workspaces, categoriesFor } = useWorkspaces();
   const recurrence = useRecurrence();
   // Null while the rules are loading, or if the task simply does not repeat.
   // The row below distinguishes the two cases by task.recurrence_rule_id.
@@ -177,6 +184,10 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
         due_date: draft.due_date || null,
         due_time: draft.due_time || null,
         checklist: draft.checklist,
+        // '' back to null: the columns are nullable uuids, and an empty string
+        // is not a uuid. Null IS the value that means unfiled.
+        workspace_id: draft.workspace_id || null,
+        category_id: draft.category_id || null,
         // The button says so (actions.save_approve) — a silent approval would
         // be a side effect nobody asked for.
         ...(approvesOnEdit ? { approval_status: true } : {}),
@@ -519,6 +530,46 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                   className={`${INPUT_CLASSES} resize-none`}
                 />
               </Field>
+
+              {/* Workspace first, then its category. Changing the workspace
+                  CLEARS the category in the same draft update: the backend
+                  refuses a category from another workspace with a 422
+                  (services.validate_workspace_placement), so carrying the old
+                  one over would fail the whole save and lose the workspace
+                  change with it.
+
+                  The category select appears only once a workspace is chosen.
+                  Without that, the sheet would show two fields both labelled
+                  "Category" — this one and the old `category` word below, which
+                  is still the live column until the AI learns the new one. */}
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={t('workspace.label')}>
+                  <CustomSelect
+                    value={draft.workspace_id}
+                    options={[
+                      { value: '', label: t('workspace.unfiled') },
+                      ...workspaces.map((w) => ({ value: w.record_id, label: w.name })),
+                    ]}
+                    onChange={(value) => setDraft((d) => ({ ...d, workspace_id: value, category_id: '' }))}
+                    ariaLabel={t('workspace.label')}
+                  />
+                </Field>
+                {draft.workspace_id && (
+                  <Field label={t('workspace.category_label')}>
+                    <CustomSelect
+                      value={draft.category_id}
+                      options={[
+                        { value: '', label: t('workspace.unfiled') },
+                        ...categoriesFor(draft.workspace_id).map((c) => ({
+                          value: c.record_id, label: c.name,
+                        })),
+                      ]}
+                      onChange={(value) => updateDraft('category_id', value)}
+                      ariaLabel={t('workspace.category_label')}
+                    />
+                  </Field>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label={t('task.category_label')}>
