@@ -1428,6 +1428,111 @@ def delete_workspace(user_id: str, workspace_id: str) -> None:
     supabase.table("workspaces").delete().eq("id", workspace_id).eq("user_id", user_id).execute()
 
 
+# --------------------------------------------------------------- categories
+
+
+def _supabase_row_to_category(row: dict) -> Category:
+    return Category(
+        record_id=row.get("id"),
+        workspace_id=_get(row, "workspace_id", ""),
+        name=_get(row, "name", ""),
+        color=row.get("color"),
+        position=_get(row, "position", 0),
+        system_key=row.get("system_key"),
+        created_at=row.get("created_at"),
+    )
+
+
+def create_category(user_id: str, category: Category) -> Category:
+    fields = {
+        "user_id": user_id,
+        "workspace_id": category.workspace_id,
+        "name": category.name,
+        "color": category.color,
+        "position": category.position,
+        "system_key": category.system_key,
+    }
+    response = supabase.table("categories").insert(fields).execute()
+    row = (response.data or [{}])[0]
+    logger.info(f"[workspaces] Created category {row.get('id')} for user {user_id}")
+    return _supabase_row_to_category(row)
+
+
+def get_categories(user_id: str) -> list[Category]:
+    """
+    Every category this user owns, across all their workspaces.
+
+    Scoped by user rather than by workspace on purpose: the frontend needs the
+    whole set on every app open (to colour task chips that may belong to any
+    workspace) and grouping them by workspace_id in the provider is one request
+    instead of one per workspace.
+    """
+    response = (
+        supabase.table("categories")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("position", desc=False)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return [_supabase_row_to_category(row) for row in (response.data or [])]
+
+
+def get_category(user_id: str, category_id: str) -> Optional[Category]:
+    response = (
+        supabase.table("categories")
+        .select("*")
+        .eq("id", category_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return _supabase_row_to_category(rows[0]) if rows else None
+
+
+def get_system_category(user_id: str, system_key: str) -> Optional[Category]:
+    """
+    The one category the integration owns, found by its KEY and never by its
+    name. That indirection is the reason a user-defined category system can
+    exist at all without the Hostaway path noticing: the label is the user's to
+    rename, the key is not.
+
+    Returns None — never raises — for an account that predates the migration.
+    Callers run inside the scheduler's per-user loop, where a raise costs every
+    later user their tick.
+    """
+    response = (
+        supabase.table("categories")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("system_key", system_key)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return _supabase_row_to_category(rows[0]) if rows else None
+
+
+def update_category(user_id: str, category_id: str, updates: dict) -> Optional[Category]:
+    if not updates:
+        return get_category(user_id, category_id)
+    response = (
+        supabase.table("categories")
+        .update(updates)
+        .eq("id", category_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    rows = response.data or []
+    return _supabase_row_to_category(rows[0]) if rows else None
+
+
+def delete_category(user_id: str, category_id: str) -> None:
+    """Tasks pointing here are SET NULL by the database and become unfiled."""
+    supabase.table("categories").delete().eq("id", category_id).eq("user_id", user_id).execute()
+
+
 def get_occurrence_dates(user_id: str, rule_id: str, from_date: str, to_date: str) -> set[str]:
     """
     Which occurrence dates this rule already has inside the window.

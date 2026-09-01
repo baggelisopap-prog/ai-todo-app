@@ -138,3 +138,60 @@ def test_deleting_a_workspace_is_scoped_to_the_user(monkeypatch):
     assert fake.sink["delete"] is True
     assert ("id", "ws-1") in fake.sink["eq"]
     assert ("user_id", "user-1") in fake.sink["eq"]
+
+
+def _cat_row(**overrides):
+    base = {"id": "cat-1", "user_id": "user-1", "workspace_id": "ws-1",
+            "name": "γραφείο", "color": "#888888", "position": 0,
+            "system_key": None, "created_at": "2026-09-01T00:00:00Z"}
+    base.update(overrides)
+    return base
+
+
+def test_listing_categories_is_scoped_to_the_user(monkeypatch):
+    """Scoped by user, NOT by workspace: the frontend loads every category once
+    and groups them by workspace_id in the provider, rather than making one
+    request per workspace on every app open."""
+    fake = _FakeSupabase([_cat_row()])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    result = repository.get_categories("user-1")
+
+    assert fake.sink["table"] == "categories"
+    assert ("user_id", "user-1") in fake.sink["eq"]
+    assert result[0].name == "γραφείο"
+    assert result[0].workspace_id == "ws-1"
+
+
+def test_creating_a_category_stamps_owner_and_workspace(monkeypatch):
+    fake = _FakeSupabase([_cat_row()])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    repository.create_category("user-1", Category(workspace_id="ws-1", name="γραφείο"))
+
+    assert fake.sink["insert"]["user_id"] == "user-1"
+    assert fake.sink["insert"]["workspace_id"] == "ws-1"
+    assert fake.sink["insert"]["system_key"] is None
+
+
+def test_the_system_category_is_found_by_its_key_not_its_name(monkeypatch):
+    """The whole point of system_key. The name 'Hostaway' is a label the user
+    sees; the key is what escalation and the webhook actually match on, so
+    renaming the label could never break the integration."""
+    fake = _FakeSupabase([_cat_row(id="cat-h", name="Hostaway", system_key="hostaway")])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    result = repository.get_system_category("user-1", "hostaway")
+
+    assert ("system_key", "hostaway") in fake.sink["eq"]
+    assert ("user_id", "user-1") in fake.sink["eq"]
+    assert result.record_id == "cat-h"
+
+
+def test_a_missing_system_category_returns_None_rather_than_raising(monkeypatch):
+    """An account that has not run the migration has no such row. Callers
+    branch on None; a raise here would take down the whole scheduler tick."""
+    fake = _FakeSupabase([])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    assert repository.get_system_category("user-1", "hostaway") is None
