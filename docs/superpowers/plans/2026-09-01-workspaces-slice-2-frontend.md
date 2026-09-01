@@ -72,7 +72,7 @@ test scripts (`frontend/scripts/*.test.mjs`).
   `createCategory(payload)`, `updateCategory(id, updates)`, `deleteCategory(id)`.
   Every later task uses these exact names.
 
-- [ ] **Step 1: Append to `frontend/src/api.js`**, following the `getRecurrences` block's shape
+- [x] **Step 1: Append to `frontend/src/api.js`**, following the `getRecurrences` block's shape
 
 ```js
 /**
@@ -133,12 +133,12 @@ export async function deleteCategory(categoryId) {
 }
 ```
 
-- [ ] **Step 2: Verify the module still parses**
+- [x] **Step 2: Verify the module still parses**
 
 Run: `cd frontend && npm run lint 2>&1 | tail -3`
 Expected: `✖ 12 problems` — the same pre-existing count, no new entry naming `api.js`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/api.js
@@ -164,7 +164,7 @@ git commit -m "The frontend learns to ask for workspaces"
 
 This task is first among the UI work on purpose: it is the only part that can be proved.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/scripts/workspaces.test.mjs`:
 
@@ -293,12 +293,12 @@ console.log(failures === 0 ? '\nAll workspace checks passed.' : `\n${failures} F
 process.exit(failures === 0 ? 0 : 1);
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd frontend && node scripts/workspaces.test.mjs`
 Expected: `ERR_MODULE_NOT_FOUND` — `src/utils/workspaces.js` does not exist.
 
-- [ ] **Step 3: Add the translation keys to `el.json`**
+- [x] **Step 3: Add the translation keys to `el.json`**
 
 At the top level, beside the existing `calendar` / `recurrence` blocks:
 
@@ -323,7 +323,7 @@ At the top level, beside the existing `calendar` / `recurrence` blocks:
   },
 ```
 
-- [ ] **Step 4: Add the same keys to `en.json`**
+- [x] **Step 4: Add the same keys to `en.json`**
 
 ```json
   "workspace": {
@@ -346,7 +346,7 @@ At the top level, beside the existing `calendar` / `recurrence` blocks:
   },
 ```
 
-- [ ] **Step 5: Write `frontend/src/utils/workspaces.js`**
+- [x] **Step 5: Write `frontend/src/utils/workspaces.js`**
 
 ```js
 /**
@@ -407,23 +407,23 @@ export function nextPosition(items) {
 }
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 Run: `cd frontend && node scripts/workspaces.test.mjs`
 Expected: every line `PASS`, final line `All workspace checks passed.`, exit 0.
 
-- [ ] **Step 7: Add the suite to `npm run check`**
+- [x] **Step 7: Add the suite to `npm run check`**
 
 In `frontend/package.json`, append to the `check` script:
 ` && node scripts/workspaces.test.mjs`
 
-- [ ] **Step 8: Run the whole frontend check**
+- [x] **Step 8: Run the whole frontend check**
 
 Run: `cd frontend && npm run check`
 Expected: every suite PASS, including `ui-check: OK` (which proves the new keys exist in
 BOTH locale files — it fails on a key present in one and missing in the other).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add frontend/src/utils/workspaces.js frontend/scripts/workspaces.test.mjs \
@@ -445,7 +445,7 @@ git commit -m "The workspace rules, in the one place a test can reach them"
 - Produces: `useWorkspaces()` → `{ workspaces, categories, activeId, setActiveId, reload,
   categoriesFor }`. Tasks 4-7 all read from this.
 
-- [ ] **Step 1: Create `frontend/src/hooks/useWorkspaces.js`**
+- [x] **Step 1: Create `frontend/src/hooks/useWorkspaces.js`**
 
 ```js
 import { createContext, useContext } from 'react';
@@ -481,7 +481,7 @@ export function useWorkspaces() {
 }
 ```
 
-- [ ] **Step 2: Create `frontend/src/components/WorkspaceProvider.jsx`**
+- [x] **Step 2: Create `frontend/src/components/WorkspaceProvider.jsx`**
 
 ```jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -570,7 +570,7 @@ export function WorkspaceProvider({ children, onShowToast }) {
 export default WorkspaceProvider;
 ```
 
-- [ ] **Step 3: Check the app-settings hook's real shape before wiring it**
+- [x] **Step 3: Check the app-settings hook's real shape before wiring it**
 
 Run: `cat frontend/src/hooks/useAppSettings.js`
 Run: `grep -n "updateSettings\|settings" frontend/src/components/AppSettingsProvider.jsx | head -20`
@@ -579,7 +579,7 @@ Run: `grep -n "updateSettings\|settings" frontend/src/components/AppSettingsProv
 other than `{ settings, updateSettings }`, adjust the two references in Step 2 to match —
 do not add an adapter.
 
-- [ ] **Step 4: Mount the provider in `App.jsx`**
+- [x] **Step 4: Mount the provider in `App.jsx`**
 
 Import it, and wrap INSIDE `AppSettingsProvider` (it reads settings) and outside
 `RecurrenceProvider`:
@@ -595,12 +595,12 @@ with the matching closing tag. The nesting order matters: `WorkspaceProvider` ca
 check for the reason already commented there — a bearer token is required, so mounting it
 above `LoginScreen` fires a guaranteed 401 on every logged-out visit.
 
-- [ ] **Step 5: Verify nothing regressed**
+- [x] **Step 5: Verify nothing regressed**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3`
 Expected: all suites PASS; `✖ 12 problems`, no new one naming `WorkspaceProvider` or `App`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/hooks/useWorkspaces.js frontend/src/components/WorkspaceProvider.jsx frontend/src/App.jsx
@@ -620,7 +620,7 @@ git commit -m "One copy of the workspaces, reachable from anywhere"
 - Produces: the bar renders under `AppBar`; `viewProps.tasks` is already filtered, so no
   view is edited.
 
-- [ ] **Step 1: Create `frontend/src/components/WorkspaceBar.jsx`**
+- [x] **Step 1: Create `frontend/src/components/WorkspaceBar.jsx`**
 
 ```jsx
 import { useTranslation } from 'react-i18next';
@@ -687,7 +687,7 @@ function WorkspaceBar() {
 export default WorkspaceBar;
 ```
 
-- [ ] **Step 2: Render it and filter once, in `App.jsx`**
+- [x] **Step 2: Render it and filter once, in `App.jsx`**
 
 Import `WorkspaceBar` and `filterTasksByWorkspace` and `useWorkspaces`. Render the bar
 directly after `<AppBar ... />`.
@@ -713,12 +713,12 @@ above the context. Either read `activeId` in a small inner component, or move th
 into the piece of the tree that is inside the provider. Prefer the second — no new
 component for one value.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3`
 Expected: all suites PASS; `✖ 12 problems`, no new entry.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/components/WorkspaceBar.jsx frontend/src/App.jsx
@@ -738,7 +738,7 @@ git commit -m "The switcher, and one filter that every screen obeys"
 - Produces: a settings sub-view. `SettingsModal` gets one row that opens it, modelled on
   the existing `RecurrencesView` row.
 
-- [ ] **Step 1: Read the pattern before writing**
+- [x] **Step 1: Read the pattern before writing**
 
 Run: `sed -n '1,80p' frontend/src/components/RecurrencesView.jsx`
 Run: `grep -n "RecurrencesView\|SettingsRow" frontend/src/components/SettingsModal.jsx | head`
@@ -746,7 +746,7 @@ Run: `grep -n "RecurrencesView\|SettingsRow" frontend/src/components/SettingsMod
 `WorkspacesView` follows that file's structure exactly: same card shape, same loading
 placeholder, same toast calls. Match it rather than inventing a second settings idiom.
 
-- [ ] **Step 2: Create `frontend/src/components/WorkspacesView.jsx`**
+- [x] **Step 2: Create `frontend/src/components/WorkspacesView.jsx`**
 
 ```jsx
 import { useState } from 'react';
@@ -975,17 +975,17 @@ function WorkspacesView({ onShowToast }) {
 export default WorkspacesView;
 ```
 
-- [ ] **Step 3: Add the row to `SettingsModal.jsx`**
+- [x] **Step 3: Add the row to `SettingsModal.jsx`**
 
 Following exactly how the Recurrences row opens its sub-view in that file, add a row
 labelled `t('workspace.manage')` that renders `<WorkspacesView onShowToast={onShowToast} />`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3`
 Expected: all suites PASS; `✖ 12 problems`, no new entry.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/WorkspacesView.jsx frontend/src/components/SettingsModal.jsx
@@ -1006,14 +1006,14 @@ git commit -m "A screen for making your own boxes"
 Without this, the user can create categories and has no way to use one. It is the half that
 makes Task 5 worth having.
 
-- [ ] **Step 1: Read the existing rows before writing**
+- [x] **Step 1: Read the existing rows before writing**
 
 Run: `grep -n "Repeat\|recurrence\|CustomSelect\|onTaskUpdate\|handleFieldChange" frontend/src/components/TaskDetailSheet.jsx | head -20`
 
 The "Repeat — Never / Mon-Fri at 09:00" row and the reminder/calendar switches are the
 pattern. Match their markup and their update call; do not introduce a third idiom.
 
-- [ ] **Step 2: Add the two rows**
+- [x] **Step 2: Add the two rows**
 
 Two `CustomSelect`s, in this order and with this coupling:
 
@@ -1055,12 +1055,12 @@ uuid and the column is nullable:
 `onFieldChange` is whatever that file already calls to PATCH a task — use its real name
 from Step 1.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3`
 Expected: all suites PASS; `✖ 12 problems`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/components/TaskDetailSheet.jsx
@@ -1077,13 +1077,13 @@ git commit -m "A task can be put in a box"
 **Interfaces:**
 - Consumes: Task 2's `describePlacement`; Task 3's `useWorkspaces`.
 
-- [ ] **Step 1: Read where the recurrence badge renders**
+- [x] **Step 1: Read where the recurrence badge renders**
 
 Run: `grep -n "describeRecurrencePattern\|useRecurrence\|badge" frontend/src/components/TaskRow.jsx | head`
 
 The placement chip sits in the same meta line, before the recurrence badge.
 
-- [ ] **Step 2: Add the chip**
+- [x] **Step 2: Add the chip**
 
 ```jsx
   const { workspaces, categories } = useWorkspaces();
@@ -1103,12 +1103,12 @@ where nobody has made a workspace yet is noise on every row:
 is deliberate — this guard is about not showing the chip at all, while the function's own
 fallback is about never printing `undefined` if it is shown.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3`
 Expected: all suites PASS; `✖ 12 problems`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/components/TaskRow.jsx
@@ -1121,10 +1121,10 @@ git commit -m "A row says which box it is in"
 
 Automated:
 
-- [ ] `cd frontend && npm run check` — every suite PASS, including the new `workspaces` one
+- [x] `cd frontend && npm run check` — every suite PASS, including the new `workspaces` one
       and `ui-check: OK` (which proves the new keys are in **both** locale files)
-- [ ] `cd frontend && npm run lint 2>&1 | tail -3` — **12 problems**, not 13
-- [ ] `./venv/Scripts/python.exe -m pytest tests/ -q` — **267 passed**, untouched by this slice
+- [x] `cd frontend && npm run lint 2>&1 | tail -3` — **12 problems**, not 13. (One WAS added — a setState inside an effect in WorkspaceProvider — and removed by deriving the active id instead of copying it.)
+- [x] `./venv/Scripts/python.exe -m pytest tests/ -q` — **267 passed**, untouched by this slice
 
 **The browser walkthrough the owner runs himself.** No test in this project can render a
 component, so every item below is the only evidence that exists for it:
