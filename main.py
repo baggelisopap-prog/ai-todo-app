@@ -167,6 +167,33 @@ class WorkspaceUpdateRequest(BaseModel):
     color: Optional[str] = None
     position: Optional[int] = None
 
+
+class CategoryWriteResponse(BaseModel):
+    category: Category
+
+
+class CategoryDeleteResponse(BaseModel):
+    deleted: bool
+    tasks_unfiled: int
+
+
+class CategoryCreateRequest(BaseModel):
+    """
+    Deliberately has no `system_key` field: the protected Hostaway category is
+    created by the migration and by nothing else, so the API has no way to mint
+    one. A client sending the field is ignored, not obeyed.
+    """
+    workspace_id: str
+    name: str = Field(max_length=40)
+    color: Optional[str] = None
+    position: int = 0
+
+
+class CategoryUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=40)
+    color: Optional[str] = None
+    position: Optional[int] = None
+
 class HealthResponse(BaseModel):
     status: str
     service: str
@@ -914,6 +941,84 @@ def delete_workspace(workspace_id: str, user_id: str = Depends(get_current_user_
     affected = repository.count_tasks_in_workspace(user_id, workspace_id)
     repository.delete_workspace(user_id, workspace_id)
     return WorkspaceDeleteResponse(deleted=True, tasks_unfiled=affected)
+
+
+# ---------------------------------------------------------------- categories
+
+
+@app.post("/categories", response_model=CategoryWriteResponse, status_code=status.HTTP_201_CREATED)
+def create_category(payload: CategoryCreateRequest, user_id: str = Depends(get_current_user_id)):
+    # get_workspace is scoped by user_id, so another user's workspace reads as
+    # absent — 404, not 403. Confirming that a row exists is itself a leak.
+    if repository.get_workspace(user_id, payload.workspace_id) is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Per WORKSPACE, not per account: 'έξοδα' under Business and 'έξοδα' under
+    # Personal are two different things and the user means both.
+    if any(
+        c.name == payload.name and c.workspace_id == payload.workspace_id
+        for c in repository.get_categories(user_id)
+    ):
+        raise HTTPException(
+            status_code=409, detail="A category with that name already exists in this workspace"
+        )
+
+    category = repository.create_category(user_id, Category(**payload.model_dump()))
+    return CategoryWriteResponse(category=category)
+
+
+@app.patch("/categories/{category_id}", response_model=CategoryWriteResponse)
+def update_category(
+    category_id: str,
+    payload: CategoryUpdateRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    existing = repository.get_category(user_id, category_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+
+    # Colour stays editable on the system category — it is pure display, and
+    # the user should be able to make their own board legible. The NAME does
+    # not: allowing the rename invites allowing the delete, and deleting this
+    # row stops every guest escalation on the account.
+    if existing.system_key and "name" in updates:
+        raise HTTPException(
+            status_code=422,
+            detail="This category belongs to an integration and cannot be renamed",
+        )
+
+    if "name" in updates and any(
+        c.name == updates["name"]
+        and c.workspace_id == existing.workspace_id
+        and c.record_id != category_id
+        for c in repository.get_categories(user_id)
+    ):
+        raise HTTPException(
+            status_code=409, detail="A category with that name already exists in this workspace"
+        )
+
+    updated = repository.update_category(user_id, category_id, updates)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return CategoryWriteResponse(category=updated)
+
+
+@app.delete("/categories/{category_id}", response_model=CategoryDeleteResponse)
+def delete_category(category_id: str, user_id: str = Depends(get_current_user_id)):
+    existing = repository.get_category(user_id, category_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    if existing.system_key:
+        raise HTTPException(
+            status_code=422,
+            detail="This category belongs to an integration and cannot be deleted",
+        )
+
+    affected = repository.count_tasks_in_category(user_id, category_id)
+    repository.delete_category(user_id, category_id)
+    return CategoryDeleteResponse(deleted=True, tasks_unfiled=affected)
 
 
 @app.get("/profile")
