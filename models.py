@@ -147,6 +147,11 @@ class AppSettings(BaseModel):
     # NULL means "Όλα" — every workspace at once, and the default for a user
     # who has never touched the switcher.
     active_workspace_id: Optional[str] = None
+    # Which workspace the EXTRACTOR speaks for when active_workspace_id is NULL
+    # ("Όλα"). Deliberately a SECOND column: "where am I looking" and "whose
+    # vocabulary should the model be given" are different questions, and the
+    # model must never be asked to guess between several workspaces.
+    default_workspace_id: Optional[str] = None
 
 
 class Workspace(BaseModel):

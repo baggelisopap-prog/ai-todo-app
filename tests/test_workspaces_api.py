@@ -193,3 +193,21 @@ def test_clearing_the_active_workspace_means_show_everything(client, monkeypatch
 
     assert "active_workspace_id" in saved
     assert saved["active_workspace_id"] is None
+
+
+def test_the_default_workspace_round_trips(client, monkeypatch):
+    """Distinct from active_workspace_id: 'where I am looking' and 'whose
+    vocabulary the extractor gets when I am looking at everything' are
+    different questions, and Όλα cannot answer the second."""
+    saved = {}
+
+    def _update(user_id, **fields):
+        saved.update(fields)
+        return AppSettings(**{k: v for k, v in fields.items()})
+
+    monkeypatch.setattr(main, "update_app_settings", _update)
+
+    r = client.patch("/settings", json={"default_workspace_id": "ws-1"})
+
+    assert r.status_code == 200
+    assert saved["default_workspace_id"] == "ws-1"

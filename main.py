@@ -771,6 +771,7 @@ def update_settings(payload: AppSettings, user_id: str = Depends(get_current_use
             # NULL is not "unset" here, it is the deliberate "Όλα" position —
             # so it is passed through rather than dropped.
             active_workspace_id=payload.active_workspace_id,
+            default_workspace_id=payload.default_workspace_id,
         )
     except Exception as e:
         logger.exception("Failed to update app settings")

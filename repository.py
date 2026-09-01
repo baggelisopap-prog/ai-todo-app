@@ -410,6 +410,7 @@ def get_app_settings(user_id: str) -> AppSettings:
         # row.get, not _get: NULL here is the meaningful "Όλα" position, not a
         # blank standing in for a typed default.
         active_workspace_id=row.get("active_workspace_id"),
+        default_workspace_id=row.get("default_workspace_id"),
     )
 
 
