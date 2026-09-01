@@ -535,3 +535,59 @@ export async function updateRecurrence(recurrenceId, updates) {
 export async function deleteRecurrence(recurrenceId) {
   return request(`/recurrences/${recurrenceId}`, { method: 'DELETE' });
 }
+/**
+ * GET /workspaces — this user's workspaces AND every category they own, in one
+ * call. Both together because the provider needs the whole set on each app
+ * open: a task chip may belong to any workspace, so fetching categories per
+ * workspace would be one request per workspace on every launch.
+ * Returns { workspaces: [...], categories: [...] }.
+ */
+export async function getWorkspaces() {
+  return request('/workspaces');
+}
+
+/** POST /workspaces — { name, color?, position? }. 409 if the name is taken. */
+export async function createWorkspace(payload) {
+  return request('/workspaces', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/** PATCH /workspaces/{id} — any of name, color, position. 409 on a taken name. */
+export async function updateWorkspace(workspaceId, updates) {
+  return request(`/workspaces/${workspaceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+/**
+ * DELETE /workspaces/{id} — removes the workspace and, by cascade, its
+ * categories. Tasks in it are NOT deleted; they become unfiled.
+ * Returns { deleted: true, tasks_unfiled: N }.
+ */
+export async function deleteWorkspace(workspaceId) {
+  return request(`/workspaces/${workspaceId}`, { method: 'DELETE' });
+}
+
+/** POST /categories — { workspace_id, name, color?, position? }. */
+export async function createCategory(payload) {
+  return request('/categories', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/**
+ * PATCH /categories/{id}. 422 if the category belongs to an integration and
+ * the change includes its name — colour is always allowed.
+ */
+export async function updateCategory(categoryId, updates) {
+  return request(`/categories/${categoryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+/**
+ * DELETE /categories/{id} — 422 for an integration's category.
+ * Returns { deleted: true, tasks_unfiled: N }.
+ */
+export async function deleteCategory(categoryId) {
+  return request(`/categories/${categoryId}`, { method: 'DELETE' });
+}
