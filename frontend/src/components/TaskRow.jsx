@@ -15,6 +15,8 @@ import {
 import { useTaskActions } from '../hooks/useTaskActions';
 import { useSwipeRow } from '../hooks/useSwipeRow';
 import { useRecurrence } from '../hooks/useRecurrence';
+import { useWorkspaces } from '../hooks/useWorkspaces';
+import { describePlacement } from '../utils/workspaces';
 import TaskMenu from './TaskMenu';
 import QuickReschedule from './QuickReschedule';
 import {
@@ -112,6 +114,7 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
   // pops into a row a second after the row itself is more unsettling than a
   // marker that says slightly less. The full sentence, time included, is on
   // the title and the accessible name either way.
+  const { workspaces, categories } = useWorkspaces();
   const recurrence = useRecurrence();
   const rule = recurrence.ruleFor(task);
   const recurrenceBadge = rule
@@ -286,6 +289,27 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
                   style={{ backgroundColor: categoryColor(task.category) }}
                 />
                 {categoryLabel(task.category, t)}
+              </span>
+            )}
+
+            {/* Only for a task that is actually filed. describePlacement still
+                returns the "Unfiled" word for an unknown workspace — that is
+                its own guard against printing undefined — but showing that
+                chip on every row of an app where nobody has made a workspace
+                yet is noise on every line. */}
+            {task.workspace_id && (
+              <span className="flex items-center gap-1 text-[var(--text-muted)] min-w-0">
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{
+                    backgroundColor:
+                      workspaces.find((w) => w.record_id === task.workspace_id)?.color
+                      || 'var(--text-muted)',
+                  }}
+                />
+                <span className="truncate">
+                  {describePlacement(task, workspaces, categories, t)}
+                </span>
               </span>
             )}
 
