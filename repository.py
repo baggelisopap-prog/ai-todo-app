@@ -1525,18 +1525,31 @@ def get_system_category(user_id: str, system_key: str) -> Optional[Category]:
     exist at all without the Hostaway path noticing: the label is the user's to
     rename, the key is not.
 
-    Returns None — never raises — for an account that predates the migration.
-    Callers run inside the scheduler's per-user loop, where a raise costs every
-    later user their tick.
+    Returns None — never raises. Two separate cases reach that same answer:
+    an account with no such row, and a database that has no `categories` table
+    at all because the code was deployed before the migration was run. The
+    second is caught explicitly rather than left to blow up, because this is
+    called from the Hostaway webhook (where a raise loses a guest message
+    outright) and from the scheduler's per-user loop (where a raise costs every
+    later user their tick). Both degrade to "unfiled", which is recoverable;
+    a lost message is not.
     """
-    response = (
-        supabase.table("categories")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("system_key", system_key)
-        .limit(1)
-        .execute()
-    )
+    try:
+        response = (
+            supabase.table("categories")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("system_key", system_key)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        logger.warning(
+            f"[workspaces] Could not read the '{system_key}' system category for "
+            f"{user_id} — has the workspaces migration been run? ({e})"
+        )
+        return None
+
     rows = response.data or []
     return _supabase_row_to_category(rows[0]) if rows else None
 

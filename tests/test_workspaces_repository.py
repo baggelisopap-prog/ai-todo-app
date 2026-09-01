@@ -246,3 +246,17 @@ def test_the_write_path_carries_both_columns():
 
     assert fields["workspace_id"] == "ws-1"
     assert fields["category_id"] == "cat-1"
+
+
+def test_a_missing_categories_TABLE_also_returns_None(monkeypatch):
+    """Deploy order must not be able to lose a guest message. If the code ships
+    before the migration runs, the table does not exist and the query raises —
+    which on the Hostaway webhook path would mean no task at all. It degrades to
+    unfiled instead, which is recoverable."""
+    class _Exploding:
+        def table(self, name):
+            raise RuntimeError("Could not find the table 'public.categories'")
+
+    monkeypatch.setattr(repository, "supabase", _Exploding())
+
+    assert repository.get_system_category("user-1", "hostaway") is None
