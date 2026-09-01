@@ -195,3 +195,54 @@ def test_a_missing_system_category_returns_None_rather_than_raising(monkeypatch)
     monkeypatch.setattr(repository, "supabase", fake)
 
     assert repository.get_system_category("user-1", "hostaway") is None
+
+
+# The task read/write path. These are METHODS on AirtableTaskRepository, not
+# module-level functions — the same shared instance every other repository test
+# reaches for.
+_task_repo = repository._get_shared_tasks_repo()
+
+
+def _task_row(**overrides):
+    base = {"id": "task-1", "task_name": "Χ", "description": "", "category": "Business",
+            "priority": "P2", "ai_suggested_category": "Business",
+            "ai_suggested_priority": "P2", "workspace_id": "ws-1", "category_id": "cat-1"}
+    base.update(overrides)
+    return base
+
+
+def test_a_task_row_carries_its_workspace_and_category():
+    """Read side. The constructor lists every field by hand, so a new column is
+    silently dropped until it is named there."""
+    task = _task_repo._supabase_row_to_task(_task_row())
+
+    assert task.workspace_id == "ws-1"
+    assert task.category_id == "cat-1"
+
+
+def test_an_unfiled_task_keeps_None_and_is_not_defaulted():
+    """Unfiled is a real, meaningful state — NULL here means 'the classifier
+    could not tell', and defaulting it to a string would invent a bucket."""
+    task = _task_repo._supabase_row_to_task(
+        _task_row(category="Unknown", workspace_id=None, category_id=None)
+    )
+
+    assert task.workspace_id is None
+    assert task.category_id is None
+
+
+def test_the_write_path_carries_both_columns():
+    """Write side needs no change: _task_to_supabase_fields is built from
+    task.model_dump(), so a new model field travels automatically. This test
+    exists to catch the day someone replaces model_dump() with a hand-written
+    field list and silently stops persisting the workspace."""
+    from models import TaskRecord
+
+    fields = _task_repo._task_to_supabase_fields(TaskRecord(
+        task_name="Χ", description="", category="Business", priority="P2",
+        ai_suggested_category="Business", ai_suggested_priority="P2",
+        workspace_id="ws-1", category_id="cat-1",
+    ))
+
+    assert fields["workspace_id"] == "ws-1"
+    assert fields["category_id"] == "cat-1"

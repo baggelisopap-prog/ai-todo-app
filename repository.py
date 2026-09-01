@@ -156,6 +156,12 @@ class AirtableTaskRepository:
             occurrence_date=row.get("occurrence_date"),
             missed_at=row.get("missed_at"),
             cancelled_at=row.get("cancelled_at"),
+            # row.get, deliberately not _get(row, key, default): NULL here is a
+            # real value meaning "unfiled", not a blank standing in for a typed
+            # default. The write side needs no equivalent — it is built from
+            # task.model_dump(), so a new model field travels on its own.
+            workspace_id=row.get("workspace_id"),
+            category_id=row.get("category_id"),
         )
 
     def save_task(self, user_id: str, task: TaskRecord) -> TaskRecord:
