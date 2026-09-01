@@ -84,3 +84,17 @@ $function$;
 --      that proves the fix did not simply switch syncing off.
 -- Step 3 is the one to insist on: step 2 alone is also what a broken push
 -- queue would look like.
+--
+-- DONE — 2026-09-01. The owner ran the statement above against the live
+-- database and then performed step 3: changed the time on a task that was
+-- already present in Google Calendar, and the change reached Google. That is
+-- both halves proved — the queue is no longer permanently full, and it is not
+-- empty because syncing died.
+--
+-- One condition that had to hold first, recorded because it nearly muddied the
+-- result: the calendar push runs inside the same ~2-minute scheduler tick as
+-- reminders, and that tick is driven by an external cron service which had
+-- disabled itself on 2026-08-31 after four 503s (Render suspended the service
+-- for exceeding its free monthly hours). With the cron off, step 3 fails
+-- identically whether the fix works or not. It was re-enabled before the check
+-- ran, which the successful sync itself confirms.
