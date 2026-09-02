@@ -4,11 +4,24 @@ import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import { searchTasks } from '../utils/searchTasks';
 import { isVisibleTask } from '../utils/taskDisplay';
+import { useWorkspaces } from '../hooks/useWorkspaces';
+import { filterTasksByCategory, UNFILED } from '../utils/workspaces';
 
 function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const { activeId, categoriesFor } = useWorkspaces();
+  // Memoised, not a bare expression: categoriesFor returns a NEW array every
+  // call, so an unwrapped value would change identity on every render and the
+  // counts below — which depend on it — would recompute every time, which is
+  // the one thing their useMemo exists to prevent.
+  //
+  // UNFILED is a view, not a workspace: it has no categories of its own.
+  const activeCategories = useMemo(
+    () => (activeId && activeId !== UNFILED ? categoriesFor(activeId) : []),
+    [activeId, categoriesFor]
+  );
   const [sortBy, setSortBy] = useState('newest');
   const [showCompleted, setShowCompleted] = useState(false);
   const [showRejected, setShowRejected] = useState(false);
@@ -23,12 +36,15 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
     if (!showRejected) base = base.filter(isVisibleTask);
     return {
       All: base.length,
-      Business: base.filter((t) => t.category === 'Business').length,
-      Personal: base.filter((t) => t.category === 'Personal').length,
-      Unknown: base.filter((t) => t.category === 'Unknown').length,
-      Hostaway: base.filter((t) => t.category === 'Hostaway').length,
+      [UNFILED]: base.filter((t) => !t.category_id).length,
+      ...Object.fromEntries(
+        activeCategories.map((c) => [
+          c.record_id,
+          base.filter((t) => t.category_id === c.record_id).length,
+        ])
+      ),
     };
-  }, [tasks, showCompleted, showRejected]);
+  }, [tasks, showCompleted, showRejected, activeCategories]);
 
   const completedCount = useMemo(() => tasks.filter((t) => t.is_completed).length, [tasks]);
   const rejectedCount = useMemo(() => tasks.filter((t) => t.is_rejected).length, [tasks]);
@@ -41,19 +57,24 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
     // not rejections — so this stays even when showRejected is on.
     result = result.filter((t) => !t.missed_at && !t.cancelled_at);
     if (!showRejected) result = result.filter(isVisibleTask);
-    if (selectedCategory !== 'All') result = result.filter((t) => t.category === selectedCategory);
+    if (selectedCategory !== 'All') result = filterTasksByCategory(result, selectedCategory);
     // Last, so the search runs over the smallest set — and so the counts on the
     // category cards keep describing the whole library rather than the search.
     return searchTasks(result, query);
   }, [tasks, selectedCategory, showCompleted, showRejected, query]);
 
-  const categoryOptions = [
-    { value: 'All', labelKey: 'browse.filter_all', accentClass: 'hover:border-[var(--text-secondary)]', selectedClass: 'border-[var(--text-secondary)] bg-[var(--bg-hover)]' },
-    { value: 'Business', labelKey: 'browse.filter_business', accentClass: 'hover:border-[var(--category-business)]/60', selectedClass: 'border-[var(--category-business)] bg-[var(--category-business)]/10' },
-    { value: 'Personal', labelKey: 'browse.filter_personal', accentClass: 'hover:border-[var(--category-personal)]/60', selectedClass: 'border-[var(--category-personal)] bg-[var(--category-personal)]/10' },
-    { value: 'Unknown', labelKey: 'browse.filter_unknown', accentClass: 'hover:border-[var(--text-secondary)]', selectedClass: 'border-[var(--text-secondary)] bg-[var(--bg-hover)]' },
-    { value: 'Hostaway', labelKey: 'browse.filter_hostaway', accentClass: 'hover:border-[var(--category-hostaway)]/60', selectedClass: 'border-[var(--category-hostaway)] bg-[var(--category-hostaway)]/10' },
-  ];
+  // Built from the user's own categories, not from four hardcoded words. Hidden
+  // entirely when no workspace is chosen: the chips above are already doing the
+  // coarse filtering, and there is no single coherent category list across two
+  // workspaces. `label` is a plain string now rather than a key — these names
+  // are the user's, so there is nothing to translate.
+  const categoryOptions = activeCategories.length
+    ? [
+        { value: 'All', label: t('browse.filter_all') },
+        ...activeCategories.map((c) => ({ value: c.record_id, label: c.name })),
+        { value: UNFILED, label: t('workspace.unfiled') },
+      ]
+    : null;
 
   const sortOptions = [
     { value: 'newest', labelKey: 'browse.sort_newest' },
@@ -89,32 +110,34 @@ function BrowseView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTas
       </div>
 
       <div className="mb-6 space-y-4">
-        {/* Category cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          {categoryOptions.map(({ value, labelKey, accentClass, selectedClass }) => {
-            const isSelected = selectedCategory === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setSelectedCategory(value)}
-                aria-pressed={isSelected}
-                className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-colors cursor-pointer text-center ${
-                  isSelected
-                    ? selectedClass
-                    : `border-[var(--border-subtle)] bg-[var(--bg-card)] ${accentClass}`
-                }`}
-              >
-                <span className="text-xs text-[var(--text-secondary)] font-medium uppercase tracking-wide">
-                  {t(labelKey)}
-                </span>
-                <span className="text-xl font-semibold text-[var(--text-primary)] mt-0.5">
-                  {categoryCounts[value]}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {/* Category cards — this workspace's own, or nothing at all */}
+        {categoryOptions && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {categoryOptions.map(({ value, label }) => {
+              const isSelected = selectedCategory === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setSelectedCategory(value)}
+                  aria-pressed={isSelected}
+                  className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-colors cursor-pointer text-center ${
+                    isSelected
+                      ? 'border-[var(--text-secondary)] bg-[var(--bg-hover)]'
+                      : 'border-[var(--border-subtle)] bg-[var(--bg-card)] hover:border-[var(--text-secondary)]'
+                  }`}
+                >
+                  <span className="text-xs text-[var(--text-secondary)] font-medium uppercase tracking-wide truncate max-w-full">
+                    {label}
+                  </span>
+                  <span className="text-xl font-semibold text-[var(--text-primary)] mt-0.5">
+                    {categoryCounts[value] ?? 0}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Sort buttons */}
         <div className="flex flex-wrap items-center gap-2">

@@ -14,6 +14,12 @@ import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
 import CustomSelect from './CustomSelect';
 import FilterBar from './FilterBar';
+import { UNFILED } from '../utils/workspaces';
+
+// The single-task form of filterTasksByCategory: this view filters inside a
+// larger predicate rather than over a list, so it cannot use the list helper.
+const matchesCategory = (task, categoryId) =>
+  categoryId === UNFILED ? !task.category_id : task.category_id === categoryId;
 import UpcomingList from './UpcomingList';
 import {
   createTaskManual,
@@ -378,7 +384,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   }
 
   const filteredTasks = tasks.filter((task) =>
-    (selectedCategory === 'All' || task.category === selectedCategory) &&
+    (selectedCategory === 'All' || matchesCategory(task, selectedCategory)) &&
     (selectedPriority === 'All' || task.priority === selectedPriority)
   );
 

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
+import { filterTasksByCategory } from '../utils/workspaces';
 import { toLocalISODate } from '../utils/formatDate';
 import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent } from '../api';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
@@ -50,10 +51,11 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
     }
   }
 
-  const filteredTasks = tasks.filter((task) =>
-    (selectedCategory === 'All' || task.category === selectedCategory) &&
-    (selectedPriority === 'All' || task.priority === selectedPriority)
-  );
+  // Category is now the user's OWN category (tasks.category_id), not the old
+  // four-word column. 'All' means no filter; UNFILED means the ones with none.
+  const filteredTasks = filterTasksByCategory(
+    tasks, selectedCategory === 'All' ? null : selectedCategory
+  ).filter((task) => selectedPriority === 'All' || task.priority === selectedPriority);
 
   const todayTasks = filteredTasks.filter((task) =>
     task.approval_status &&
