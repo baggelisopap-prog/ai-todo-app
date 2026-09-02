@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { formatDate, roundToNearestHalfHour } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import {
-  categoryColor,
-  categoryLabel,
   describeRecurrence,
   describeRecurrencePattern,
   dueTone,
@@ -282,15 +280,14 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
               </button>
             )}
 
-            {task.category && task.category !== 'Unknown' && (
-              <span className="flex items-center gap-1" style={{ color: categoryColor(task.category) }}>
-                <span
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ backgroundColor: categoryColor(task.category) }}
-                />
-                {categoryLabel(task.category, t)}
-              </span>
-            )}
+            {/* The old four-word category chip stood here and was removed on
+                2026-09-02. It printed "Personal" — the AI's word for the dying
+                `category` column — in the same meta line where the placement
+                chip below prints "Personal" the WORKSPACE. The owner dictated a
+                task while standing in one workspace, saw that chip, and
+                reasonably concluded it had been filed in another; it had in
+                fact been filed nowhere. The word is still in the database and
+                still written by the extractor. It is simply no longer shown. */}
 
             {/* Only for a task that is actually filed. describePlacement still
                 returns the "Unfiled" word for an unknown workspace — that is
