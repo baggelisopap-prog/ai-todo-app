@@ -47,6 +47,7 @@ from google.genai import types
 from pydantic import BaseModel, ValidationError
 
 import agent_tools  # build_time_context only — see _build_prompt
+import repository  # the user's own categories — see _category_block
 from models import ChecklistItem
 
 try:
@@ -83,8 +84,17 @@ MAX_INSTRUCTION_CHARS = 500
 #                     approve it, but no agent gets to approve one.
 #   is_rejected     — the soft-delete path. Two different "remove this" verbs
 #                     one sentence apart is a way to delete the wrong thing.
+#   workspace_id    — DELIBERATELY ABSENT, and not merely unvalidated: the
+#                     field is not writable, so there is nothing for the model
+#                     to aim at. Changing a category is a small move inside the
+#                     box the user is looking at; changing the WORKSPACE takes
+#                     the task off the screen they are standing on. Ask for
+#                     "move it to Friday", have it also decide the task is
+#                     Personal, and the task vanishes in front of you. The
+#                     owner drew this line himself (2026-09-02).
 TASK_AGENT_WRITABLE_FIELDS = {
-    "task_name", "description", "category", "priority", "due_date", "due_time",
+    "task_name", "description", "category", "category_id", "priority",
+    "due_date", "due_time",
     "is_completed", "checklist", "notify_enabled", "calendar_sync_enabled",
 }
 
@@ -95,6 +105,11 @@ CLEARABLE_FIELDS = {"due_date", "due_time", "description", "checklist"}
 
 VALID_CATEGORIES = {"Business", "Personal", "Unknown", "Hostaway"}
 VALID_PRIORITIES = {"P1", "P2", "P3"}
+
+# Distinct from None on purpose: None means the model said nothing about the
+# category; this means it named one we could not place. Only the second is
+# worth reporting back to the user.
+_UNRESOLVED = object()
 
 
 # The model's entire output.
@@ -122,6 +137,10 @@ class TaskEditPlan(BaseModel):
     task_name: Optional[str] = None
     description: Optional[str] = None
     category: Optional[Literal["Business", "Personal", "Unknown", "Hostaway"]] = None
+    # The user's OWN category, answered by NAME — never an id, because models
+    # truncate and invent UUIDs. _normalize_plan resolves it inside the task's
+    # own workspace, so a name from elsewhere cannot land.
+    category_name: Optional[str] = None
     priority: Optional[Literal["P1", "P2", "P3"]] = None
     due_date: Optional[str] = None
     due_time: Optional[str] = None
@@ -212,7 +231,30 @@ def answer_language(instruction: str) -> str:
     return "Greek" if _GREEK_CHARS.search(instruction or "") else "English"
 
 
-def _build_prompt(task, instruction: str) -> str:
+def _category_block(task, user_id: str) -> str:
+    """
+    The names this task may be filed under: the categories of ITS OWN
+    workspace, and nothing else.
+
+    An unfiled task gets an empty string — there is no workspace to look
+    inside, so there is nothing to offer and nothing to invent from. The
+    workspace itself is never offered: see TASK_AGENT_WRITABLE_FIELDS.
+    """
+    if not task.workspace_id:
+        return ""
+    categories = repository.get_categories_for_workspace(user_id, task.workspace_id)
+    if not categories:
+        return ""
+    names = ", ".join(c.name for c in categories)
+    return (
+        f"\n[CATEGORIES you may file this task under — {names}]\n"
+        "Use \"category_name\" with one of those names, copied exactly, and only if "
+        "the instruction asks for it. Never invent a name, and never name one that "
+        "is not in that list.\n"
+    )
+
+
+def _build_prompt(task, instruction: str, user_id: str) -> str:
     """Time header + the task + the instruction. The header is
     agent_tools.build_time_context()'s — the ONE thing worth sharing with the
     other agent, because "resolve Friday to a date" is the same problem with
@@ -222,7 +264,8 @@ def _build_prompt(task, instruction: str) -> str:
     _, _, time_header = agent_tools.build_time_context()
     return (
         f"{time_header}\n\n"
-        f"[THE TASK — current values]\n{_render_task(task)}\n\n"
+        f"[THE TASK — current values]\n{_render_task(task)}\n"
+        f"{_category_block(task, user_id)}\n"
         f"[INSTRUCTION]\n{instruction}\n\n"
         # Last, so it is the nearest thing to the output being generated —
         # and stated, not requested. See answer_language.
@@ -230,7 +273,24 @@ def _build_prompt(task, instruction: str) -> str:
     )
 
 
-def _normalize_plan(plan: TaskEditPlan, task) -> dict:
+def _resolve_category(user_id: str, task, name):
+    """The id of the category with this NAME inside THIS task's workspace.
+
+    Returns the sentinel object _UNRESOLVED when the model named something we
+    could not place, so the caller can report it as invalid — distinct from
+    None, which is the ordinary "the model said nothing about the category"."""
+    if not name:
+        return None
+    if not task.workspace_id:
+        return _UNRESOLVED
+    wanted = str(name).strip().casefold()
+    for c in repository.get_categories_for_workspace(user_id, task.workspace_id):
+        if c.name.strip().casefold() == wanted:
+            return c.record_id
+    return _UNRESOLVED
+
+
+def _normalize_plan(plan: TaskEditPlan, task, user_id: str) -> dict:
     """
     Turns the model's plan into the field dict the caller will apply, dropping
     everything that is not a real change, and validating every value that
@@ -252,6 +312,11 @@ def _normalize_plan(plan: TaskEditPlan, task) -> dict:
         "task_name": plan.task_name,
         "description": plan.description,
         "category": plan.category,
+        # A NAME from the model becomes an id here, looked up inside the task's
+        # OWN workspace — so a name belonging to a different workspace simply
+        # does not resolve, and lands in `invalid` rather than moving the task's
+        # category outside the box it lives in.
+        "category_id": _resolve_category(user_id, task, plan.category_name),
         "priority": plan.priority,
         "due_date": plan.due_date,
         "due_time": plan.due_time,
@@ -268,6 +333,11 @@ def _normalize_plan(plan: TaskEditPlan, task) -> dict:
 
         if key == "category" and value not in VALID_CATEGORIES:
             invalid.append(key)
+            continue
+        if key == "category_id" and value is _UNRESOLVED:
+            # Reported under the name the model actually used, since that is
+            # what the user will recognise in the message.
+            invalid.append("category_name")
             continue
         if key == "priority" and value not in VALID_PRIORITIES:
             invalid.append(key)
@@ -429,7 +499,7 @@ def plan_task_edit(instruction: str, task, user_id: str) -> dict:
         logging.info(f"[task_agent] action=unclear task={task.record_id} latency={latency_ms}ms")
         return {"action": "unclear", "message": plan.message}
 
-    normalized = _normalize_plan(plan, task)
+    normalized = _normalize_plan(plan, task, user_id)
     logging.info(
         f"[task_agent] action=edit task={task.record_id} "
         f"fields={list(normalized['fields'])} invalid={normalized['invalid']} "
