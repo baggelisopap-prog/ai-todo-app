@@ -76,10 +76,13 @@ export async function getAllTasks() {
  * POST /extract — sends natural language text, gets back saved tasks.
  * Returns { saved_tasks: [...], count: N }
  */
-export async function extractTasks(text) {
+export async function extractTasks(text, workspaceId = null) {
+  // workspaceId is where the user was standing. The extractor is scoped to it
+  // and is shown only that workspace's category names; null means "Όλα" and
+  // the server falls back to their default workspace.
   return request('/extract', {
     method: 'POST',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, workspace_id: workspaceId }),
   });
 }
 
@@ -88,10 +91,11 @@ export async function extractTasks(text) {
  * Uses FormData (multipart). Cannot go through request() which hardcodes JSON headers.
  * Returns { saved_tasks: [...], count: N }
  */
-export async function extractTasksFromAudio(audioBlob) {
+export async function extractTasksFromAudio(audioBlob, workspaceId = null) {
   const formData = new FormData();
   const extension = audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
   formData.append('audio', audioBlob, `recording.${extension}`);
+  if (workspaceId) formData.append('workspace_id', workspaceId);
 
   let response;
   try {
@@ -123,10 +127,11 @@ export async function extractTasksFromAudio(audioBlob) {
  * Uses FormData (multipart). Cannot go through request() which hardcodes JSON headers.
  * Returns { saved_tasks: [...], count: N }
  */
-export async function extractTasksFromImage(imageBlob, context = '') {
+export async function extractTasksFromImage(imageBlob, context = '', workspaceId = null) {
   const formData = new FormData();
   const extension = imageBlob.type.split('/')[1]?.split(';')[0] || 'jpg';
   formData.append('image', imageBlob, `photo.${extension}`);
+  if (workspaceId) formData.append('workspace_id', workspaceId);
   if (context && context.trim()) {
     formData.append('context', context.trim());
   }

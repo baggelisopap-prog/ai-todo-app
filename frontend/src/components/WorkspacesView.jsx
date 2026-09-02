@@ -5,6 +5,8 @@ import {
   createCategory, updateCategory, deleteCategory,
 } from '../api';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useAppSettings } from '../hooks/useAppSettings';
+import CustomSelect from './CustomSelect';
 import { nextPosition } from '../utils/workspaces';
 
 /**
@@ -26,6 +28,7 @@ import { nextPosition } from '../utils/workspaces';
 function WorkspacesView({ onShowToast }) {
   const { t } = useTranslation();
   const { workspaces, reload, categoriesFor } = useWorkspaces();
+  const { settings, updateSettings } = useAppSettings();
   const [busy, setBusy] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [newCategoryFor, setNewCategoryFor] = useState(null); // workspace_id
@@ -68,6 +71,34 @@ function WorkspacesView({ onShowToast }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--text-secondary)]">{t('workspace.manage_hint')}</p>
+
+      {/* Which vocabulary the extractor is given when the user is on "Όλα".
+          A second setting beside the switcher, not a reuse of it: "where am I
+          looking" and "whose category names should the model see" are
+          different questions, and "Όλα" cannot answer the second — the model
+          must never be handed several workspaces and asked to guess. */}
+      {workspaces.length > 0 && (
+        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-input)] p-3 space-y-1">
+          <span className="text-xs text-[var(--text-secondary)] font-medium uppercase tracking-wide block">
+            {t('workspace.default_label')}
+          </span>
+          <CustomSelect
+            compact
+            value={settings?.default_workspace_id || ''}
+            options={[
+              { value: '', label: t('workspace.unfiled') },
+              ...workspaces.map((w) => ({ value: w.record_id, label: w.name })),
+            ]}
+            onChange={(value) =>
+              updateSettings({ default_workspace_id: value || null })?.catch?.(
+                (err) => onShowToast?.(err.message, 'error')
+              )
+            }
+            ariaLabel={t('workspace.default_label')}
+          />
+          <p className="text-xs text-[var(--text-muted)]">{t('workspace.default_hint')}</p>
+        </div>
+      )}
 
       {workspaces.map((workspace) => {
         const categories = categoriesFor(workspace.record_id);

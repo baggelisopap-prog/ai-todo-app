@@ -2,8 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { extractTasks } from '../api';
 import { useModalBehavior } from '../hooks/useModalBehavior';
+import { useWorkspaces } from '../hooks/useWorkspaces';
+import { UNFILED } from '../utils/workspaces';
 
 function AddTaskModal({ onClose, onTasksAdded }) {
+  const { activeId } = useWorkspaces();
+  // UNFILED is a VIEW, not a destination: a task added while looking at the
+  // unfiled pile should go to the user's default workspace, not deliberately
+  // back onto the pile. null tells the server to use that default.
+  const destination = activeId === UNFILED ? null : activeId;
+
   const { t } = useTranslation();
   useModalBehavior(onClose);
   const [text, setText] = useState('');
@@ -23,7 +31,7 @@ function AddTaskModal({ onClose, onTasksAdded }) {
     setIsSubmitting(true);
     setError(null);
     try {
-      const result = await extractTasks(trimmedText);
+      const result = await extractTasks(trimmedText, destination);
       onTasksAdded(result.saved_tasks);
     } catch (err) {
       setError(err.message);

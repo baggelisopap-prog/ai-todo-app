@@ -2,8 +2,15 @@ import { forwardRef, useState, useRef, useEffect, useImperativeHandle } from 're
 import { useTranslation } from 'react-i18next';
 import { extractTasksFromImage } from '../api';
 import { CameraIcon, SpinnerIcon } from './icons';
+import { useWorkspaces } from '../hooks/useWorkspaces';
+import { UNFILED } from '../utils/workspaces';
 
 const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButton = true, mode = 'gallery' }, ref) {
+  const { activeId } = useWorkspaces();
+  // UNFILED is a VIEW, not a destination: a task added while looking at the
+  // unfiled pile should go to the user's default workspace, not deliberately
+  // back onto the pile. null tells the server to use that default.
+  const destination = activeId === UNFILED ? null : activeId;
   const { t } = useTranslation();
   const [state, setState] = useState('idle'); // idle | preview | processing
   const [imageFile, setImageFile] = useState(null);
@@ -55,7 +62,7 @@ const PhotoButton = forwardRef(function PhotoButton({ onComplete, renderIdleButt
     setState('processing');
     setError(null);
     try {
-      const result = await extractTasksFromImage(imageFile, contextText);
+      const result = await extractTasksFromImage(imageFile, contextText, destination);
       onComplete(result.saved_tasks);
       cleanup();
     } catch (err) {

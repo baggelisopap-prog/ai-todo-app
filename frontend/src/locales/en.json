@@ -418,6 +418,8 @@
   },
   "workspace": {
     "all": "All",
+    "default_label": "Default workspace",
+    "default_hint": "When you add a task while viewing All, the AI uses this workspace’s categories.",
     "unfiled": "Unfiled",
     "label": "Workspace",
     "category_label": "Workspace category",

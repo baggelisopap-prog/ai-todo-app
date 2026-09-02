@@ -2,6 +2,8 @@ import { forwardRef, useState, useEffect, useRef, useImperativeHandle } from 're
 import { useTranslation } from 'react-i18next';
 import { extractTasksFromAudio } from '../api';
 import { MicIcon, StopIcon, SpinnerIcon } from './icons';
+import { useWorkspaces } from '../hooks/useWorkspaces';
+import { UNFILED } from '../utils/workspaces';
 
 function formatTime(s) {
   const m = Math.floor(s / 60);
@@ -10,6 +12,11 @@ function formatTime(s) {
 }
 
 const VoiceButton = forwardRef(function VoiceButton({ onComplete, renderIdleButton = true }, ref) {
+  const { activeId } = useWorkspaces();
+  // UNFILED is a VIEW, not a destination: a task added while looking at the
+  // unfiled pile should go to the user's default workspace, not deliberately
+  // back onto the pile. null tells the server to use that default.
+  const destination = activeId === UNFILED ? null : activeId;
   const { t } = useTranslation();
   const [recordingState, setRecordingState] = useState('idle');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -75,7 +82,7 @@ const VoiceButton = forwardRef(function VoiceButton({ onComplete, renderIdleButt
 
         setRecordingState('processing');
         try {
-          const result = await extractTasksFromAudio(audioBlob);
+          const result = await extractTasksFromAudio(audioBlob, destination);
           onComplete(result.saved_tasks);
         } catch (err) {
           showError(err.message);
