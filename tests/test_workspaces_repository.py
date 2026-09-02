@@ -260,3 +260,60 @@ def test_a_missing_categories_TABLE_also_returns_None(monkeypatch):
     monkeypatch.setattr(repository, "supabase", _Exploding())
 
     assert repository.get_system_category("user-1", "hostaway") is None
+
+
+# The exact set of `tasks` columns that _task_to_supabase_fields is allowed to
+# produce. user_id and calendar_origin are added by save_task afterwards; every
+# other real column is server-generated and never in a model_dump.
+TASK_COLUMNS = {
+    "task_name", "description", "category", "priority", "due_date", "due_time",
+    "checklist", "approval_status", "is_completed", "is_rejected",
+    "notify_enabled", "notification_sent", "calendar_sync_enabled",
+    "ai_suggested_category", "ai_suggested_priority",
+    "hostaway_created_at", "hostaway_last_notified_at", "hostaway_conversation_id",
+    "hostaway_last_message_at", "hostaway_message_count", "hostaway_answered_at",
+    "hostaway_thread",
+    "recurrence_rule_id", "occurrence_date", "missed_at", "cancelled_at",
+    "workspace_id", "category_id",
+}
+
+
+def test_the_write_path_sends_only_real_columns():
+    """
+    The guard that was missing when `category_name` was added to SingleTask.
+
+    TaskRecord inherits every SingleTask field, and _task_to_supabase_fields is
+    built from model_dump(), so a new model field silently becomes a new column
+    in the INSERT. Supabase rejects the WHOLE insert for one unknown key
+    (PGRST204) — which took down manual creation, all three AI extraction paths
+    and the Hostaway webhook simultaneously, on a change whose unit tests all
+    passed because none of them touch the real schema.
+
+    If this fails, either the field belongs in TASK_COLUMNS and the migration
+    adding it should be in docs/migrations/, or it is model-only and belongs in
+    the pop() list beside record_id.
+    """
+    from models import TaskRecord
+
+    fields = _task_repo._task_to_supabase_fields(TaskRecord(
+        task_name="Χ", description="", category="Business", priority="P2",
+        ai_suggested_category="Business", ai_suggested_priority="P2",
+    ))
+
+    assert set(fields) == TASK_COLUMNS, (
+        f"unexpected: {set(fields) - TASK_COLUMNS} / missing: {TASK_COLUMNS - set(fields)}"
+    )
+
+
+def test_the_models_answer_never_reaches_the_database():
+    """category_name is what the MODEL says; category_id is the column."""
+    from models import TaskRecord
+
+    fields = _task_repo._task_to_supabase_fields(TaskRecord(
+        task_name="Χ", description="", category="Business", priority="P2",
+        ai_suggested_category="Business", ai_suggested_priority="P2",
+        category_name="crypto", category_id="c1",
+    ))
+
+    assert "category_name" not in fields
+    assert fields["category_id"] == "c1"

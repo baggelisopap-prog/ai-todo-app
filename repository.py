@@ -83,6 +83,14 @@ class AirtableTaskRepository:
         fields.pop("record_id", None)
         fields.pop("created_time", None)
 
+        # category_name is what the MODEL answers with; the column is
+        # category_id, which services.resolve_category_name has already filled
+        # in from it. TaskRecord inherits the field from SingleTask, so
+        # model_dump() carries it here whether we want it or not — and Supabase
+        # rejects the whole INSERT for one unknown key (PGRST204), which took
+        # down every task-creation path at once until this line existed.
+        fields.pop("category_name", None)
+
         # checklist is a JSONB column now — hand it a plain list of dicts,
         # no manual JSON string encoding needed.
         fields["checklist"] = self._checklist_to_jsonb(task.checklist)
