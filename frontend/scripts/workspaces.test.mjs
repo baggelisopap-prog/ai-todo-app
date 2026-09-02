@@ -15,9 +15,11 @@ import { dirname, join } from 'node:path';
 
 import {
   filterTasksByWorkspace,
+  filterTasksByCategory,
   categoriesForWorkspace,
   describePlacement,
   nextPosition,
+  UNFILED,
 } from '../src/utils/workspaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -117,6 +119,34 @@ check('a new item goes after the highest, not after the count',
   nextPosition([{ position: 0 }, { position: 7 }]), 8);
 check('a missing position counts as 0 rather than NaN',
   nextPosition([{}, { position: 2 }]), 3);
+
+// ------------------------------------------------------ the unfiled bucket
+check('the unfiled chip shows exactly the tasks with no workspace',
+  filterTasksByWorkspace(
+    [task({ record_id: 'filed', workspace_id: 'ws-b' }),
+     task({ record_id: 'bare' })], UNFILED).map((t) => t.record_id),
+  ['bare']);
+
+check('UNFILED cannot collide with a real id', UNFILED.startsWith('__'), true);
+
+// ------------------------------------------------------ category filtering
+check('no category filter returns everything',
+  filterTasksByCategory(
+    [task({ record_id: 'a', category_id: 'c1' }), task({ record_id: 'b' })], null)
+    .map((t) => t.record_id),
+  ['a', 'b']);
+
+check('a category keeps only its own',
+  filterTasksByCategory(
+    [task({ record_id: 'in', category_id: 'c1' }),
+     task({ record_id: 'out', category_id: 'c2' })], 'c1').map((t) => t.record_id),
+  ['in']);
+
+check('an uncategorised task is findable, not lost',
+  filterTasksByCategory(
+    [task({ record_id: 'filed', category_id: 'c1' }),
+     task({ record_id: 'bare' })], UNFILED).map((t) => t.record_id),
+  ['bare']);
 
 console.log(failures === 0 ? '\nAll workspace checks passed.' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -8,16 +8,36 @@
  */
 
 /**
+ * The value both filters use for "has none".
+ *
+ * A sentinel rather than null, because null already means "no filter at all"
+ * in these controls — and "show me everything" and "show me the ones nobody
+ * filed" are opposite requests. Prefixed so it can never collide with a uuid.
+ */
+export const UNFILED = '__unfiled__';
+
+/**
  * The task list narrowed to one workspace.
  *
  * `activeId` null means "Όλα", and that deliberately INCLUDES unfiled tasks —
  * a task with no workspace is still the user's work and must never disappear
- * because they have not made a choice.
+ * because they have not made a choice. UNFILED asks for the opposite: only
+ * the ones with no workspace, which is where anything the AI could not place
+ * goes to be found.
  */
 export function filterTasksByWorkspace(tasks, activeId) {
   const list = tasks || [];
   if (!activeId) return list;
+  if (activeId === UNFILED) return list.filter((task) => !task.workspace_id);
   return list.filter((task) => task.workspace_id === activeId);
+}
+
+/** The task list narrowed to one category, or to the ones with none. */
+export function filterTasksByCategory(tasks, categoryId) {
+  const list = tasks || [];
+  if (!categoryId) return list;
+  if (categoryId === UNFILED) return list.filter((task) => !task.category_id);
+  return list.filter((task) => task.category_id === categoryId);
 }
 
 /** One workspace's categories, in the order the user arranged them. */
