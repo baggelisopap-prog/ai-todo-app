@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspaces } from '../api';
 import { WorkspaceContext } from '../hooks/useWorkspaces';
 import { useAppSettings } from '../hooks/useAppSettings';
-import { categoriesForWorkspace } from '../utils/workspaces';
+import { categoriesForWorkspace, UNFILED } from '../utils/workspaces';
 
 /**
  * One copy of this user's workspaces and categories, fetched once.
@@ -78,8 +78,12 @@ export function WorkspaceProvider({ children, onShowToast }) {
   // If the active workspace no longer exists — deleted here or on another
   // device — fall back to "Όλα" rather than filtering against an id nothing
   // matches, which would render every screen empty with no way to tell why.
+  // UNFILED is accepted alongside the real ids: it is a legitimate position,
+  // not a stale one, and without it here the chip would deselect itself on
+  // every render.
   const resolvedActiveId = useMemo(
-    () => (workspaces.some((w) => w.record_id === activeId) ? activeId : null),
+    () => (activeId === UNFILED || workspaces.some((w) => w.record_id === activeId)
+      ? activeId : null),
     [workspaces, activeId]
   );
 

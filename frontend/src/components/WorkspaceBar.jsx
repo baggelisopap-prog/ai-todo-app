@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { UNFILED } from '../utils/workspaces';
 
 /**
  * The workspace switcher: a row of chips under the AppBar, "Όλα" first.
@@ -18,7 +19,15 @@ function WorkspaceBar() {
 
   if (workspaces.length < 2) return null;
 
-  const chips = [{ record_id: null, name: t('workspace.all'), color: null }, ...workspaces];
+  // Last, after the real workspaces: it is where anything the AI could not
+  // place goes to be found. Without it the old "Unknown" filter would have
+  // been removed with nothing in its place, and an unfiled task would only
+  // ever be visible mixed into "Όλα".
+  const chips = [
+    { record_id: null, name: t('workspace.all'), color: null },
+    ...workspaces,
+    { record_id: UNFILED, name: t('workspace.unfiled'), color: null },
+  ];
 
   return (
     // top-14 matches the AppBar's h-14 above it, so the two stack while the
