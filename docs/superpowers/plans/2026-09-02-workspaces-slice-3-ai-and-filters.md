@@ -79,7 +79,7 @@ plain-node frontend test scripts.
 **Interfaces:**
 - Produces: `app_settings.default_workspace_id`. Tasks 2 and 10 depend on it.
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 ```sql
 -- The default workspace — the one the extractor uses when nothing is selected.
@@ -115,12 +115,12 @@ left join workspaces w on w.id = s.default_workspace_id
 order by u.email;
 ```
 
-- [ ] **Step 2: Verify it destroys nothing**
+- [x] **Step 2: Verify it destroys nothing**
 
 Run: `grep -n -i "drop\|delete from\|truncate" docs/migrations/2026-09-02-default-workspace.sql`
 Expected: no output at all.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/migrations/2026-09-02-default-workspace.sql
@@ -140,7 +140,7 @@ git commit -m "Migration: which workspace the extractor speaks for"
 - Produces: `AppSettings.default_workspace_id` round-trips through `GET`/`PATCH /settings`.
   Task 3 reads it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_workspaces_api.py`:
 
@@ -163,12 +163,12 @@ def test_the_default_workspace_round_trips(client, monkeypatch):
     assert saved["default_workspace_id"] == "ws-1"
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_workspaces_api.py -q`
 Expected: FAIL — `KeyError: 'default_workspace_id'`.
 
-- [ ] **Step 3: Add the field to `models.py`'s `AppSettings`**, beside `active_workspace_id`
+- [x] **Step 3: Add the field to `models.py`'s `AppSettings`**, beside `active_workspace_id`
 
 ```python
     # Which workspace the EXTRACTOR speaks for when active_workspace_id is NULL
@@ -178,24 +178,24 @@ Expected: FAIL — `KeyError: 'default_workspace_id'`.
     default_workspace_id: Optional[str] = None
 ```
 
-- [ ] **Step 4: Read it in `repository.get_app_settings`**, beside `active_workspace_id`
+- [x] **Step 4: Read it in `repository.get_app_settings`**, beside `active_workspace_id`
 
 ```python
         default_workspace_id=row.get("default_workspace_id"),
 ```
 
-- [ ] **Step 5: Pass it in `main.py`'s `update_settings`**, beside `active_workspace_id`
+- [x] **Step 5: Pass it in `main.py`'s `update_settings`**, beside `active_workspace_id`
 
 ```python
             default_workspace_id=payload.default_workspace_id,
 ```
 
-- [ ] **Step 6: Run the suite**
+- [x] **Step 6: Run the suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
 Expected: 268 passed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add models.py repository.py main.py tests/test_workspaces_api.py
@@ -217,7 +217,7 @@ git commit -m "The setting that tells the extractor which vocabulary to use"
   `services.TaskService.resolve_category_name(user_id, workspace_id, name) -> Optional[str]`.
   Tasks 4 and 5 both use the last one.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_extract_workspace.py`:
 
@@ -302,12 +302,12 @@ def test_no_name_and_no_workspace_are_both_safe(service):
     assert service.resolve_category_name(USER, None, "μετοχές") is None
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_extract_workspace.py -q`
 Expected: FAIL — `AttributeError: 'TaskService' object has no attribute 'resolve_extraction_workspace'`.
 
-- [ ] **Step 3: Add the repository helper**, beside `get_categories` in `repository.py`
+- [x] **Step 3: Add the repository helper**, beside `get_categories` in `repository.py`
 
 ```python
 def get_categories_for_workspace(user_id: str, workspace_id: str) -> list[Category]:
@@ -319,7 +319,7 @@ def get_categories_for_workspace(user_id: str, workspace_id: str) -> list[Catego
     return [c for c in get_categories(user_id) if c.workspace_id == workspace_id]
 ```
 
-- [ ] **Step 4: Add both resolvers to `services.TaskService`**, beside `validate_workspace_placement`
+- [x] **Step 4: Add both resolvers to `services.TaskService`**, beside `validate_workspace_placement`
 
 ```python
     def resolve_extraction_workspace(self, user_id: str, requested_id) -> Optional[str]:
@@ -362,12 +362,12 @@ def get_categories_for_workspace(user_id: str, workspace_id: str) -> list[Catego
         return None
 ```
 
-- [ ] **Step 5: Run it**
+- [x] **Step 5: Run it**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_extract_workspace.py -q`
 Expected: 8 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add repository.py services.py tests/test_extract_workspace.py
@@ -390,7 +390,7 @@ git commit -m "One workspace for the model, and a name it cannot fake"
 **Read first:** `sed -n '25,70p' ai_engine.py` — the instruction builder and how it is called
 from all three extract paths. Line 43 is the hardcoded category line being replaced.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_extract_workspace.py`:
 
@@ -421,12 +421,12 @@ def test_a_workspace_with_no_categories_says_so_rather_than_listing_nothing(monk
     assert "category_name" in instruction
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_extract_workspace.py -q`
 Expected: FAIL — `AttributeError: module 'ai_engine' has no attribute 'build_extraction_instruction'`.
 
-- [ ] **Step 3: Add `category_name` to `SingleTask` in `models.py`**
+- [x] **Step 3: Add `category_name` to `SingleTask` in `models.py`**
 
 ```python
     # What the model ANSWERS with for the user's own categories — a name, never
@@ -436,7 +436,7 @@ Expected: FAIL — `AttributeError: module 'ai_engine' has no attribute 'build_e
     category_name: Optional[str] = None
 ```
 
-- [ ] **Step 4: Build the instruction from the user's categories in `ai_engine.py`**
+- [x] **Step 4: Build the instruction from the user's categories in `ai_engine.py`**
 
 Rename `_build_system_instruction()` to `build_extraction_instruction(user_id, workspace_id)`
 and append, after the existing hardcoded `category` line (which stays — it still fills the
@@ -474,7 +474,7 @@ def build_extraction_instruction(user_id: str, workspace_id) -> str:
     )
 ```
 
-- [ ] **Step 5: Thread `workspace_id` through the three extract paths**
+- [x] **Step 5: Thread `workspace_id` through the three extract paths**
 
 `main.py`: add `workspace_id: Optional[str] = None` to `ExtractRequest`, and accept it as a
 form field / query parameter on the voice and image routes exactly as those routes already
@@ -491,14 +491,14 @@ take their other parameters. Each route resolves it before calling the service:
             "category_id": self.resolve_category_name(user_id, workspace_id, item.category_name),
 ```
 
-- [ ] **Step 6: Run the suite**
+- [x] **Step 6: Run the suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
 Expected: 278 passed. Any existing extraction test that now hits an unstubbed
 `get_categories_for_workspace` must be given a stub — an unstubbed repository call reaches
 the live database, which is the exact failure Slice 1 uncovered in `test_webhook_fanout.py`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ai_engine.py models.py main.py services.py tests/test_extract_workspace.py
@@ -522,7 +522,7 @@ git commit -m "The extractor is handed your words, and only yours"
 full before touching it (`sed -n '318,336p' agent_tools.py`) — it records that this block is
 74% of every prompt token ever billed, and what happened last time it stopped being constant.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_agent_dynamic_categories.py`:
 
@@ -574,12 +574,12 @@ def test_no_vocabulary_leaves_the_instruction_byte_identical():
     assert agent_tools.build_system_instruction("") == agent_tools.build_system_instruction()
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/test_agent_dynamic_categories.py -q`
 Expected: FAIL — `AttributeError: module 'agent_tools' has no attribute 'build_vocabulary_block'`.
 
-- [ ] **Step 3: Add the vocabulary builder to `agent_tools.py`**
+- [x] **Step 3: Add the vocabulary builder to `agent_tools.py`**
 
 ```python
 def build_vocabulary_block(workspaces, categories) -> str:
@@ -614,7 +614,7 @@ def build_vocabulary_block(workspaces, categories) -> str:
     )
 ```
 
-- [ ] **Step 4: Let the instruction take an optional tail**
+- [x] **Step 4: Let the instruction take an optional tail**
 
 ```python
 def build_system_instruction(vocabulary: str = "") -> str:
@@ -624,7 +624,7 @@ and change the final `return """..."""` to `return """...""" + vocabulary`. **Do
 one character of the string itself** — the test asserting `dynamic.startswith(static)` is
 what proves the prefix survived.
 
-- [ ] **Step 5: Pass the vocabulary in `agent_engine.py:182`**
+- [x] **Step 5: Pass the vocabulary in `agent_engine.py:182`**
 
 ```python
         system_instruction = agent_tools.build_system_instruction(
@@ -635,12 +635,12 @@ what proves the prefix survived.
         )
 ```
 
-- [ ] **Step 6: Run the suite**
+- [x] **Step 6: Run the suite**
 
 Run: `./venv/Scripts/python.exe -m pytest tests/ -q`
 Expected: 282 passed. Agent tests that call the engine need the two repository calls stubbed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add agent_tools.py agent_engine.py tests/test_agent_dynamic_categories.py
@@ -658,7 +658,7 @@ git commit -m "The agent learns your words, at the end of the sentence"
 - Produces: `filterTasksByCategory(tasks, categoryId)` where `'unfiled'` is a real value;
   `UNFILED` — the sentinel. Tasks 8 and 9 use both.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/scripts/workspaces.test.mjs`, before the final `console.log`:
 
@@ -686,12 +686,12 @@ check('UNFILED does not collide with a real id', UNFILED.startsWith('__'), true)
 
 and add `filterTasksByCategory, UNFILED` to the import at the top of that file.
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `cd frontend && node scripts/workspaces.test.mjs`
 Expected: FAIL — `filterTasksByCategory is not a function`.
 
-- [ ] **Step 3: Add both to `frontend/src/utils/workspaces.js`**
+- [x] **Step 3: Add both to `frontend/src/utils/workspaces.js`**
 
 ```js
 /**
@@ -712,12 +712,12 @@ export function filterTasksByCategory(tasks, categoryId) {
 }
 ```
 
-- [ ] **Step 4: Run it**
+- [x] **Step 4: Run it**
 
 Run: `cd frontend && node scripts/workspaces.test.mjs`
 Expected: all PASS, 25 checks.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/utils/workspaces.js frontend/scripts/workspaces.test.mjs
@@ -734,7 +734,7 @@ git commit -m "Show me everything and show me the unfiled are opposite requests"
 This is the chip that made an AI-created task look as though it had landed in the Personal
 workspace when it had landed nowhere. It is the single most misleading thing on the screen.
 
-- [ ] **Step 1: Delete the old category chip**
+- [x] **Step 1: Delete the old category chip**
 
 Remove the whole `{task.category && task.category !== 'Unknown' && (...)}` block (around
 `TaskRow.jsx:285`) and, if they become unused, the `categoryColor` / `categoryLabel`
@@ -751,12 +751,12 @@ Leave a comment where it was:
                 longer shown. */}
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3`
 Expected: all PASS; **12 problems**. An unused-import error here means step 1 left one behind.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/components/TaskRow.jsx
@@ -774,7 +774,7 @@ git commit -m "The chip that lied about where a task went"
 **Interfaces:**
 - Consumes: Task 6's `filterTasksByCategory` / `UNFILED`; Slice 2's `useWorkspaces`.
 
-- [ ] **Step 1: Rewrite `FilterBar.jsx`'s category options**
+- [x] **Step 1: Rewrite `FilterBar.jsx`'s category options**
 
 ```jsx
   const { activeId, categoriesFor } = useWorkspaces();
@@ -795,25 +795,25 @@ git commit -m "The chip that lied about where a task went"
 and render the category `CustomSelect` only when `categoryOptions` is non-null, leaving the
 priority select to take the full width otherwise.
 
-- [ ] **Step 2: Repoint the two predicates**
+- [x] **Step 2: Repoint the two predicates**
 
 `TodayView.jsx:54` and `CalendarView.jsx:381` currently read
 `(selectedCategory === 'All' || task.category === selectedCategory)`. Both become a call to
 `filterTasksByCategory` over the list, with `selectedCategory === 'All'` passed as `null`.
 
-- [ ] **Step 3: Rewrite `BrowseView.jsx`'s pills and counts**
+- [x] **Step 3: Rewrite `BrowseView.jsx`'s pills and counts**
 
 The hardcoded `categoryOptions` array and the `Business/Personal/Unknown/Hostaway` counts
 become the active workspace's categories plus `UNFILED`, counted the same way. Where there
 is no active workspace, render no category pills at all — the workspace chips above are
 already doing that job.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3 && npx vite build`
 Expected: all PASS; **12 problems**; `✓ built`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/FilterBar.jsx frontend/src/components/TodayView.jsx \
@@ -832,7 +832,7 @@ git commit -m "The category filter belongs under a workspace, not beside it"
 It replaces the old "Unknown" filter, which the workspace chips otherwise removed with
 nothing in its place. It is where a task the AI could not place goes to be found.
 
-- [ ] **Step 1: Extend `filterTasksByWorkspace` and its tests**
+- [x] **Step 1: Extend `filterTasksByWorkspace` and its tests**
 
 `UNFILED` becomes a legal `activeId`, meaning "tasks with no workspace":
 
@@ -855,7 +855,7 @@ check('the unfiled chip shows exactly the tasks with no workspace',
   ['bare']);
 ```
 
-- [ ] **Step 2: Add the chip and keep the fallback honest**
+- [x] **Step 2: Add the chip and keep the fallback honest**
 
 In `WorkspaceBar.jsx`, append after the workspaces:
 `{ record_id: UNFILED, name: t('workspace.unfiled'), color: null }`.
@@ -869,12 +869,12 @@ on every render:
       ? activeId : null),
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3`
 Expected: all PASS; **12 problems**.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/components/WorkspaceBar.jsx frontend/src/components/WorkspaceProvider.jsx \
@@ -893,7 +893,7 @@ git commit -m "Somewhere to find what nobody filed"
 **Interfaces:**
 - Consumes: Task 4's `workspace_id` parameters; Task 2's setting.
 
-- [ ] **Step 1: Send the active workspace from the three add paths**
+- [x] **Step 1: Send the active workspace from the three add paths**
 
 `api.js`: `extractTasks(text, workspaceId)`, and the same second argument on the voice and
 image calls, sent the way each of those routes already takes its parameters.
@@ -907,7 +907,7 @@ default rather than deliberately back onto the pile:
   const destination = activeId === UNFILED ? null : activeId;
 ```
 
-- [ ] **Step 2: Add the default-workspace picker to `WorkspacesView.jsx`**
+- [x] **Step 2: Add the default-workspace picker to `WorkspacesView.jsx`**
 
 One `CustomSelect` at the top of that screen, labelled `t('workspace.default_label')`, over
 `workspaces`, saving through `updateSettings({ default_workspace_id: value || null })`, with
@@ -925,13 +925,13 @@ New keys, in **both** locale files:
     "default_hint": "When you add a task while viewing “All”, the AI uses this workspace's categories."
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `cd frontend && npm run check && npm run lint 2>&1 | tail -3 && npx vite build`
 Expected: all PASS (`ui-check` proves both locale files gained both keys); **12 problems**;
 `✓ built`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/api.js frontend/src/components/AddTaskModal.jsx \
@@ -947,10 +947,10 @@ git commit -m "A task lands where you were standing"
 
 Automated:
 
-- [ ] `./venv/Scripts/python.exe -m pytest tests/ -q` — **282+ passed**, none failing
-- [ ] `cd frontend && npm run check` — every suite PASS, `ui-check: OK`
-- [ ] `cd frontend && npm run lint 2>&1 | tail -3` — **12 problems**, not 13
-- [ ] `npx vite build` — `✓ built`
+- [x] `./venv/Scripts/python.exe -m pytest tests/ -q` — **284 passed**, none failing
+- [x] `cd frontend && npm run check` — every suite PASS, `ui-check: OK`
+- [x] `cd frontend && npm run lint` — **12 problems**. One warning WAS added (an unmemoised array in BrowseView feeding a useMemo) and was fixed, not suppressed.
+- [x] `npx vite build` — `✓ built`
 - [ ] The owner has run `2026-09-02-default-workspace.sql` and read its one query back
 
 **The browser walkthrough:**
