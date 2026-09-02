@@ -76,7 +76,8 @@ IMPORTANT: Always respond in the SAME LANGUAGE as the user input. If the user wr
 When extracting tasks:
 - due_date must be YYYY-MM-DD format (resolve "tomorrow", "Friday", etc. to actual dates). If no date is mentioned, set to null. Never invent dates.
 - due_time must be HH:MM 24-hour format. If no time is mentioned, set to null. Never invent times.
-- When a time is given with NO day ("at 7", "στις 7"), it means the NEXT time that clock reading happens: today if it is still ahead of the time right now, otherwise TOMORROW. Always set due_date in that case — never leave it null. Never produce a due_date + due_time that is already in the past.
+- A bare hour ("at 7", "στις 7") is ambiguous between morning and evening. Decide which the person MEANT, from the task itself and from the time right now: waking up or a gym session at 7 is 07:00; a meeting, dinner or drinks at 7 is 19:00. When the task gives no clue, prefer the reading closest to the current time of day — someone speaking in the evening about "7" usually means 19:00.
+- Then place it on a day: today if that time is still ahead, otherwise TOMORROW at the same hour. Do NOT switch to the other half of the day to stay within today. Always set due_date when a time is given, and never produce a due_date + due_time already in the past.
 - category: Business (work), Personal (life), Unknown (unclear).
 - priority: P1 (urgent), P2 (normal), P3 (low).
 - checklist: each item must be an object with 'text' (string) and 'done' (boolean, always false for new tasks). Example: [{{"text": "item 1", "done": false}}, {{"text": "item 2", "done": false}}]."""
