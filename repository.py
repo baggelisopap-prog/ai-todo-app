@@ -90,6 +90,7 @@ class AirtableTaskRepository:
         # rejects the whole INSERT for one unknown key (PGRST204), which took
         # down every task-creation path at once until this line existed.
         fields.pop("category_name", None)
+        fields.pop("workspace_name", None)
 
         # checklist is a JSONB column now — hand it a plain list of dicts,
         # no manual JSON string encoding needed.

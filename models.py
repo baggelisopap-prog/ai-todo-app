@@ -23,6 +23,10 @@ class SingleTask(BaseModel):
         default_factory=list,
         description="List of checklist items. Each item is an object with 'text' (the item description) and 'done' (whether completed, defaults to false). AI should always set done=false for new tasks.",
     )
+    # What the model ANSWERS with for the workspace — a NAME, and ONLY asked for
+    # when the user was on "Όλα" so we genuinely do not know it. Standing in a
+    # workspace, the model is never asked, and anything it says here is ignored.
+    workspace_name: Optional[str] = None
     # What the model ANSWERS with for the user's own categories — a NAME, never
     # an id, because models truncate and invent UUIDs.
     # services.resolve_category_name turns it into tasks.category_id, and an

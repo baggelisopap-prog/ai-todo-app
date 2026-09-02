@@ -111,11 +111,107 @@ def test_a_workspace_with_no_categories_says_so_rather_than_listing_nothing(monk
 def test_the_old_four_word_line_survives(monkeypatch):
     """tasks.category is still the live column until a later slice, and the
     model still has to fill it. Adding the new names must not remove the old
-    instruction."""
+    instruction.
+
+    All three repository calls are stubbed, including the ones this path only
+    started making later: an unstubbed call here reaches the REAL Supabase, and
+    the whole point of these tests is that they never do.
+    """
     import ai_engine
     monkeypatch.setattr(ai_engine.repository, "get_categories_for_workspace",
                         lambda u, w: [])
+    monkeypatch.setattr(ai_engine.repository, "get_workspaces", lambda u: [])
+    monkeypatch.setattr(ai_engine.repository, "get_categories", lambda u: [])
 
     instruction = ai_engine.build_extraction_instruction(USER, None)
 
     assert "Business" in instruction and "Personal" in instruction
+
+
+# ================================================================= the model
+# picks the workspace too, but ONLY when we genuinely do not know it.
+#
+# Measured before it was built: 8 phrases x 3 runs, 7/7 correct on workspace
+# and every one stable. "ραντεβού με τον Κώστα στις 7" — the exact phrase the
+# owner complained had landed in Business — came back Personal, consistently.
+
+from models import Workspace
+
+WSS = [Workspace(record_id="ws-b", name="Business"),
+       Workspace(record_id="ws-p", name="Personal")]
+
+
+@pytest.fixture
+def service_with_workspaces(service, monkeypatch):
+    monkeypatch.setattr(repository, "get_workspaces", lambda u: WSS)
+    return service
+
+
+def test_a_known_workspace_name_resolves(service_with_workspaces):
+    assert service_with_workspaces.resolve_workspace_name(USER, "Personal") == "ws-p"
+
+
+def test_workspace_resolution_ignores_case_and_padding(service_with_workspaces):
+    assert service_with_workspaces.resolve_workspace_name(USER, "  BUSINESS ") == "ws-b"
+
+
+def test_an_invented_workspace_name_files_nothing(service_with_workspaces):
+    """Same rule as categories: no container is ever created from model output."""
+    assert service_with_workspaces.resolve_workspace_name(USER, "Επενδύσεις") is None
+    assert service_with_workspaces.resolve_workspace_name(USER, None) is None
+
+
+def test_the_prompt_asks_for_a_workspace_ONLY_when_none_was_given(monkeypatch):
+    """The model is never handed a choice we can already answer. Standing in a
+    workspace, it is not asked which one — that is the whole reason the
+    extractor stays accurate."""
+    import ai_engine
+    monkeypatch.setattr(ai_engine.repository, "get_workspaces", lambda u: WSS)
+    monkeypatch.setattr(ai_engine.repository, "get_categories_for_workspace",
+                        lambda u, w: [c for c in CATS if c.workspace_id == w])
+    monkeypatch.setattr(ai_engine.repository, "get_categories", lambda u: CATS)
+
+    known = ai_engine.build_extraction_instruction(USER, "ws-b")
+    unknown = ai_engine.build_extraction_instruction(USER, None)
+
+    assert "workspace_name" not in known
+    assert "κήπος" not in known           # the other workspace stays out of it
+
+    assert "workspace_name" in unknown
+    assert "Business" in unknown and "Personal" in unknown
+    assert "μετοχές" in unknown and "κήπος" in unknown
+
+
+def test_the_model_choice_is_used_when_we_did_not_know(service_with_workspaces):
+    from models import SingleTask
+    task = SingleTask(task_name="Ραντεβού", description="", category="Personal",
+                      priority="P2", workspace_name="Personal", category_name=None)
+
+    record = service_with_workspaces._single_task_to_record(task, USER, None)
+
+    assert record.workspace_id == "ws-p"
+
+
+def test_where_we_DID_know_the_model_cannot_override_it(service_with_workspaces):
+    """It was not asked, so anything it says here is noise, not an opinion."""
+    from models import SingleTask
+    task = SingleTask(task_name="Χ", description="", category="Business",
+                      priority="P2", workspace_name="Personal")
+
+    record = service_with_workspaces._single_task_to_record(task, USER, "ws-b")
+
+    assert record.workspace_id == "ws-b"
+
+
+def test_a_category_from_the_wrong_workspace_is_dropped_not_forced(service_with_workspaces):
+    """The model answered Personal + crypto. crypto lives in Business, so the
+    workspace stands and the category falls away — rather than dragging the
+    task into a workspace it did not choose."""
+    from models import SingleTask
+    task = SingleTask(task_name="Χ", description="", category="Personal",
+                      priority="P2", workspace_name="Personal", category_name="crypto")
+
+    record = service_with_workspaces._single_task_to_record(task, USER, None)
+
+    assert record.workspace_id == "ws-p"
+    assert record.category_id is None
