@@ -92,8 +92,17 @@ MAX_INSTRUCTION_CHARS = 500
 #                     "move it to Friday", have it also decide the task is
 #                     Personal, and the task vanishes in front of you. The
 #                     owner drew this line himself (2026-09-02).
+#   category        — the OLD four-word column, REMOVED here on 2026-09-02.
+#                     It is invisible in the UI now, so changing it produces
+#                     nothing the user can see — but the model kept reaching
+#                     for it because it was there. Measured: "put it in crypto"
+#                     also set category='Unknown', an edit nobody asked for that
+#                     showed up in the change list; and "move it to Personal"
+#                     set category='Personal' and reported "done" when nothing
+#                     had moved. A phantom change is bad; a false confirmation
+#                     is worse.
 TASK_AGENT_WRITABLE_FIELDS = {
-    "task_name", "description", "category", "category_id", "priority",
+    "task_name", "description", "category_id", "priority",
     "due_date", "due_time",
     "is_completed", "checklist", "notify_enabled", "calendar_sync_enabled",
 }
@@ -103,7 +112,8 @@ TASK_AGENT_WRITABLE_FIELDS = {
 # deliberately — a task with no name is not a state the UI can render.
 CLEARABLE_FIELDS = {"due_date", "due_time", "description", "checklist"}
 
-VALID_CATEGORIES = {"Business", "Personal", "Unknown", "Hostaway"}
+# VALID_CATEGORIES stood here and is gone with the field it guarded. A constant
+# nobody reads is a claim about the code that is no longer true.
 VALID_PRIORITIES = {"P1", "P2", "P3"}
 
 # Distinct from None on purpose: None means the model said nothing about the
@@ -136,7 +146,9 @@ class TaskEditPlan(BaseModel):
 
     task_name: Optional[str] = None
     description: Optional[str] = None
-    category: Optional[Literal["Business", "Personal", "Unknown", "Hostaway"]] = None
+    # The old four-word `category` field is gone from this schema on purpose —
+    # see TASK_AGENT_WRITABLE_FIELDS. A field the model can see is a field it
+    # will use.
     # The user's OWN category, answered by NAME — never an id, because models
     # truncate and invent UUIDs. _normalize_plan resolves it inside the task's
     # own workspace, so a name from elsewhere cannot land.
@@ -311,7 +323,6 @@ def _normalize_plan(plan: TaskEditPlan, task, user_id: str) -> dict:
     candidates = {
         "task_name": plan.task_name,
         "description": plan.description,
-        "category": plan.category,
         # A NAME from the model becomes an id here, looked up inside the task's
         # OWN workspace — so a name belonging to a different workspace simply
         # does not resolve, and lands in `invalid` rather than moving the task's
@@ -331,9 +342,6 @@ def _normalize_plan(plan: TaskEditPlan, task, user_id: str) -> dict:
         if value is None or key not in TASK_AGENT_WRITABLE_FIELDS:
             continue
 
-        if key == "category" and value not in VALID_CATEGORIES:
-            invalid.append(key)
-            continue
         if key == "category_id" and value is _UNRESOLVED:
             # Reported under the name the model actually used, since that is
             # what the user will recognise in the message.
@@ -444,7 +452,7 @@ def plan_task_edit(instruction: str, task, user_id: str) -> dict:
     if len(instruction) > MAX_INSTRUCTION_CHARS:
         instruction = instruction[:MAX_INSTRUCTION_CHARS]
 
-    prompt = _build_prompt(task, instruction)
+    prompt = _build_prompt(task, instruction, user_id)
     started = time.perf_counter()
 
     plan = None

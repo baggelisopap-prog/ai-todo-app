@@ -123,3 +123,42 @@ def test_the_undo_payload_carries_the_previous_category():
 
     assert result["fields"]["category_id"] == "c-stocks"
     assert result["before"]["category_id"] == "c-crypto"
+
+
+# ================================================================ the front door
+#
+# Every test above calls the module's internals directly, which is exactly how
+# _build_prompt gained a user_id parameter while the ONE line that calls it kept
+# passing two arguments. The suite stayed green; the feature raised TypeError on
+# its first real use. This test goes in the way the app does — through
+# plan_task_edit — with only the network call stubbed, so a signature that no
+# longer matches its call site fails here instead of in production.
+
+def test_the_real_entry_point_runs_end_to_end(monkeypatch):
+    class _FakeResponse:
+        text = '{"action":"edit","message":"ok","category_name":"crypto"}'
+        usage_metadata = None
+
+    monkeypatch.setattr(task_agent.client.models, "generate_content",
+                        lambda **kw: _FakeResponse())
+    monkeypatch.setattr(task_agent, "token_tracker", None)
+
+    result = task_agent.plan_task_edit("βάλ' το στα crypto", _task(), USER)
+
+    assert result["fields"]["category_id"] == "c-crypto"
+    assert "workspace_id" not in result["fields"]
+
+
+def test_the_front_door_refuses_another_workspaces_category(monkeypatch):
+    class _FakeResponse:
+        text = '{"action":"edit","message":"ok","category_name":"κήπος"}'
+        usage_metadata = None
+
+    monkeypatch.setattr(task_agent.client.models, "generate_content",
+                        lambda **kw: _FakeResponse())
+    monkeypatch.setattr(task_agent, "token_tracker", None)
+
+    result = task_agent.plan_task_edit("βάλ' το στον κήπο", _task(), USER)
+
+    assert "category_id" not in result["fields"]
+    assert "category_name" in result["invalid"]
