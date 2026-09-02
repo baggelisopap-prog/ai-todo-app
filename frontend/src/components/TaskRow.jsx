@@ -187,15 +187,23 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
         </div>
       )}
 
-      {/* z-20 is load-bearing, not decoration. The "tap anywhere else to close"
-          overlay below is `fixed inset-0 z-10` — it covers the WHOLE viewport,
-          these two buttons included. Without a higher z-index here, a tap on
-          Delete or Reschedule landed on that overlay instead, which does one
-          thing: closes the tray. The row simply slid back and nothing happened,
-          which is exactly what the owner reported on 2026-09-02. Deleting from
-          the ⋯ menu kept working the whole time, because it never goes near
-          this overlay — which is what narrowed it down. */}
-      <div className="absolute inset-y-0 right-0 z-20 flex items-stretch" aria-hidden={!isTrayOpen}>
+      {/* z-20 ONLY while the tray is open, and both halves of that matter.
+
+          It is needed at all because the "tap anywhere else to close" overlay
+          below is `fixed inset-0 z-10` — it covers the WHOLE viewport, these
+          two buttons included. Without a higher z-index, a tap on Delete or
+          Reschedule landed on the overlay, which does one thing: closes the
+          tray. The row slid back and nothing happened.
+
+          It must NOT be permanent: this element is always in the DOM and sits
+          BEHIND the card by document order. A standing z-20 lifts it in front,
+          so the two buttons showed on top of every task all the time. While the
+          tray IS open the card has slid 140px left, so the buttons occupy space
+          the card has vacated and cover nothing. */}
+      <div
+        className={`absolute inset-y-0 right-0 flex items-stretch ${isTrayOpen ? 'z-20' : ''}`}
+        aria-hidden={!isTrayOpen}
+      >
         <button
           type="button"
           tabIndex={isTrayOpen ? 0 : -1}
