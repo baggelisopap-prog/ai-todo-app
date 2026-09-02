@@ -187,7 +187,15 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
         </div>
       )}
 
-      <div className="absolute inset-y-0 right-0 flex items-stretch" aria-hidden={!isTrayOpen}>
+      {/* z-20 is load-bearing, not decoration. The "tap anywhere else to close"
+          overlay below is `fixed inset-0 z-10` — it covers the WHOLE viewport,
+          these two buttons included. Without a higher z-index here, a tap on
+          Delete or Reschedule landed on that overlay instead, which does one
+          thing: closes the tray. The row simply slid back and nothing happened,
+          which is exactly what the owner reported on 2026-09-02. Deleting from
+          the ⋯ menu kept working the whole time, because it never goes near
+          this overlay — which is what narrowed it down. */}
+      <div className="absolute inset-y-0 right-0 z-20 flex items-stretch" aria-hidden={!isTrayOpen}>
         <button
           type="button"
           tabIndex={isTrayOpen ? 0 : -1}
