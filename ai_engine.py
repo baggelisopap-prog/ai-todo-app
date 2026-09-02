@@ -67,14 +67,16 @@ def _build_system_instruction() -> str:
     """Builds the shared system instruction with the current Athens date injected."""
     athens_now = datetime.now(ZoneInfo("Europe/Athens"))
     today_str = athens_now.strftime("%A, %Y-%m-%d")
+    now_hhmm = athens_now.strftime("%H:%M")
     return f"""You are a task extraction system.
-Today is {today_str} (Europe/Athens timezone).
+Today is {today_str} and the time right now is {now_hhmm} (Europe/Athens timezone).
 
 IMPORTANT: Always respond in the SAME LANGUAGE as the user input. If the user writes in Greek, all task_name and description fields must be in Greek. If the user writes in English, respond in English. Never translate.
 
 When extracting tasks:
 - due_date must be YYYY-MM-DD format (resolve "tomorrow", "Friday", etc. to actual dates). If no date is mentioned, set to null. Never invent dates.
 - due_time must be HH:MM 24-hour format. If no time is mentioned, set to null. Never invent times.
+- When a time is given with NO day ("at 7", "στις 7"), it means the NEXT time that clock reading happens: today if it is still ahead of the time right now, otherwise TOMORROW. Always set due_date in that case — never leave it null. Never produce a due_date + due_time that is already in the past.
 - category: Business (work), Personal (life), Unknown (unclear).
 - priority: P1 (urgent), P2 (normal), P3 (low).
 - checklist: each item must be an object with 'text' (string) and 'done' (boolean, always false for new tasks). Example: [{{"text": "item 1", "done": false}}, {{"text": "item 2", "done": false}}]."""
