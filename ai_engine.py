@@ -107,7 +107,7 @@ When extracting tasks:
 - Then place it on a day: today if that time is still ahead, otherwise TOMORROW at the same hour. Do NOT switch to the other half of the day to stay within today. Always set due_date when a time is given, and never produce a due_date + due_time already in the past.
 - category: Business (work), Personal (life), Unknown (unclear).
 - priority: P1 (urgent), P2 (normal), P3 (low).
-- checklist: each item must be an object with 'text' (string) and 'done' (boolean, always false for new tasks). Example: [{{"text": "item 1", "done": false}}, {{"text": "item 2", "done": false}}]."""
+- checklist: when the user names ONE piece of work and then its parts ("3 bugs in the app by Friday", "before the check-in: ..."), make ONE task with an item per part, done=false. Two things the user simply wants done are two tasks, even on the same day or the same outing."""
 
 
 # ==========================================
