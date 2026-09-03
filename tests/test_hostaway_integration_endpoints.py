@@ -19,6 +19,12 @@ def _wire(monkeypatch, existing=None, token_ok=True, webhooks=None):
                         lambda u, updates: state["updated"].append(updates))
     monkeypatch.setattr(main.repository, "delete_hostaway_connection",
                         lambda u: state["deleted"].append(u))
+    # Connecting now creates the locked Hostaway category (2026-09-03). Stubbed
+    # like every other repository call here: unstubbed it reaches the REAL
+    # Supabase, and the connect route swallows the failure — so the test would
+    # pass while quietly making a network call on every run.
+    monkeypatch.setattr(main.service, "ensure_integration_category",
+                        lambda u, key, name: state.setdefault("categories", []).append((u, key)))
 
     def _token(credentials):
         if not token_ok:
@@ -57,6 +63,12 @@ def test_connecting_validates_then_stores(monkeypatch):
     assert (user_id, account_id, webhook_id) == ("user-1", "147809", 55555)
     assert stored_secret != "s3cret", "the secret was stored in the clear"
     assert crypto.decrypt_secret(stored_secret) == "s3cret"
+    # The locked category is born HERE and nowhere else, so that a user who
+    # never touches Hostaway does not carry an undeletable category named after
+    # a product they do not use. Asserted rather than merely stubbed: a wiring
+    # that quietly stops being called is exactly the failure this suite has
+    # already missed twice.
+    assert state.get("categories") == [("user-1", "hostaway")]
 
 
 def test_bad_credentials_store_nothing(monkeypatch):

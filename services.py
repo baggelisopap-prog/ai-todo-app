@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 from pywebpush import webpush, WebPushException
-from models import RecurrenceRule, SingleTask, TaskList, TaskRecord
+from models import Category, RecurrenceRule, SingleTask, TaskList, TaskRecord, Workspace
 from ai_engine import extract_tasks, extract_tasks_from_audio, extract_tasks_from_image
 from repository import AirtableTaskRepository
 import google_calendar
@@ -337,6 +337,76 @@ class TaskService:
         if requested_id:
             return requested_id
         return repository.get_app_settings(user_id).default_workspace_id
+
+    # The two workspaces every account starts with, in display order.
+    # Business first and Business default: the owner is aiming this at
+    # companies, a company uses both halves, and a sole trader can ignore one.
+    STARTER_WORKSPACES = (("Business", "#2563eb"), ("Personal", "#16a34a"))
+
+    def ensure_account_workspaces(self, user_id: str) -> list:
+        """
+        Furnishes an account that has no workspaces, and does nothing otherwise.
+
+        This exists because nothing else did. The 2026-09-01 migration furnished
+        the accounts that existed that day; no code has furnished one since, so
+        the next person to sign up would have got no workspaces, no chip row (it
+        needs two to appear) and every task unfiled forever.
+
+        Lazy rather than a signup trigger: no migration to run, it can be tested,
+        and it repairs any account that somehow ends up with none. Deliberately
+        a NO-OP once even one workspace exists — it must never re-create a
+        workspace the user chose to delete.
+
+        No categories are created. The workspaces are structure; the categories
+        would be a guess about someone's life.
+        """
+        existing = repository.get_workspaces(user_id)
+        if existing:
+            return existing
+
+        created = [
+            repository.create_workspace(
+                user_id, Workspace(name=name, color=color, position=i)
+            )
+            for i, (name, color) in enumerate(self.STARTER_WORKSPACES)
+        ]
+        repository.update_app_settings(
+            user_id, default_workspace_id=created[0].record_id
+        )
+        logger.info(f"[workspaces] Furnished a new account for {user_id}")
+        return created
+
+    def ensure_integration_category(self, user_id: str, system_key: str, name: str):
+        """
+        The one category an integration owns, created when it is CONNECTED and
+        never before.
+
+        Before this, the migration gave every account a Hostaway category
+        whether or not they had Hostaway — an undeletable, unrenameable row
+        named after a product they may not use, which for anyone outside short-
+        term rentals is a permanent puzzle.
+
+        It lands in Business, which every account now has. That is what retires
+        the awkward part: a category cannot be moved between workspaces, so one
+        created in whatever single workspace happened to exist would have been
+        stuck there forever.
+
+        Idempotent — reconnecting returns the existing row rather than letting
+        unique(user_id, system_key) surface as a 500.
+        """
+        existing = repository.get_system_category(user_id, system_key)
+        if existing:
+            return existing
+
+        workspaces = self.ensure_account_workspaces(user_id)
+        home = next((w for w in workspaces if w.name == "Business"), workspaces[0])
+
+        return repository.create_category(user_id, Category(
+            workspace_id=home.record_id,
+            name=name,
+            system_key=system_key,
+            position=0,
+        ))
 
     def resolve_workspace_name(self, user_id: str, name) -> Optional[str]:
         """

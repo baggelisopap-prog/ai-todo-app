@@ -945,8 +945,13 @@ def list_workspaces(user_id: str = Depends(get_current_user_id)):
     workspace would be one request per workspace on every launch.
     """
     try:
+        # Furnishes a brand-new account on its first read, and does nothing
+        # at all otherwise. Nothing else creates workspaces: the migration
+        # furnished the accounts that existed the day it ran, so without this
+        # the next person to sign up would get none, never see the chip row
+        # (it needs two) and have every task unfiled forever.
         return WorkspacesListResponse(
-            workspaces=repository.get_workspaces(user_id),
+            workspaces=service.ensure_account_workspaces(user_id),
             categories=repository.get_categories(user_id),
         )
     except Exception as e:
@@ -1887,6 +1892,15 @@ def connect_hostaway(
     repository.upsert_hostaway_connection(
         user_id, credentials.account_id, crypto.encrypt_secret(credentials.client_secret), webhook_id
     )
+    # The category is created HERE and nowhere else — only a user who actually
+    # connects Hostaway gets a locked, unrenameable category named after it.
+    # Never fatal: a guest task filed under nothing is far better than a
+    # connection that refused to save.
+    try:
+        service.ensure_integration_category(user_id, "hostaway", "Hostaway")
+    except Exception as e:
+        logging.error(f"[hostaway connect] Could not create the Hostaway category for {user_id}: {e}")
+
     logging.info(
         f"[hostaway connect] {user_id} connected account {credentials.account_id} "
         f"(webhook={webhook_id})"
