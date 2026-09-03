@@ -273,3 +273,22 @@ Recorded because the owner asked whether the explicit rule was wasted words. It 
 ### Decision: every account starts with Business AND Personal; integrations land in Business (2026-09-03)
 The owner is aiming this at companies: a company uses both halves and a sole trader can ignore one. `services.ensure_account_workspaces` furnishes them lazily on the first workspace read, with Business as `default_workspace_id`. No categories are seeded — the workspaces are structure, the categories would be a guess about someone's life.
 This also retires a real limitation rather than solving it: a category **cannot be moved between workspaces**, so an integration's category created in whatever single workspace happened to exist would be stuck there. Business always existing removes the question. Moving a category between workspaces is parked (see BACKLOG.md) because there is no obviously right answer for the tasks already filed under it.
+
+### Decision: the extraction instruction says WHEN a checklist is built, not just what shape it takes (2026-09-03)
+The instruction described a checklist item's shape (`{text, done}`) and never said when to build one. The shape is already enforced by `response_schema=TaskList`, so those words bought nothing; the decision the model actually had to make was unguided, and it made it differently on identical input. "να πάω το παιδί στον γιατρό και μετά στο σχολείο" came back once as one task that had **silently dropped the school**, and once as one task with two items. The owner's complaint was over-splitting; the measurement showed the real fault was instability in both directions.
+
+`ai_engine.py`'s `_build_system_instruction` now carries the rule instead: one piece of work the user names **together with its parts** becomes one task with an item per part; two things they simply want done stay two tasks, same day or same outing notwithstanding. Two examples anchor the shapes.
+
+**Do not shrink this line.** Three cheaper wordings were measured against the real model and all fail the same way — they merge what should stay separate, because a loose trigger ("same job with sub-steps") is permission to merge with no reason to split, and the model always finds something shared ("this afternoon", "tomorrow"):
+
+| wording | chars | score |
+|---|---|---|
+| shape only (what shipped before) | 192 | 11/15, and unstable run-to-run |
+| "same place, same trip, same sitting" | 195 | 8/11 |
+| "same job with sub-steps" alone | 115 | **0/4** |
+| that + the two-things brake, no examples | 176 | 5/8 |
+| **narrow trigger + brake + 2 examples (shipped)** | **273** | **8/8, and 14/15 across the wider set** |
+
+82 real calls over five rounds. Cost: +81 characters on a 1,573-character instruction (+5%), which also buys the removal of a redundant JSON example. One builder feeds all three capture paths (text, audio, image), so this is one line for all of them.
+
+**Known soft spot:** "doctor then school" is genuinely one outing with two stops and lands correctly in 2 runs out of 3. Left alone deliberately — another sentence in the prompt is not worth 1 case in 15.
