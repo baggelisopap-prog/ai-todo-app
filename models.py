@@ -85,6 +85,19 @@ class TaskRecord(SingleTask):
     record_id: Optional[str] = None
     created_time: Optional[str] = None
 
+    # WHEN THIS TASK WAS CREATED, surfaced 2026-09-04 for Browse's History tab.
+    #
+    # created_time above was the Airtable-era field and NOTHING WRITES IT: it is
+    # popped from both the insert and the update path, and unlike created_at it
+    # carries no database default. The frontend has been sorting Browse by it
+    # ("Νεότερα"/"Παλαιότερα") the whole time, which is why that sort has had
+    # nothing to sort on. created_at is the real one — `TIMESTAMPTZ default
+    # now()`, filled by the database on every row.
+    #
+    # Read-only, exactly like created_time: popped in _task_to_supabase_fields
+    # and in update_task so it can never be written or overwritten from here.
+    created_at: Optional[str] = None
+
     # Hostaway escalation tracking (only set on category="Hostaway" tasks).
     # hostaway_last_notified_at advances every time an escalation notification
     # fires, so "time since last notification" can be compared against the
@@ -118,6 +131,19 @@ class TaskRecord(SingleTask):
     # The row survives so the generator, which skips any occurrence_date that
     # already exists, does not recreate the task on the next tick.
     cancelled_at: Optional[str] = None
+
+    # Soft delete (2026-09-04). Set when the user deleted an ORDINARY task. The
+    # row survives so Browse's History tab can show what was deleted and when,
+    # and so Restore can simply clear this column again.
+    #
+    # cancelled_at stays a separate column even though it carries the same user
+    # intent for a recurrence occurrence: that one exists for a MECHANICAL
+    # reason (the generator recreates a hard-deleted occurrence_date within two
+    # minutes), which is not true of an ordinary task. One column answering
+    # "why is this row still here" two different ways is how a schema starts
+    # lying. Both read as "Διαγράφηκε" in the UI, because to the person who
+    # pressed Delete they are the same act.
+    deleted_at: Optional[str] = None
 
     # Workspaces (2026-09-01). Both nullable and both ON DELETE SET NULL in the
     # database: deleting a container must never delete work, so a task whose

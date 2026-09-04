@@ -232,6 +232,24 @@ class DeleteTaskResponse(BaseModel):
     """
     calendar: Literal["none", "deleted", "kept_google_origin", "delete_failed"]
 
+
+class RestoreTaskResponse(BaseModel):
+    """
+    Response body for POST /tasks/{record_id}/restore. The task is always
+    restored; this reports what happened to its Google Calendar link:
+      none               — no linked event
+      kept_google_origin — the event was never deleted (it pre-existed in
+                           Google Calendar), so the link is still live
+      link_cleared       — an app-origin event WAS removed from Google when the
+                           task was deleted, and restoring does NOT recreate
+                           it; the dead link has been cleared
+
+    link_cleared is the value the UI must not swallow. It is the one honest
+    difference between "restored" and "restored exactly as it was", and the
+    accepted hole in this feature (see docs/DECISIONS.md).
+    """
+    calendar: Literal["none", "kept_google_origin", "link_cleared"]
+
 class TaskAgentEditRequest(BaseModel):
     """Request body for POST /tasks/{record_id}/agent-edit"""
     instruction: str
@@ -625,8 +643,16 @@ def update_task(record_id: str, request: UpdateTaskRequest, user_id: str = Depen
 @app.delete("/tasks/{record_id}", response_model=DeleteTaskResponse, status_code=status.HTTP_200_OK)
 def delete_task(record_id: str, user_id: str = Depends(get_current_user_id)):
     """
-    Permanently delete a task. This is a HARD delete — the row is gone.
-    For soft delete (preserves data for AI learning), use PATCH with is_rejected=true.
+    Delete a task: it leaves every list in the app and moves to Browse's
+    History tab, where POST /tasks/{record_id}/restore can bring it back.
+
+    CORRECTED 2026-09-04. This docstring used to read "This is a HARD delete —
+    the row is gone. For soft delete (preserves data for AI learning), use
+    PATCH with is_rejected=true." Both halves stopped being true: the row now
+    survives with deleted_at stamped, and is_rejected was never a general soft
+    delete — it means "the user rejected the AI's suggestion" and exists to
+    feed the learning loop, so steering ordinary deletes into it would have
+    corrupted that signal.
 
     Returns 200 with `{"calendar": ...}` describing what happened to the linked
     Google Calendar event (was 204 No Content, which could not say). The task is
@@ -642,6 +668,31 @@ def delete_task(record_id: str, user_id: str = Depends(get_current_user_id)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete task: {str(e)}"
+        )
+
+@app.post("/tasks/{record_id}/restore", response_model=RestoreTaskResponse, status_code=status.HTTP_200_OK)
+def restore_task(record_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Undo a delete: clears deleted_at (and cancelled_at, so one button also
+    restores a cancelled recurrence occurrence) and the task is live again.
+
+    POST rather than PATCH deliberately. PATCH /tasks/{id} takes a field dict
+    and would let any caller clear deleted_at as a side effect of an ordinary
+    edit; restoring is its own act and gets its own door. It is also why
+    services.restore_task, not the generic update path, owns the calendar
+    bookkeeping described in RestoreTaskResponse.
+
+    No time limit. Nothing purges deleted rows, so a cutoff would be code whose
+    only job is to refuse something that works — decided with the owner on
+    2026-09-04.
+    """
+    try:
+        return RestoreTaskResponse(calendar=service.restore_task(user_id, record_id))
+    except Exception as e:
+        logger.exception(f"Failed to restore task {record_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to restore task: {str(e)}"
         )
 
 @app.post("/tasks/{record_id}/agent-edit", response_model=TaskAgentEditResponse)

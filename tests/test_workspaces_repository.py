@@ -274,6 +274,7 @@ TASK_COLUMNS = {
     "hostaway_last_message_at", "hostaway_message_count", "hostaway_answered_at",
     "hostaway_thread",
     "recurrence_rule_id", "occurrence_date", "missed_at", "cancelled_at",
+    "deleted_at",
     "workspace_id", "category_id",
 }
 

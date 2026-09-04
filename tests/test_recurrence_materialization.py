@@ -4,7 +4,8 @@ Generation, idempotency, and the two things a rule edit must never destroy.
 The scheduler runs every ~2 minutes, so "running it twice changes nothing"
 is not a nicety here — it is the correctness property.
 """
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import logging
 
@@ -12,6 +13,16 @@ import pytest
 
 import services
 from models import RecurrenceRule, TaskRecord
+
+
+def _is_recent_athens_iso(value: str) -> bool:
+    """Same check test_completion_source.py makes of completed_at, for the same
+    reason: a timestamp column that arrives without an offset, or holding
+    something that is not a time at all, only shows up as a wrong day in the
+    History screen months later."""
+    stamped = datetime.fromisoformat(value)
+    assert stamped.tzinfo is not None, "a timestamptz column needs an offset"
+    return abs((datetime.now(ZoneInfo("Europe/Athens")) - stamped).total_seconds()) < 60
 
 
 def _rule(**overrides):
@@ -382,23 +393,66 @@ def test_a_cancelled_occurrence_stays_invisible_even_when_completed_are_included
     assert agent_tools.is_open_task(cancelled, include_completed=True) is False
 
 
+def test_the_agent_does_not_see_a_soft_deleted_task():
+    """
+    The whole reason deleted_at was added to is_open_task rather than to each
+    caller. This one function is what the agent's day view, its search, every
+    write guard, the escalation query and the reminders all read — so a task
+    the user deleted cannot be answered about, notified about, or escalated,
+    and no screen had to be visited to make that true.
+    """
+    deleted = TaskRecord(task_name="gone", description="", category="Business",
+                         priority="P1", ai_suggested_category="Business",
+                         ai_suggested_priority="P1", approval_status=True,
+                         record_id="t1", deleted_at="2026-09-04T09:00:00+03:00")
+    live = TaskRecord(task_name="here", description="", category="Business",
+                      priority="P1", ai_suggested_category="Business",
+                      ai_suggested_priority="P1", approval_status=True,
+                      record_id="t2")
+
+    assert agent_tools.is_open_task(deleted) is False
+    assert agent_tools.is_open_task(live) is True
+
+
+def test_a_soft_deleted_task_stays_invisible_even_when_completed_are_included():
+    """include_completed widens the window to finished work, not to deleted
+    work. A deleted task is not a completed one and must not ride in on that
+    flag -- the agent uses it to answer "what did I get done"."""
+    deleted = TaskRecord(task_name="gone", description="", category="Business",
+                         priority="P1", ai_suggested_category="Business",
+                         ai_suggested_priority="P1", approval_status=True,
+                         record_id="t1", deleted_at="2026-09-04T09:00:00+03:00")
+    assert agent_tools.is_open_task(deleted, include_completed=True) is False
+
+
 # --- delete routing -----------------------------------------------------------
 
 class _FakeTaskRepo:
-    """Stands in for AirtableTaskRepository: only the one method
-    services.TaskService.delete_task calls through self.repository for the
-    hard-delete path."""
+    """Stands in for AirtableTaskRepository: only the methods
+    services.TaskService.delete_task / restore_task call through
+    self.repository.
 
-    def __init__(self, task):
+    Deliberately does NOT define delete_task. The repository method was renamed
+    to soft_delete_task on 2026-09-04, and a fake still answering to the old
+    name would let a caller that missed the rename pass its tests while doing
+    the old thing against a method that no longer exists in production."""
+
+    def __init__(self, task, restore_succeeds=True):
         self._task = task
-        self.delete_calls = []
+        self.soft_delete_calls = []
+        self.restore_calls = []
+        self._restore_succeeds = restore_succeeds
 
     def get_task(self, user_id, record_id):
         return self._task
 
-    def delete_task(self, user_id, record_id):
-        self.delete_calls.append((user_id, record_id))
+    def soft_delete_task(self, user_id, record_id, deleted_at):
+        self.soft_delete_calls.append((user_id, record_id, deleted_at))
         return True
+
+    def restore_task(self, user_id, record_id):
+        self.restore_calls.append((user_id, record_id))
+        return self._restore_succeeds
 
 
 def _wire_delete(monkeypatch, task, cancel_succeeds=True):
@@ -426,12 +480,28 @@ def test_deleting_a_recurring_occurrence_cancels_instead_of_hard_deleting(monkey
 
     assert len(seen["cancelled"]) == 1
     assert seen["cancelled"][0][:2] == ("user-1", "t1")
-    assert fake_repo.delete_calls == [], "a recurring occurrence must never be hard-deleted"
+    assert fake_repo.soft_delete_calls == [], "a recurring occurrence takes the cancelled_at branch, not deleted_at"
 
 
-def test_deleting_an_ordinary_task_still_hard_deletes(monkeypatch):
-    """No recurrence_rule_id means no rule could ever resurrect it -- turning
-    every delete into a soft delete would mean the app never frees a row."""
+def test_deleting_an_ordinary_task_stamps_deleted_at_instead_of_removing_the_row(monkeypatch):
+    """
+    REVERSED 2026-09-04, deliberately and by the owner's decision.
+
+    This test used to be called test_deleting_an_ordinary_task_still_hard_deletes
+    and asserted the opposite, on the reasoning: "No recurrence_rule_id means no
+    rule could ever resurrect it -- turning every delete into a soft delete
+    would mean the app never frees a row."
+
+    Freeing the row is exactly what was given up. The rows ARE the archive that
+    Browse's History tab reads, and "the app never frees a row" turned out to
+    be the feature, not the cost: a hard delete destroyed the only answer to
+    "what did I have last month" and to "I deleted that by mistake".
+
+    What did NOT change is the two branches staying apart. An ordinary task
+    gets deleted_at; only a recurrence occurrence gets cancelled_at, because
+    that column carries a mechanical requirement (the generator skips a date
+    that already exists) an ordinary task does not have.
+    """
     ordinary = TaskRecord(task_name="plain", description="", category="Business",
                           priority="P1", ai_suggested_category="Business",
                           ai_suggested_priority="P1", approval_status=True,
@@ -440,7 +510,13 @@ def test_deleting_an_ordinary_task_still_hard_deletes(monkeypatch):
 
     svc.delete_task("user-1", "t2")
 
-    assert fake_repo.delete_calls == [("user-1", "t2")]
+    assert len(fake_repo.soft_delete_calls) == 1
+    user, record, deleted_at = fake_repo.soft_delete_calls[0]
+    assert (user, record) == ("user-1", "t2")
+    assert _is_recent_athens_iso(deleted_at), (
+        "deleted_at must be a real Athens-local timestamp, not a bare True -- "
+        "the History tab groups by day and reads exactly this value"
+    )
     assert seen["cancelled"] == [], "an ordinary task must never be soft-cancelled"
 
 
@@ -482,15 +558,15 @@ def test_a_failed_recurrence_lookup_never_falls_through_to_a_hard_delete(monkeyp
     with pytest.raises(RuntimeError):
         svc.delete_task("user-1", "t1")
 
-    assert fake_repo.delete_calls == [], "a failed lookup must not fall through to a hard delete"
+    assert fake_repo.soft_delete_calls == [], "a failed lookup must not fall through to the ordinary delete"
 
 
-def test_a_genuinely_absent_row_still_takes_the_hard_delete_path(monkeypatch):
+def test_a_genuinely_absent_row_still_takes_the_ordinary_delete_path(monkeypatch):
     """
     The other half of the same distinction: None because the row really
     isn't there is a legitimate, honest answer and must still resolve --
-    falling through to the hard-delete branch, which itself raises on a
-    zero-row response.
+    falling through to the ordinary deleted_at branch, which itself raises on
+    a zero-row response.
     """
     monkeypatch.setattr(services.repository, "get_task_calendar_fields", lambda u, r: None)
     monkeypatch.setattr(services.repository, "get_task_recurrence_fields", lambda u, r: None, raising=False)
@@ -501,7 +577,7 @@ def test_a_genuinely_absent_row_still_takes_the_hard_delete_path(monkeypatch):
 
     svc.delete_task("user-1", "t1")
 
-    assert fake_repo.delete_calls == [("user-1", "t1")]
+    assert [c[:2] for c in fake_repo.soft_delete_calls] == [("user-1", "t1")]
 
 
 def test_the_cancel_log_line_does_not_claim_a_delete(monkeypatch, caplog):
@@ -520,10 +596,15 @@ def test_the_cancel_log_line_does_not_claim_a_delete(monkeypatch, caplog):
     line = "\n".join(caplog.messages)
     assert "cancel" in line.lower()
     assert "rule-1" in line, "the rule id names which rule caused the cancellation"
-    assert "Deleted task t1." not in line
+    assert "Soft-deleted task t1." not in line
 
 
-def test_the_ordinary_delete_log_line_is_unchanged(monkeypatch, caplog):
+def test_the_ordinary_delete_log_line_says_soft_deleted(monkeypatch, caplog):
+    """Was test_the_ordinary_delete_log_line_is_unchanged, asserting "Deleted
+    task t2.". The line changed with the behaviour, and the point of the test
+    did not: the two branches must stay distinguishable in the log, because
+    this repo has already nearly mis-diagnosed an incident on a diagnostic that
+    could not tell two outcomes apart."""
     ordinary = TaskRecord(task_name="plain", description="", category="Business",
                           priority="P1", ai_suggested_category="Business",
                           ai_suggested_priority="P1", approval_status=True,
@@ -533,4 +614,85 @@ def test_the_ordinary_delete_log_line_is_unchanged(monkeypatch, caplog):
     with caplog.at_level(logging.INFO):
         svc.delete_task("user-1", "t2")
 
-    assert "Deleted task t2." in "\n".join(caplog.messages)
+    line = "\n".join(caplog.messages)
+    assert "Soft-deleted task t2." in line
+    assert "cancel" not in line.lower(), "an ordinary delete must not read like a cancellation"
+
+
+# --- Restore (2026-09-04) --------------------------------------------------
+
+
+def _wire_restore(monkeypatch, calendar_fields, restore_succeeds=True):
+    seen = {"unlinked": []}
+    monkeypatch.setattr(services.repository, "get_task_calendar_fields", lambda u, r: calendar_fields)
+    monkeypatch.setattr(services.repository, "unlink_task_from_calendar",
+                        lambda task_id: seen["unlinked"].append(task_id), raising=False)
+
+    svc = services.TaskService.__new__(services.TaskService)
+    fake_repo = _FakeTaskRepo(None, restore_succeeds=restore_succeeds)
+    svc.repository = fake_repo
+    return svc, fake_repo, seen
+
+
+def test_restoring_a_task_with_no_calendar_link_reports_none(monkeypatch):
+    svc, fake_repo, seen = _wire_restore(monkeypatch, None)
+
+    assert svc.restore_task("user-1", "t1") == "none"
+    assert fake_repo.restore_calls == [("user-1", "t1")]
+    assert seen["unlinked"] == []
+
+
+def test_restoring_an_app_origin_task_clears_the_dead_calendar_link(monkeypatch):
+    """
+    The accepted hole, asserted so it cannot be quietly closed or quietly
+    forgotten. Deleting an app-origin task removed its Google event; restoring
+    does NOT recreate it, so the link must be cleared and the caller told, or
+    the task keeps pointing at an event that no longer exists and every later
+    sync tries to update a ghost.
+    """
+    svc, fake_repo, seen = _wire_restore(
+        monkeypatch, {"google_event_id": "ev-1", "calendar_origin": "app"}
+    )
+
+    assert svc.restore_task("user-1", "t1") == "link_cleared"
+    assert seen["unlinked"] == ["t1"]
+
+
+def test_restoring_a_google_origin_task_keeps_its_still_live_link(monkeypatch):
+    """The mirror of the delete rule: an event that pre-existed in Google
+    Calendar was never deleted, so its link is still good and must not be
+    thrown away."""
+    svc, fake_repo, seen = _wire_restore(
+        monkeypatch, {"google_event_id": "ev-1", "calendar_origin": "google"}
+    )
+
+    assert svc.restore_task("user-1", "t1") == "kept_google_origin"
+    assert seen["unlinked"] == [], "a live link must survive a restore"
+
+
+def test_restoring_raises_when_no_row_matched(monkeypatch):
+    """Same reason the delete branch checks: a PostgREST UPDATE matching zero
+    rows returns 200 with empty data rather than raising, so without this the
+    UI would report the task restored while it stayed deleted."""
+    svc, fake_repo, seen = _wire_restore(monkeypatch, None, restore_succeeds=False)
+
+    with pytest.raises(RuntimeError):
+        svc.restore_task("user-1", "t1")
+
+
+def test_a_failed_unlink_never_undoes_the_restore(monkeypatch):
+    """Clearing the dead link is bookkeeping. The task is already restored by
+    the time it runs, and a failure there must not surface as a failed restore
+    -- a dangling id the next sync complains about is strictly better than
+    telling the user their task did not come back when it did."""
+    svc, fake_repo, seen = _wire_restore(
+        monkeypatch, {"google_event_id": "ev-1", "calendar_origin": "app"}
+    )
+
+    def _boom(task_id):
+        raise RuntimeError("supabase timeout")
+
+    monkeypatch.setattr(services.repository, "unlink_task_from_calendar", _boom, raising=False)
+
+    assert svc.restore_task("user-1", "t1") == "link_cleared"
+    assert fake_repo.restore_calls == [("user-1", "t1")]

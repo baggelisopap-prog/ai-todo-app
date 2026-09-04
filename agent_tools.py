@@ -33,11 +33,18 @@ def is_open_task(t, include_completed: bool = False) -> bool:
     """SINGLE SOURCE OF TRUTH for 'counts as an open task'.
     Any change to the pending-approval policy happens HERE and nowhere else."""
     # missed_at is a recurrence occurrence that outlived its grace and closed
-    # itself. cancelled_at is one the user deliberately deleted. Both are kept
-    # as a record — "was Monday's check done?" must have an answer — but
-    # neither is work anybody can still do, so neither is open, not even with
-    # include_completed.
-    if t.is_rejected or t.missed_at or t.cancelled_at or not t.approval_status:
+    # itself. cancelled_at is one the user deliberately deleted. deleted_at is
+    # an ordinary task the user deleted (2026-09-04: deletes stopped removing
+    # the row). All three are kept as a record — "was Monday's check done?"
+    # must have an answer — but none is work anybody can still do, so none is
+    # open, not even with include_completed.
+    #
+    # deleted_at belongs HERE and nowhere else. This function is what the agent,
+    # the day view, the escalation query and the reminders all read, so adding
+    # the clause here is what keeps a deleted task from being answered about,
+    # notified about, or escalated. Anything that filters tasks by hand instead
+    # of calling this is a bug waiting for the next state to be added.
+    if t.is_rejected or t.missed_at or t.cancelled_at or t.deleted_at or not t.approval_status:
         return False
     if not include_completed and t.is_completed:
         return False

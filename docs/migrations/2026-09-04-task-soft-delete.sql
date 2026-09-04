@@ -1,0 +1,78 @@
+-- A deleted task stops disappearing — run in the Supabase SQL Editor.
+--
+-- RUN THIS BEFORE DEPLOYING THE CODE THAT WRITES THIS COLUMN.
+-- repository.update_task sends its dict straight to Supabase, and Supabase
+-- rejects a write containing an unknown column WHOLESALE (PGRST204) — the same
+-- shape as the `category_name` field that took down manual creation, all three
+-- AI extraction paths and the Hostaway webhook simultaneously on 2026-09-01.
+-- Deploy first and every delete in the app fails. Migration first, deploy
+-- second.
+--
+-- The other direction is safe and the window can be as long as you like:
+-- _supabase_row_to_task reads named keys off the row (row.get("due_date"), …)
+-- and never splats it into TaskRecord(**row), so the running old code gets one
+-- extra column back from `select *` and ignores it.
+--
+-- Why this exists: until today repository.delete_task ran a real DELETE. The
+-- row was gone, and with it the answer to "what did I have last month" and to
+-- "I deleted that by mistake". Two of the three timestamps the owner asked for
+-- were already on the row — created_at and completed_at — and only the deletion
+-- had nowhere to live.
+--
+-- Why a column and not a separate history table: created_at and completed_at
+-- already sit on the task row. A second table would mean copying them and
+-- keeping two records of the same life in step — the standard way to end up
+-- with two answers to one question.
+--
+-- Why NOT a reuse of cancelled_at: cancelled_at means "the user deleted THIS
+-- recurrence occurrence", and it exists because get_occurrence_dates skips any
+-- occurrence_date that already exists — remove the row and the generator
+-- recreates the task within two minutes. That mechanical requirement does not
+-- apply to an ordinary task, and overloading the column would make "why does
+-- this row still exist" have two different answers. In the History screen both
+-- read as "Διαγράφηκε", because to the person who pressed Delete they are the
+-- same act.
+--
+-- ACCEPTED WEAKNESS, decided with the owner on 2026-09-04: restore does not
+-- bring back the Google Calendar event. Deleting a task with
+-- calendar_origin='app' deletes its event on Google's side immediately, and
+-- Google is outside this database — there is no undo to reach for. A restored
+-- task comes back with its calendar link cleared and the UI says so out loud
+-- rather than reporting a bare success. This is a known hole, not an oversight.
+--
+-- No index. Every read is `select * where user_id = …` for one user and the
+-- filtering happens in Python afterwards, so an index on deleted_at would cost
+-- writes and buy nothing at this size.
+--
+-- Existing rows keep NULL, which is the honest state: NULL means "not deleted",
+-- and everything actually deleted before today is gone with no record to
+-- backfill from. The archive starts the day this runs.
+
+alter table tasks add column if not exists deleted_at timestamptz;
+
+-- ---------------------------------------------------------------------------
+-- VERIFICATION — commented out deliberately. Uncomment and run this block
+-- AFTER applying the statement above, to confirm it actually took.
+--
+-- Query 2 is the one that matters, and it proves BOTH things at once: it names
+-- deleted_at, so Postgres would have raised "column deleted_at does not exist"
+-- rather than returning a number if the column were missing. Query 1 is
+-- therefore redundant, kept only because a data_type is easier to read than an
+-- inference.
+--
+-- Query 2 expects deleted = 0 — a new column must not have touched a single
+-- row — and total to equal your current task count.
+--
+-- APPLIED 2026-09-04. Read back by the owner: total 325, deleted 0.
+-- (The 301 quoted in docs on 2026-09-03 was a day older; Hostaway messages and
+-- daily recurrence occurrences add rows continuously, so the total moves on
+-- its own. `deleted` is the number that had to be 0, and was.)
+-- ---------------------------------------------------------------------------
+
+-- select column_name, data_type
+-- from information_schema.columns
+-- where table_name = 'tasks' and column_name = 'deleted_at';
+
+-- select count(*) as total,
+--        count(deleted_at) as deleted
+-- from tasks;

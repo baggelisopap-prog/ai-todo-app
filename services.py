@@ -560,15 +560,23 @@ class TaskService:
 
     def delete_task(self, user_id: str, record_id: str) -> str:
         """
-        Disposes of a task, scoped to user_id, permanently: hard-deletes an
-        ordinary task, cancels a recurring occurrence. Raises on failure.
+        Disposes of a task, scoped to user_id: stamps deleted_at on an ordinary
+        task, cancels a recurring occurrence. Raises on failure.
 
-        A recurring occurrence (non-null recurrence_rule_id) is the one
-        exception: it is cancelled instead of hard-deleted, because
-        get_occurrence_dates skips any occurrence_date that already exists,
-        so removing the row would make the generator recreate it on the next
-        ~2-minute tick. An ordinary task has no rule that could resurrect it
-        and keeps the hard delete below.
+        NOTHING IS HARD-DELETED HERE ANY MORE (2026-09-04). Until that date an
+        ordinary task was really removed, and the test guarding it said so:
+        "turning every delete into a soft delete would mean the app never frees
+        a row". The owner has since decided the opposite — the rows ARE the
+        archive that Browse's History tab reads, and freeing them was never
+        worth the answer it destroyed to "what did I have last month". Both
+        branches now leave the row in place; only the column differs.
+
+        A recurring occurrence (non-null recurrence_rule_id) still takes its
+        own branch and stamps cancelled_at, because that column carries a
+        MECHANICAL requirement an ordinary task does not have:
+        get_occurrence_dates skips any occurrence_date that already exists, so
+        the generator must be able to tell "this date is spoken for" from
+        "this task was deleted".
 
         Origin-aware calendar cleanup: only deletes the linked Google
         Calendar event if this task originated in the app
@@ -607,10 +615,12 @@ class TaskService:
                 f"so the generator will not recreate it."
             )
         else:
-            success = self.repository.delete_task(user_id, record_id)
+            success = self.repository.soft_delete_task(
+                user_id, record_id, datetime.now(ZoneInfo("Europe/Athens")).isoformat()
+            )
             if not success:
                 raise RuntimeError(f"Failed to delete task {record_id}")
-            logger.info(f"Deleted task {record_id}.")
+            logger.info(f"Soft-deleted task {record_id}.")
 
         if not calendar_fields or not calendar_fields.get("google_event_id"):
             return "none"
@@ -624,6 +634,61 @@ class TaskService:
 
         deleted = google_calendar.delete_calendar_event(user_id, calendar_fields["google_event_id"])
         return "deleted" if deleted else "delete_failed"
+
+    def restore_task(self, user_id: str, record_id: str) -> str:
+        """
+        Undoes a delete, scoped to user_id: clears deleted_at and cancelled_at
+        so the task is live again. Raises on failure.
+
+        Returns WHAT HAPPENED TO THE CALENDAR, the same shape delete_task
+        returns and for the same reason — the caller must be able to tell the
+        user the truth instead of a bare "restored":
+          "none"               — no linked event; nothing to say
+          "kept_google_origin" — the event was never deleted (it pre-existed in
+                                 Google Calendar), so the link is still live
+          "link_cleared"       — an app-origin event WAS deleted from Google
+                                 when this task was deleted, and restoring the
+                                 task does not bring it back
+
+        That last case is the accepted hole in this feature, decided with the
+        owner on 2026-09-04 (see docs/DECISIONS.md). Google Calendar is outside
+        this database and there is no undo to reach for: recreating the event
+        would mean a new event id, new invites and a second entry in anyone
+        else's copy of the calendar. So the link is cleared rather than left
+        pointing at an event that no longer exists, and the UI says so out
+        loud. A task with a dangling google_event_id is worse than an honest
+        one with none — the sync would keep trying to update a ghost.
+        """
+        calendar_fields = None
+        try:
+            calendar_fields = repository.get_task_calendar_fields(user_id, record_id)
+        except Exception as e:
+            logger.error(
+                f"[calendar sync] Failed to look up linked calendar event before restoring task {record_id}: {e}"
+            )
+
+        restored = self.repository.restore_task(user_id, record_id)
+        if not restored:
+            raise RuntimeError(f"Failed to restore task {record_id}")
+        logger.info(f"Restored task {record_id}.")
+
+        if not calendar_fields or not calendar_fields.get("google_event_id"):
+            return "none"
+
+        if calendar_fields.get("calendar_origin") != "app":
+            return "kept_google_origin"
+
+        # Clearing the link is best-effort on purpose: the task is already
+        # restored and a bookkeeping failure here must not undo that or raise
+        # in the user's face. The worst case is a dangling id the next sync
+        # logs about, which is strictly better than a lost restore.
+        try:
+            repository.unlink_task_from_calendar(record_id)
+        except Exception as e:
+            logger.error(
+                f"[calendar sync] Restored task {record_id} but failed to clear its dead google_event_id: {e}"
+            )
+        return "link_cleared"
 
     def send_push_to_user(self, user_id: str, title: str, body: str, view: Optional[str] = None) -> dict:
         """

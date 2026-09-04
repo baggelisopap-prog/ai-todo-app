@@ -82,6 +82,12 @@ class AirtableTaskRepository:
         # Remove server-generated fields Supabase manages itself
         fields.pop("record_id", None)
         fields.pop("created_time", None)
+        # created_at is a real column with a database default, so unlike
+        # category_name it would not be rejected — it would be silently
+        # OVERWRITTEN with whatever the model happened to be holding, which on
+        # a re-save is the row's own old value and on a fresh object is None.
+        # A creation date that moves is worse than one that is missing.
+        fields.pop("created_at", None)
 
         # category_name is what the MODEL answers with; the column is
         # category_id, which services.resolve_category_name has already filled
@@ -154,6 +160,7 @@ class AirtableTaskRepository:
             ai_suggested_priority=row["ai_suggested_priority"],
             record_id=record_id,
             created_time=row.get("created_time"),
+            created_at=row.get("created_at"),
             hostaway_created_at=row.get("hostaway_created_at"),
             hostaway_last_notified_at=row.get("hostaway_last_notified_at"),
             hostaway_conversation_id=row.get("hostaway_conversation_id"),
@@ -165,6 +172,7 @@ class AirtableTaskRepository:
             occurrence_date=row.get("occurrence_date"),
             missed_at=row.get("missed_at"),
             cancelled_at=row.get("cancelled_at"),
+            deleted_at=row.get("deleted_at"),
             # row.get, deliberately not _get(row, key, default): NULL here is a
             # real value meaning "unfiled", not a blank standing in for a typed
             # default. The write side needs no equivalent — it is built from
@@ -253,6 +261,7 @@ class AirtableTaskRepository:
         # Prevent accidental overwrites of read-only fields
         mapped_updates.pop("record_id", None)
         mapped_updates.pop("created_time", None)
+        mapped_updates.pop("created_at", None)
 
         # Double eq is deliberate defense-in-depth: even if a wrong/spoofed
         # record_id were somehow passed, this guarantees the update can
@@ -268,19 +277,60 @@ class AirtableTaskRepository:
         logger.info(f"Successfully updated task in Supabase. ID: {record_id}")
         return self._supabase_row_to_task(response.data[0])
 
-    def delete_task(self, user_id: str, record_id: str) -> bool:
+    def soft_delete_task(self, user_id: str, record_id: str, deleted_at: str) -> bool:
         """
-        Permanently deletes a task from Supabase, scoped to user_id.
-        Returns True if deletion succeeded.
+        Marks a task as deleted by stamping deleted_at, leaving the row in
+        place, scoped to user_id. Returns whether a row was actually updated.
+
+        Renamed from delete_task on 2026-09-04 when the DELETE became an
+        UPDATE. The rename is the point: a caller still reaching for the old
+        name gets an AttributeError instead of silently keeping the old
+        behaviour on a path nobody re-read.
+
+        The row survives because it IS the history — Browse's History tab reads
+        deleted_at, and Restore clears it again. Nothing purges these rows; the
+        archive is deliberately permanent (see docs/DECISIONS.md).
+
+        The bool return matters for the same reason it does in cancel_task: a
+        PostgREST UPDATE matching zero rows returns 200 with empty data rather
+        than raising, so without this signal a race or an RLS edge case would
+        leave the row untouched while the caller reported success.
         """
         response = (
             supabase.table("tasks")
-            .delete()
+            .update({"deleted_at": deleted_at})
             .eq("id", record_id)
             .eq("user_id", user_id)
             .execute()
         )
-        logger.info(f"Successfully deleted task from Supabase. ID: {record_id}")
+        logger.info(f"Marked task deleted in Supabase. ID: {record_id}")
+        return bool(response.data)
+
+    def restore_task(self, user_id: str, record_id: str) -> bool:
+        """
+        Undoes a soft delete by clearing deleted_at, scoped to user_id.
+        Returns whether a row was actually updated.
+
+        Clears cancelled_at too, so one button restores both an ordinary task
+        and a cancelled recurrence occurrence — to the user they were the same
+        act. Restoring an occurrence is safe: get_occurrence_dates skips any
+        occurrence_date that already exists regardless of state, and the row
+        never went away, so nothing is duplicated.
+
+        Deliberately does NOT touch the Google Calendar link. Deleting an
+        app-origin task removes its event on Google's side immediately and
+        there is no undo to reach for — services.restore_task clears the dead
+        link and reports it, rather than leaving a task pointing at an event
+        that no longer exists.
+        """
+        response = (
+            supabase.table("tasks")
+            .update({"deleted_at": None, "cancelled_at": None})
+            .eq("id", record_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        logger.info(f"Restored task in Supabase. ID: {record_id}")
         return bool(response.data)
 
 
