@@ -177,10 +177,35 @@ def _event(task_id="task-1", title="Αλλαγή σεντονιών", date="2026
     }
 
 
-def _pull(monkeypatch, events, snapshot):
-    """Runs one pull against a fake Google, returning the write-backs it made."""
-    writes = []
+def _foreign_event(event_id="ev-abc", title="Ραντεβού γιατρός", date="2026-09-10",
+                   time="12:00", description="", link="https://calendar.google.com/e"):
+    """An event the OWNER created in Google Calendar — no task-id marker on it."""
+    start = {"dateTime": f"{date}T{time}:00+03:00"} if time else {"date": date}
+    return {
+        "id": event_id, "summary": title, "status": "confirmed", "start": start,
+        "description": description, "htmlLink": link,
+    }
 
+
+def _pull(monkeypatch, events, snapshot=None, stored_events=None):
+    """
+    Runs one pull against a fake Google. Returns what it wrote, and where:
+    "tasks" — write-backs onto the user's tasks, "events" — upserts into the
+    stored copy of the user's own Google events.
+    """
+    writes = []
+    upserts = []
+
+    monkeypatch.setattr(
+        google_calendar.repository, "get_google_calendar_events_snapshot",
+        lambda user_id, event_ids: {
+            k: v for k, v in (stored_events or {}).items() if k in event_ids
+        },
+    )
+    monkeypatch.setattr(
+        google_calendar.repository, "upsert_google_calendar_event",
+        lambda **kwargs: upserts.append(kwargs),
+    )
     monkeypatch.setattr(
         google_calendar.repository, "get_google_calendar_connection",
         lambda u: {"calendar_sync_token": None, "access_token": "t"},
@@ -192,7 +217,7 @@ def _pull(monkeypatch, events, snapshot):
     )
     monkeypatch.setattr(
         google_calendar.repository, "get_tasks_sync_snapshot",
-        lambda user_id, task_ids: {k: v for k, v in snapshot.items() if k in task_ids},
+        lambda user_id, task_ids: {k: v for k, v in (snapshot or {}).items() if k in task_ids},
     )
     monkeypatch.setattr(
         google_calendar.repository, "update_task_from_calendar_event",
@@ -203,12 +228,17 @@ def _pull(monkeypatch, events, snapshot):
     monkeypatch.setattr(google_calendar.repository, "update_calendar_sync_token", lambda u, t: None)
 
     google_calendar.pull_calendar_changes("user-1")
-    return writes
+    return {"tasks": writes, "events": upserts}
+
+
+def _pull_tasks(monkeypatch, events, snapshot):
+    """The write-backs onto tasks only, for the tests that are about those."""
+    return _pull(monkeypatch, events, snapshot)["tasks"]
 
 
 def test_an_unchanged_event_is_not_written_back(monkeypatch):
     """The 75.000-writes-a-day bug: same title, same date, same time — no write."""
-    writes = _pull(
+    writes = _pull_tasks(
         monkeypatch,
         [_event()],
         {"task-1": {"task_name": "Αλλαγή σεντονιών", "due_date": "2026-09-10", "due_time": "17:00"}},
@@ -218,7 +248,7 @@ def test_an_unchanged_event_is_not_written_back(monkeypatch):
 
 def test_an_unchanged_all_day_event_is_not_written_back(monkeypatch):
     """A date-only task holds due_time NULL; the pull computes None. Same thing."""
-    writes = _pull(
+    writes = _pull_tasks(
         monkeypatch,
         [_event(time=None)],
         {"task-1": {"task_name": "Αλλαγή σεντονιών", "due_date": "2026-09-10", "due_time": None}},
@@ -227,7 +257,7 @@ def test_an_unchanged_all_day_event_is_not_written_back(monkeypatch):
 
 
 def test_a_changed_event_is_written_back_exactly_once(monkeypatch):
-    writes = _pull(
+    writes = _pull_tasks(
         monkeypatch,
         [_event(time="19:45")],
         {"task-1": {"task_name": "Αλλαγή σεντονιών", "due_date": "2026-09-10", "due_time": "17:00"}},
@@ -236,7 +266,7 @@ def test_a_changed_event_is_written_back_exactly_once(monkeypatch):
 
 
 def test_a_renamed_event_is_written_back(monkeypatch):
-    writes = _pull(
+    writes = _pull_tasks(
         monkeypatch,
         [_event(title="Αλλαγή σεντονιών και πετσετών")],
         {"task-1": {"task_name": "Αλλαγή σεντονιών", "due_date": "2026-09-10", "due_time": "17:00"}},
@@ -251,7 +281,7 @@ def test_the_completion_checkmark_is_not_a_change(monkeypatch):
     It is stripped before comparison, or every completed task would be
     rewritten on every tick — which is precisely the bug being fixed.
     """
-    writes = _pull(
+    writes = _pull_tasks(
         monkeypatch,
         [_event(title=f"{google_calendar.COMPLETION_CHECKMARK_PREFIX}Αλλαγή σεντονιών")],
         {"task-1": {"task_name": "Αλλαγή σεντονιών", "due_date": "2026-09-10", "due_time": "17:00"}},
@@ -265,5 +295,77 @@ def test_an_event_naming_a_task_we_cannot_see_is_not_written(monkeypatch):
     If it does not resolve to one of THIS user's tasks, there is nothing to
     write back to.
     """
-    writes = _pull(monkeypatch, [_event(task_id="someone-elses-task")], {})
+    writes = _pull_tasks(monkeypatch, [_event(task_id="someone-elses-task")], {})
     assert writes == []
+
+
+# --- 3. Same fix, next door: the owner's OWN Google events -----------------
+#
+# The task fix was measured, and the measurement showed the same waste one
+# table over: 46 of 64 rows in google_calendar_events were rewritten within
+# 170 seconds — the owner's own appointments, re-stored every ~2-minute tick
+# with identical values, roughly 33.000 writes a day. Milder than the task
+# version (nothing here feeds the push queue, so no edit can be hidden), but
+# the same unconditional write, and the same one-line answer.
+
+
+def test_an_unchanged_foreign_event_is_not_stored_again(monkeypatch):
+    stored = {
+        "ev-abc": {
+            "title": "Ραντεβού γιατρός", "description": "", "start_date": "2026-09-10",
+            "start_time": "12:00", "is_all_day": False,
+            "html_link": "https://calendar.google.com/e",
+        }
+    }
+    assert _pull(monkeypatch, [_foreign_event()], stored_events=stored)["events"] == []
+
+
+def test_an_unchanged_all_day_foreign_event_is_not_stored_again(monkeypatch):
+    stored = {
+        "ev-abc": {
+            "title": "Γενέθλια", "description": "", "start_date": "2026-09-10",
+            "start_time": None, "is_all_day": True, "html_link": None,
+        }
+    }
+    event = _foreign_event(title="Γενέθλια", time=None, link=None)
+    assert _pull(monkeypatch, [event], stored_events=stored)["events"] == []
+
+
+def test_a_moved_foreign_event_is_stored_once(monkeypatch):
+    stored = {
+        "ev-abc": {
+            "title": "Ραντεβού γιατρός", "description": "", "start_date": "2026-09-10",
+            "start_time": "12:00", "is_all_day": False,
+            "html_link": "https://calendar.google.com/e",
+        }
+    }
+    upserts = _pull(monkeypatch, [_foreign_event(time="18:30")], stored_events=stored)["events"]
+
+    assert len(upserts) == 1
+    assert upserts[0]["start_time"] == "18:30"
+
+
+def test_a_foreign_event_we_have_never_seen_is_stored(monkeypatch):
+    upserts = _pull(monkeypatch, [_foreign_event()], stored_events={})["events"]
+
+    assert len(upserts) == 1
+    assert upserts[0]["google_event_id"] == "ev-abc"
+    assert upserts[0]["title"] == "Ραντεβού γιατρός"
+
+
+def test_a_null_description_in_the_database_does_not_count_as_a_change(monkeypatch):
+    """
+    Google sends no description, the code turns that into "", and the column
+    could hold NULL. Comparing those two naively would report a difference
+    every tick and rewrite the row forever — the exact bug, wearing a
+    disguise. (Today all 43 stored rows hold "" rather than NULL; this keeps
+    it true if one ever does not.)
+    """
+    stored = {
+        "ev-abc": {
+            "title": "Ραντεβού γιατρός", "description": None, "start_date": "2026-09-10",
+            "start_time": "12:00", "is_all_day": False,
+            "html_link": "https://calendar.google.com/e",
+        }
+    }
+    assert _pull(monkeypatch, [_foreign_event()], stored_events=stored)["events"] == []

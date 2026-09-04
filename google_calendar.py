@@ -319,12 +319,23 @@ def pull_calendar_changes(user_id: str) -> int:
         # get_tasks_needing_calendar_push compares updated_at against — so a
         # stamp written here could land after a real edit and hide that edit
         # from the push queue permanently.
+        # The same measurement found the same waste one table over: 46 of 64
+        # google_calendar_events rows re-stored every tick with identical
+        # values (~33.000 writes a day). Milder — nothing here feeds the push
+        # queue, so no edit of the user's can be hidden by it — but the same
+        # unconditional write, so it gets the same batched lookup.
         page_task_ids = []
+        page_event_ids = []
         for event in items:
+            if event.get("status") == "cancelled":
+                continue
             candidate_id = event.get("extendedProperties", {}).get("private", {}).get(TASK_ID_EXTENDED_PROPERTY)
-            if candidate_id and event.get("status") != "cancelled":
+            if candidate_id:
                 page_task_ids.append(candidate_id)
+            elif event.get("id"):
+                page_event_ids.append(event["id"])
         current_tasks = repository.get_tasks_sync_snapshot(user_id, page_task_ids)
+        current_events = repository.get_google_calendar_events_snapshot(user_id, page_event_ids)
 
         for event in items:
             task_id = event.get("extendedProperties", {}).get("private", {}).get(TASK_ID_EXTENDED_PROPERTY)
@@ -409,17 +420,36 @@ def pull_calendar_changes(user_id: str) -> int:
                         logging.info(f"[calendar pull] foreign event {event.get('id')} has no start date/time, skipping")
                         continue  # malformed event, skip
 
-                    repository.upsert_google_calendar_event(
-                        user_id=user_id,
-                        google_event_id=event["id"],
-                        title=event.get("summary", "(χωρίς τίτλο)"),
-                        description=event.get("description", ""),
-                        start_date=ev_date,
-                        start_time=ev_time,
-                        is_all_day=is_all_day,
-                        html_link=event.get("htmlLink"),
-                    )
-                    logging.info(f"[calendar pull] stored foreign event {event['id']}: start_date={ev_date} start_time={ev_time}")
+                    ev_title = event.get("summary", "(χωρίς τίτλο)")
+                    ev_description = event.get("description", "")
+                    ev_link = event.get("htmlLink")
+
+                    # `or ""` on both sides of the text fields: Google sending
+                    # no description becomes "", the column may hold NULL, and
+                    # comparing those two naively would report a difference on
+                    # every single tick — the bug wearing a disguise.
+                    stored = current_events.get(event["id"])
+                    if stored is not None and (
+                        (stored.get("title") or "") == (ev_title or "")
+                        and (stored.get("description") or "") == (ev_description or "")
+                        and stored.get("start_date") == ev_date
+                        and stored.get("start_time") == ev_time
+                        and bool(stored.get("is_all_day")) == is_all_day
+                        and (stored.get("html_link") or None) == (ev_link or None)
+                    ):
+                        logging.info(f"[calendar pull] foreign event {event['id']} unchanged — no write")
+                    else:
+                        repository.upsert_google_calendar_event(
+                            user_id=user_id,
+                            google_event_id=event["id"],
+                            title=ev_title,
+                            description=ev_description,
+                            start_date=ev_date,
+                            start_time=ev_time,
+                            is_all_day=is_all_day,
+                            html_link=ev_link,
+                        )
+                        logging.info(f"[calendar pull] stored foreign event {event['id']}: start_date={ev_date} start_time={ev_time}")
 
             changes_processed += 1
 

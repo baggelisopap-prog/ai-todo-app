@@ -1031,6 +1031,30 @@ def upsert_google_calendar_event(user_id: str, google_event_id: str, title: str,
     }, on_conflict="user_id,google_event_id").execute()
 
 
+def get_google_calendar_events_snapshot(user_id: str, google_event_ids: list[str]) -> dict[str, dict]:
+    """
+    The fields upsert_google_calendar_event writes, for a batch of the user's
+    stored Google events at once — the foreign-event twin of
+    get_tasks_sync_snapshot, and there for the same measured reason: 46 of 64
+    of these rows were being re-stored every ~2-minute tick with identical
+    values (~33.000 writes a day) because the pull upserted every event it
+    saw without looking at what was already there.
+
+    last_synced_at is deliberately NOT selected: it is the column the write
+    itself moves, so comparing it would report a difference every time.
+    """
+    if not google_event_ids:
+        return {}
+    result = (
+        supabase.table("google_calendar_events")
+        .select("google_event_id, title, description, start_date, start_time, is_all_day, html_link")
+        .in_("google_event_id", google_event_ids)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return {row["google_event_id"]: row for row in result.data}
+
+
 def delete_google_calendar_event_record(user_id: str, google_event_id: str) -> None:
     supabase.table("google_calendar_events").delete().eq("user_id", user_id).eq("google_event_id", google_event_id).execute()
 
