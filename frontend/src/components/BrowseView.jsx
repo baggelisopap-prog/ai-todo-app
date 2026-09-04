@@ -327,6 +327,7 @@ function BrowseView({
       ) : (
         <HistoryList
           rows={historyRows}
+          onTaskUpdate={onTaskUpdate}
           onTaskRestored={onTaskRestored}
           onShowToast={onShowToast}
         />

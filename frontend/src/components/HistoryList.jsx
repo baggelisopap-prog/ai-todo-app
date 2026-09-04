@@ -95,11 +95,53 @@ function eventLine({ kind, at, exact, task }, t) {
   return t('browse.event_deleted', { time: timeOfDay(at) });
 }
 
-function HistoryRow({ row, onRestore, isRestoring }) {
+/**
+ * The way back, per state — and every state that HAD one before this screen
+ * existed must still have one.
+ *
+ * That is not a nicety: Browse used to show completed and rejected tasks as
+ * ordinary cards behind two toggles, where the circle un-completed them and
+ * the ⋯ menu un-rejected them. Moving them into History took those toggles
+ * away, and the first version of this screen offered Restore on deleted rows
+ * only — so a task ticked off by accident had no way back. The owner hit it
+ * within minutes of the deploy.
+ *
+ * A missed occurrence has no entry here on purpose, and it is the one case
+ * where nothing was taken away: those rows were never visible in Browse at
+ * all, "un-missing" is not a thing the backend can do, and the day it was for
+ * has passed regardless.
+ */
+const ACTIONS = {
+  [KIND_DELETED]: {
+    labelKey: 'browse.restore',
+    busyKey: 'browse.restoring',
+    failKey: 'toast.restore_failed',
+  },
+  [KIND_COMPLETED]: {
+    labelKey: 'browse.reopen',
+    busyKey: 'browse.reopening',
+    updates: { is_completed: false },
+    toastKey: 'toast.uncompleted',
+    failKey: 'toast.action_failed',
+  },
+  [KIND_REJECTED]: {
+    labelKey: 'browse.unreject',
+    busyKey: 'browse.reopening',
+    updates: { is_rejected: false },
+    toastKey: 'toast.unrejected',
+    // Not 'restore_failed': re-opening a task is not a restore, and a failure
+    // message naming the wrong action sends the reader looking in the wrong
+    // place for what went wrong.
+    failKey: 'toast.action_failed',
+  },
+};
+
+function HistoryRow({ row, onAct, isBusy }) {
   const { t } = useTranslation();
   const { kind, task } = row;
   const style = KIND_STYLES[kind];
   const created = task.created_at || task.created_time;
+  const action = ACTIONS[kind];
 
   return (
     <li className="flex items-start gap-3 py-2.5 px-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)]">
@@ -124,41 +166,60 @@ function HistoryRow({ row, onRestore, isRestoring }) {
         )}
       </div>
 
-      {kind === KIND_DELETED && (
+      {action && (
         <button
           type="button"
-          onClick={() => onRestore(task.record_id)}
-          disabled={isRestoring}
+          onClick={() => onAct(row)}
+          disabled={isBusy}
           className="flex-shrink-0 px-2.5 py-1 rounded-md text-xs border border-[var(--border-medium)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors"
         >
-          {isRestoring ? t('browse.restoring') : t('browse.restore')}
+          {t(isBusy ? action.busyKey : action.labelKey)}
         </button>
       )}
     </li>
   );
 }
 
-function HistoryList({ rows, onTaskRestored, onShowToast }) {
+function HistoryList({ rows, onTaskUpdate, onTaskRestored, onShowToast }) {
   const { t } = useTranslation();
-  const [restoringId, setRestoringId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
   const now = new Date();
 
-  async function handleRestore(recordId) {
-    setRestoringId(recordId);
+  /**
+   * One handler for all three ways back. A deleted row needs its own endpoint
+   * (restore clears a column the ordinary PATCH deliberately cannot reach);
+   * un-completing and un-rejecting are plain field updates that go through the
+   * same onTaskUpdate every other screen uses, so re-opening a task from here
+   * behaves exactly like un-ticking its circle in Today.
+   *
+   * In every case the row simply stops being history and leaves this list on
+   * its own — App folds the new task into state, and it reappears under Ενεργά.
+   */
+  async function handleAct(row) {
+    const { kind, task } = row;
+    const action = ACTIONS[kind];
+    if (!action) return;
+
+    setBusyId(task.record_id);
     try {
-      const { calendar } = await restoreTask(recordId);
-      onTaskRestored?.(recordId);
-      // 'link_cleared' is not a detail to swallow: the task is back but its
-      // Google Calendar event is not, and the only place the user would
-      // otherwise discover that is their own calendar, later.
-      onShowToast?.(
-        calendar === 'link_cleared' ? 'toast.restored_calendar_cleared' : 'toast.restored',
-        'success'
-      );
+      if (kind === KIND_DELETED) {
+        const { calendar } = await restoreTask(task.record_id);
+        onTaskRestored?.(task.record_id);
+        // 'link_cleared' is not a detail to swallow: the task is back but its
+        // Google Calendar event is not, and the only place the user would
+        // otherwise discover that is their own calendar, later.
+        onShowToast?.(
+          calendar === 'link_cleared' ? 'toast.restored_calendar_cleared' : 'toast.restored',
+          'success'
+        );
+      } else {
+        await onTaskUpdate(task.record_id, action.updates);
+        onShowToast?.(action.toastKey, 'success');
+      }
     } catch {
-      onShowToast?.('toast.restore_failed', 'error');
+      onShowToast?.(action.failKey, 'error');
     } finally {
-      setRestoringId(null);
+      setBusyId(null);
     }
   }
 
@@ -176,8 +237,8 @@ function HistoryList({ rows, onTaskRestored, onShowToast }) {
               <HistoryRow
                 key={row.task.record_id}
                 row={row}
-                onRestore={handleRestore}
-                isRestoring={restoringId === row.task.record_id}
+                onAct={handleAct}
+                isBusy={busyId === row.task.record_id}
               />
             ))}
           </ul>

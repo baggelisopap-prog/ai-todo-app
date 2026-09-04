@@ -234,7 +234,10 @@
     "restoring": "Restoring…",
     "empty_history": "Nothing in history yet.",
     "empty_history_hint": "The archive started on 2026-09-04. Anything deleted before that was not recorded anywhere.",
-    "empty_history_filtered": "Nothing in this range."
+    "empty_history_filtered": "Nothing in this range.",
+    "reopen": "Reopen",
+    "reopening": "Working…",
+    "unreject": "Undo"
   },
   "toast": {
     "added_one": "Added 1 task",
@@ -251,7 +254,8 @@
     "event_convert_failed": "Could not turn that event into a task",
     "restored": "Restored",
     "restored_calendar_cleared": "Task restored. Its Google Calendar event was NOT — it was removed from your calendar when the task was deleted and is not recreated. The link has been cleared.",
-    "restore_failed": "Restore failed"
+    "restore_failed": "Restore failed",
+    "action_failed": "That didn't work"
   },
   "inbox": {
     "hint": "Tap ○ to approve"
