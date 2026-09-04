@@ -62,7 +62,7 @@ const TRAY_WIDTH_PX = 140;
  * - **Tapping opens a reading view, not a form.** That is the sheet's job; this
  *   component only reports the tap.
  */
-function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTaskDeleted, onShowToast }) {
+function TaskRow({ task, variant = 'default', showCreated = false, isSelected, onOpen, onUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
   const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast });
   const { isPending, isCompleted, isRejected } = actions;
@@ -279,6 +279,21 @@ function TaskRow({ task, variant = 'default', isSelected, onOpen, onUpdate, onTa
               <span className={`flex items-center gap-1 ${DUE_TONE_CLASSES[tone]}`}>
                 <CalendarIcon className="w-3 h-3" />
                 {formatDate(task.due_date, task.due_time)}
+              </span>
+            )}
+
+            {/* Only while the list is ordered by creation date, and this is a
+                fix rather than an extra: the row shows the DUE date, so a list
+                sorted by CREATION date looked shuffled and there was no way to
+                tell a working sort from a broken one. Now the value being
+                sorted is on screen. Muted, and absent the rest of the time —
+                every row carrying a second date permanently would cost more
+                than it explains. */}
+            {showCreated && (task.created_at || task.created_time) && (
+              <span className="text-[var(--text-muted)]">
+                {t('browse.created_on', {
+                  date: formatDate((task.created_at || task.created_time).slice(0, 10)),
+                })}
               </span>
             )}
 

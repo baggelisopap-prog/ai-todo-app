@@ -16,13 +16,19 @@ import TaskDetailSheet from './TaskDetailSheet';
  * impossible to place. `isExpanded`/`onToggleExpand` still mean what they did;
  * what changed is that "expanded" now draws a sheet instead of growing the row
  * into a form.
+ *
+ * `showCreated` (2026-09-04) is the one addition since, and it is optional so
+ * the two CalendarView call sites keep working untouched: it tells the row to
+ * print "Μπήκε …" while the list is ordered by creation date, so the ordering
+ * the user chose is one they can actually see.
  */
-function TaskCard({ task, variant = 'default', isExpanded, onToggleExpand, onUpdate, onTaskDeleted, onShowToast }) {
+function TaskCard({ task, variant = 'default', showCreated = false, isExpanded, onToggleExpand, onUpdate, onTaskDeleted, onShowToast }) {
   return (
     <>
       <TaskRow
         task={task}
         variant={variant}
+        showCreated={showCreated}
         isSelected={isExpanded}
         onOpen={onToggleExpand}
         onUpdate={onUpdate}

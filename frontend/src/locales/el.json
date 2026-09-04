@@ -202,10 +202,7 @@
     "show_completed": "Εμφάνιση ολοκληρωμένων",
     "show_rejected": "Εμφάνιση απορριφθέντων",
     "sort_label": "Ταξινόμηση:",
-    "sort_newest": "Νεότερα",
-    "sort_oldest": "Παλαιότερα",
     "sort_priority": "Προτεραιότητα",
-    "sort_due_date": "Ημερομηνία λήξης",
     "tab_active": "Ενεργά",
     "tab_history": "Ιστορικό",
     "history_what": "Τι",
@@ -237,7 +234,11 @@
     "empty_history_filtered": "Τίποτα σε αυτό το διάστημα.",
     "reopen": "Ξανάνοιγμα",
     "reopening": "Γίνεται…",
-    "unreject": "Αναίρεση"
+    "unreject": "Αναίρεση",
+    "sort_created_desc": "Μπήκε: νεότερα πρώτα",
+    "sort_created_asc": "Μπήκε: παλαιότερα πρώτα",
+    "sort_due_asc": "Λήγει: νωρίτερα πρώτα",
+    "sort_due_desc": "Λήγει: αργότερα πρώτα"
   },
   "toast": {
     "added_one": "Προστέθηκε 1 εργασία",

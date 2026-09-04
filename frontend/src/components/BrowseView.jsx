@@ -53,7 +53,7 @@ function BrowseView({
   // Active-tab filters
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [priority, setPriority] = useState('All');
-  const [sortBy, setSortBy] = useState('newest');
+  const [sortBy, setSortBy] = useState('created_desc');
 
   // History-tab filters. 30 days rather than everything, because the question
   // that brings someone here is almost always recent ("where did that go");
@@ -151,11 +151,17 @@ function BrowseView({
     { value: 'P3', label: 'P3' },
   ];
 
+  // Each option names WHICH date and WHICH direction. "Νεότερα" did neither:
+  // the row shows the due date while that sort ordered by the creation date,
+  // so the list read as shuffled and a working sort was indistinguishable from
+  // a broken one. "Λήγει: αργότερα πρώτα" is genuinely new — sorting by due
+  // date only ever went one way.
   const sortOptions = [
-    { value: 'newest', label: t('browse.sort_newest') },
-    { value: 'oldest', label: t('browse.sort_oldest') },
+    { value: 'created_desc', label: t('browse.sort_created_desc') },
+    { value: 'created_asc', label: t('browse.sort_created_asc') },
+    { value: 'due_asc', label: t('browse.sort_due_asc') },
+    { value: 'due_desc', label: t('browse.sort_due_desc') },
     { value: 'priority', label: t('browse.sort_priority') },
-    { value: 'due_date', label: t('browse.sort_due_date') },
   ];
 
   const kindOptions = [

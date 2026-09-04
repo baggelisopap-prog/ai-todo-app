@@ -202,10 +202,7 @@
     "show_completed": "Show completed",
     "show_rejected": "Show rejected",
     "sort_label": "Sort:",
-    "sort_newest": "Newest",
-    "sort_oldest": "Oldest",
     "sort_priority": "Priority",
-    "sort_due_date": "Due date",
     "tab_active": "Active",
     "tab_history": "History",
     "history_what": "What",
@@ -237,7 +234,11 @@
     "empty_history_filtered": "Nothing in this range.",
     "reopen": "Reopen",
     "reopening": "Working…",
-    "unreject": "Undo"
+    "unreject": "Undo",
+    "sort_created_desc": "Added: newest first",
+    "sort_created_asc": "Added: oldest first",
+    "sort_due_asc": "Due: earliest first",
+    "sort_due_desc": "Due: latest first"
   },
   "toast": {
     "added_one": "Added 1 task",
