@@ -30,13 +30,21 @@ The distinction matters more than usual here, because one item moved from the se
 - [x] `git push` → deployed.
 - [x] **The History tab renders, with completed entries in it.** Not claimed: this is how the owner discovered he could not re-open them, so the screen was demonstrably on his phone with real rows on it.
 
-**Still unseen — this is the list to work through:**
-- [ ] Delete a task. It leaves Today/Browse **and appears under Ιστορικό → Σήμερα** with "Διαγράφηκε HH:MM".
-- [ ] Press **Επαναφορά**. It returns to Ενεργά.
-- [ ] **Ξανάνοιγμα** on a completed row puts it back, un-ticked. (Shipped in `33ab9e7`, after the deploy — never used.)
+- [x] **Ξανάνοιγμα** on a completed row puts it back, un-ticked — owner-confirmed 2026-09-04, the fix for the regression he found.
+- [x] **The sort menu** — owner-confirmed 2026-09-04: the two «Μπήκε…» directions flip the order and the row prints "Μπήκε <date>".
+
+**Still unseen:**
+- [ ] Delete a task. It leaves Today/Browse **and appears under Ιστορικό → Σήμερα** with "Διαγράφηκε HH:MM". *(Almost certainly fine — the tab is known to render and Ξανάνοιγμα works through the same list — but the delete→History path itself has not been watched.)*
 - [ ] **Αναίρεση** on a rejected row returns it to the **Εισερχόμενα**, not to Ενεργά.
-- [ ] Delete a task **that has a Google Calendar event**, then restore it. The toast must say the calendar event did NOT come back. This is the accepted hole and the one place the UI is allowed to be wordy.
 - [ ] Old completions (pre-2026-08-13) read "η ώρα δεν καταγράφηκε" rather than inventing an hour.
+- [ ] **Λήγει: αργότερα πρώτα** — the genuinely new sort option; never used.
+
+### BLOCKED, and not on this feature: the Google Calendar restore check
+- [ ] Delete a task **that has a Google Calendar event**, then restore it. The toast must say the calendar event did **NOT** come back (`link_cleared`). A bare "Επανήλθε" is the failure signal.
+
+**Why it is parked**: the owner reported on 2026-09-04 that he **has an existing problem with Google Calendar** — he did not say what, and it was not investigated here. The check therefore cannot distinguish "our restore reports the calendar honestly" from "his calendar connection is unwell to begin with", so running it now would produce an answer nobody could trust either way.
+
+**Pick it up with the calendar work, not before.** What it is testing is `services.restore_task`'s `link_cleared` branch: deleting an `calendar_origin='app'` task removes its Google event immediately, restoring does not recreate it, so the dead `google_event_id` is cleared and the UI must say so out loud. That path has unit coverage (`test_restoring_an_app_origin_task_clears_the_dead_calendar_link`) and has never run against a real Google account. Related and possibly the same area: BACKLOG.md's "Orphaned Google Calendar events + no retry on a failed delete", open since 2026-08-07.
 - [x] ~~`created_at` actually arrives~~ — **confirmed by the owner 2026-09-04**: History rows print "Μπήκε <date>". The column reaches the frontend, so the sort has something real to sort.
 - [ ] **The sort menu, after `a0edc63`.** «Μπήκε: νεότερα πρώτα» vs «Μπήκε: παλαιότερα πρώτα» must flip the order, and each row must print "Μπήκε <date>" while either is active — that is the value being sorted, on screen. «Λήγει: αργότερα πρώτα» is new and has never been used.
 
