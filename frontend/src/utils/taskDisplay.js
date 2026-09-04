@@ -138,10 +138,18 @@ export function checklistProgress(checklist) {
  * `missed_at` is a recurrence occurrence that outlived its grace window and
  * closed itself. `cancelled_at` is one the user deleted; the row survives
  * (rather than being removed) so the generator does not recreate it on the
- * next tick. Both are deliberately NOT `is_rejected`: rejection means the
+ * next tick. `deleted_at` is an ordinary task the user deleted — since
+ * 2026-09-04 a delete stamps that column instead of removing the row, so that
+ * Browse's History tab has something to show and Restore has something to
+ * clear. All three are deliberately NOT `is_rejected`: rejection means the
  * user turned down the AI's suggestion, and that column is preserved to feed
  * the learning loop.
+ *
+ * The `deleted_at` clause is why a soft delete does not leak into Today, the
+ * Calendar, Upcoming or the Inbox: every one of those screens asks this
+ * function rather than keeping its own copy of the rule. History is the one
+ * screen that deliberately does NOT call it.
  */
 export function isVisibleTask(task) {
-  return !task.is_rejected && !task.missed_at && !task.cancelled_at;
+  return !task.is_rejected && !task.missed_at && !task.cancelled_at && !task.deleted_at;
 }

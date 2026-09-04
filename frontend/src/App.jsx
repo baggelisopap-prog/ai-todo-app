@@ -215,8 +215,34 @@ function App() {
     return updatedTask;
   }
 
+  /**
+   * A delete stamps the task rather than dropping it, mirroring what the
+   * backend now does to the row (2026-09-04).
+   *
+   * Dropping it — which is what this did — would take the task out of every
+   * list including History, so a task you just deleted would be missing from
+   * the very screen built to show it until the next full reload. Every screen
+   * except History filters on `isVisibleTask`, so stamping hides it exactly as
+   * effectively as removing it did.
+   *
+   * The client's UTC stamp is a placeholder for the server's Athens-local one.
+   * They are the same instant written two ways, and `taskHistory.millis` reads
+   * both, so the row groups under the right day either way; the real value
+   * replaces this on the next GET /tasks.
+   */
   function handleTaskDeleted(recordId) {
-    setTasks((prev) => prev.filter((task) => task.record_id !== recordId));
+    const deletedAt = new Date().toISOString();
+    setTasks((prev) =>
+      prev.map((task) => (task.record_id === recordId ? { ...task, deleted_at: deletedAt } : task))
+    );
+  }
+
+  function handleTaskRestored(recordId) {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.record_id === recordId ? { ...task, deleted_at: null, cancelled_at: null } : task
+      )
+    );
   }
 
   function handleTaskCreated(task) {
@@ -263,6 +289,7 @@ function App() {
     onToggleExpand: handleToggleExpand,
     onTaskUpdate: handleUpdateTask,
     onTaskDeleted: handleTaskDeleted,
+    onTaskRestored: handleTaskRestored,
     onShowToast: handleShowToast,
   };
 

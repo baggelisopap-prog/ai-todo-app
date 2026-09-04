@@ -214,7 +214,12 @@ export async function toggleTaskCalendarSync(recordId, enabled) {
 }
 
 /**
- * DELETE /tasks/{record_id} — permanently delete a task.
+ * DELETE /tasks/{record_id} — delete a task.
+ *
+ * Since 2026-09-04 this is a SOFT delete: the task leaves every list and moves
+ * to Browse's History tab, where restoreTask() below brings it back. The row
+ * is not removed, which is what gives the History tab something to show.
+ *
  * Returns { calendar } describing what happened to the linked Google Calendar
  * event: 'none' | 'deleted' | 'kept_google_origin' | 'delete_failed'. The task
  * is deleted in all four cases — 'kept_google_origin' means the event was
@@ -243,6 +248,21 @@ export async function deleteTask(recordId) {
   } catch {
     return { calendar: 'none' };
   }
+}
+
+/**
+ * POST /tasks/{record_id}/restore — undo a delete.
+ *
+ * Returns { calendar }: 'none' | 'kept_google_origin' | 'link_cleared'.
+ *
+ * 'link_cleared' MUST reach the user. It means the task is back but its Google
+ * Calendar event is not — that event was removed from the calendar when the
+ * task was deleted, and Google is outside this app's database, so there is no
+ * undo to reach for. Showing a bare "Restored" for that case would be a lie
+ * the user only discovers when they look at their calendar.
+ */
+export async function restoreTask(recordId) {
+  return request(`/tasks/${recordId}/restore`, { method: 'POST' });
 }
 
 /**

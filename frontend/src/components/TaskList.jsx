@@ -67,11 +67,36 @@ function sortTasks(tasks, sortBy) {
   }
 }
 
+/**
+ * When a task was created, for sorting.
+ *
+ * `created_at` first, and that is a fix rather than a preference: `created_time`
+ * is the Airtable-era column, it is popped from both the insert and the update
+ * path, and unlike created_at it carries no database default — so nothing has
+ * ever written it, and "Νεότερα"/"Παλαιότερα" have been sorting a column full
+ * of nulls. created_at is the database's own `default now()`, present on every
+ * row. created_time stays as a fallback rather than being deleted, so any row
+ * that does carry one is still ordered by it instead of dropping to the end.
+ */
+function createdAt(task) {
+  return task.created_at || task.created_time || null;
+}
+
+/**
+ * Date.parse rather than localeCompare, because the two columns are not
+ * written in the same offset — Postgres hands created_at back in UTC while the
+ * app's own timestamps are Athens-local — and ISO strings only sort correctly
+ * when their offsets match.
+ */
 function compareCreatedTime(a, b, direction) {
-  if (!a.created_time && !b.created_time) return 0;
-  if (!a.created_time) return 1;
-  if (!b.created_time) return -1;
-  const result = a.created_time.localeCompare(b.created_time);
+  const at = createdAt(a);
+  const bt = createdAt(b);
+  if (!at && !bt) return 0;
+  // A task with no creation date sinks, whichever way the list is sorted:
+  // "oldest first" must not be led by rows whose age is simply unknown.
+  if (!at) return 1;
+  if (!bt) return -1;
+  const result = Date.parse(at) - Date.parse(bt);
   return direction === 'desc' ? -result : result;
 }
 
