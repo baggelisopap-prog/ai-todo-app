@@ -37,8 +37,15 @@ The distinction matters more than usual here, because one item moved from the se
 - [ ] **Αναίρεση** on a rejected row returns it to the **Εισερχόμενα**, not to Ενεργά.
 - [ ] Delete a task **that has a Google Calendar event**, then restore it. The toast must say the calendar event did NOT come back. This is the accepted hole and the one place the UI is allowed to be wordy.
 - [ ] Old completions (pre-2026-08-13) read "η ώρα δεν καταγράφηκε" rather than inventing an hour.
-- [ ] **`created_at` actually arrives**: every history row shows "Μπήκε <date>". If it is missing everywhere, the column is not reaching the frontend and the sort fix below is inert too.
-- [ ] **Νεότερα ↔ Παλαιότερα visibly changes the order.** Before this work it did nothing at all, so "it looks the same" is the failure signal.
+- [x] ~~`created_at` actually arrives~~ — **confirmed by the owner 2026-09-04**: History rows print "Μπήκε <date>". The column reaches the frontend, so the sort has something real to sort.
+- [ ] **The sort menu, after `a0edc63`.** «Μπήκε: νεότερα πρώτα» vs «Μπήκε: παλαιότερα πρώτα» must flip the order, and each row must print "Μπήκε <date>" while either is active — that is the value being sorted, on screen. «Λήγει: αργότερα πρώτα» is new and has never been used.
+
+### The sort, and why it was not the bug it looked like
+The owner reported «Νεότερα» showing 4 Σεπ, 5 Σεπ, 6 Σεπ, 26 Αυγ, 7 Σεπ and **diagnosed it himself before being told**: the row prints the DUE date while that option ordered by the CREATION date. Two different dates, one of them invisible.
+
+So the ordering was correct and unverifiable — which is worse than it sounds, because it HAD genuinely been broken until the same day, and nothing on screen could tell the two states apart. Fixed in `a0edc63`: every option names its date and direction, «Λήγει: αργότερα πρώτα» was added (due-date sorting only ever went one way), and the row prints "Μπήκε …" while a creation ordering is active.
+
+The logic moved to `utils/sortTasks.js` with 26 checks, because inside `TaskList.jsx` the plain-node scripts could not reach it and no test could have caught the null-column bug. The first assertion is that the two directions produce **different** orders — a comparator returning 0 for everything passes any test that only asks whether the same items came back.
 
 ## The regression this feature caused, and why it was predictable
 Moving completed and rejected tasks into History **took away two capabilities the owner had**: Browse's "Εμφάνιση ολοκληρωμένων" and "Εμφάνιση απορριφθέντων" toggles showed those tasks as ordinary cards, where the circle un-completed them and the ⋯ menu un-rejected them. The first version of History was read-only apart from Restore, and Restore was on deleted rows only. He hit it within minutes, on a task he had ticked by accident.
