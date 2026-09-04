@@ -144,6 +144,51 @@ def sync_google_calendar_for_user(user_id: str) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+def push_task_to_calendar_now(user_id: str, task: TaskRecord) -> None:
+    """
+    Sends ONE task to Google Calendar immediately, instead of leaving it for
+    the next scheduler tick.
+
+    Why this exists: turning the per-task calendar switch on only wrote a
+    flag, and the push waited up to two minutes for the external cron. The
+    owner reported it as "the button does nothing" — and it looked cured by
+    turning the global sync-all on, which cures nothing: both switches feed
+    the same queue and the same tick. What changed was that two minutes had
+    passed. main.py's create_recurrence already materialises synchronously
+    for exactly this reason, with the same reasoning in its docstring.
+
+    Eligibility mirrors repository.get_tasks_needing_calendar_push, so this
+    can never push something the scheduler would refuse to push.
+
+    NEVER RAISES, and never blocks the save that triggered it: the flag is
+    stored either way and the next tick retries, which is precisely today's
+    behaviour. This may only ever be faster, never less reliable.
+    """
+    try:
+        if not task.due_date or task.is_completed or task.is_rejected:
+            return
+        if not repository.get_google_calendar_connection(user_id):
+            return
+
+        calendar_fields = repository.get_task_calendar_fields(user_id, task.record_id)
+        event_id = google_calendar.sync_task_to_google_calendar(user_id, {
+            "id": task.record_id,
+            "task_name": task.task_name,
+            "description": task.description,
+            "due_date": task.due_date,
+            "due_time": task.due_time,
+            # An existing link means UPDATE that event rather than create a
+            # second one — including a task converted from a Google event,
+            # which carries its event id from birth.
+            "google_event_id": (calendar_fields or {}).get("google_event_id"),
+        })
+        if event_id:
+            repository.update_task_calendar_sync(task.record_id, event_id)
+            logger.info(f"[calendar sync] Pushed task {task.record_id} to Google immediately (event {event_id})")
+    except Exception as e:
+        logger.error(f"[calendar sync] Immediate push failed for task {task.record_id}: {e}")
+
+
 class TaskService:
     """
     Business logic layer. Coordinates AI extraction with data persistence.
@@ -555,6 +600,14 @@ class TaskService:
                     )
             except Exception as e:
                 logger.error(f"[calendar sync] Failed to mark calendar event completion for task {record_id}: {e}")
+
+        # Switching calendar sync ON sends the task NOW rather than in up to
+        # two minutes. Deliberately only on True: turning it off is a
+        # separate decision (whether to delete the Google event) that is not
+        # made here, and an ordinary edit must not start talking to Google on
+        # the user's own request path.
+        if updates.get("calendar_sync_enabled") is True:
+            push_task_to_calendar_now(user_id, updated_task)
 
         return updated_task
 

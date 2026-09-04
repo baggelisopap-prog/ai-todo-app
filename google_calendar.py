@@ -28,6 +28,14 @@ TASK_ID_EXTENDED_PROPERTY = "ai_todo_app_task_id"
 # task's task_name — otherwise the checkmark would leak into the app.
 COMPLETION_CHECKMARK_PREFIX = "✓ "
 
+# How long to wait for Google before giving up, on the calls that can run
+# INSIDE a user's own request (see services.push_task_to_calendar_now): the
+# token refresh and the event push. Without a limit, requests waits forever,
+# which was harmless while every call ran in the background scheduler and is
+# not once a button press is waiting on it. Giving up is safe here — the flag
+# is already saved and the next scheduler tick retries.
+USER_FACING_TIMEOUT_SECONDS = 5
+
 
 def get_valid_access_token(user_id: str) -> str:
     """
@@ -51,7 +59,7 @@ def get_valid_access_token(user_id: str) -> str:
             "client_secret": GOOGLE_OAUTH_CLIENT_SECRET,
             "refresh_token": connection["refresh_token"],
             "grant_type": "refresh_token",
-        })
+        }, timeout=USER_FACING_TIMEOUT_SECONDS)
         response.raise_for_status()
         new_tokens = response.json()
         new_access_token = new_tokens["access_token"]
@@ -132,6 +140,7 @@ def sync_task_to_google_calendar(user_id: str, task: dict) -> Optional[str]:
                 f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{existing_event_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
                 json=event_body,
+                timeout=USER_FACING_TIMEOUT_SECONDS,
             )
             if response.status_code == 404:
                 existing_event_id = None  # event was deleted on Google's side; fall through to create a new one
@@ -141,6 +150,7 @@ def sync_task_to_google_calendar(user_id: str, task: dict) -> Optional[str]:
                 "https://www.googleapis.com/calendar/v3/calendars/primary/events",
                 headers={"Authorization": f"Bearer {access_token}"},
                 json=event_body,
+                timeout=USER_FACING_TIMEOUT_SECONDS,
             )
 
         response.raise_for_status()
@@ -301,6 +311,21 @@ def pull_calendar_changes(user_id: str) -> int:
                 f"status={event.get('status')}"
             )
 
+        # What those tasks currently hold, fetched ONCE for the whole page.
+        # Until 2026-09-04 every linked event was written back unconditionally,
+        # so ~105 task rows were rewritten every ~2-minute tick with identical
+        # values (~75.000 writes a day, measured). The cost was the smaller
+        # half: each write also restamped google_last_synced_at, which is what
+        # get_tasks_needing_calendar_push compares updated_at against — so a
+        # stamp written here could land after a real edit and hide that edit
+        # from the push queue permanently.
+        page_task_ids = []
+        for event in items:
+            candidate_id = event.get("extendedProperties", {}).get("private", {}).get(TASK_ID_EXTENDED_PROPERTY)
+            if candidate_id and event.get("status") != "cancelled":
+                page_task_ids.append(candidate_id)
+        current_tasks = repository.get_tasks_sync_snapshot(user_id, page_task_ids)
+
         for event in items:
             task_id = event.get("extendedProperties", {}).get("private", {}).get(TASK_ID_EXTENDED_PROPERTY)
             event_summary = event.get("summary", "(no title)")
@@ -341,10 +366,25 @@ def pull_calendar_changes(user_id: str) -> int:
                     if event_title.startswith(COMPLETION_CHECKMARK_PREFIX):
                         event_title = event_title[len(COMPLETION_CHECKMARK_PREFIX):]
 
-                    repository.update_task_from_calendar_event(
-                        task_id, due_date, due_time, event_title
-                    )
-                    logging.info(f"[calendar pull] updated task {task_id}: due_date={due_date} due_time={due_time}")
+                    # Compared AFTER the checkmark is stripped, or every
+                    # completed task would look changed on every single tick.
+                    current = current_tasks.get(task_id)
+                    if current is None:
+                        logging.info(
+                            f"[calendar pull] event names task {task_id}, which is not one of this "
+                            f"user's tasks — nothing written"
+                        )
+                    elif (
+                        current.get("task_name") == event_title
+                        and current.get("due_date") == due_date
+                        and current.get("due_time") == due_time
+                    ):
+                        logging.info(f"[calendar pull] task {task_id} unchanged — no write")
+                    else:
+                        repository.update_task_from_calendar_event(
+                            task_id, due_date, due_time, event_title
+                        )
+                        logging.info(f"[calendar pull] updated task {task_id}: due_date={due_date} due_time={due_time}")
             else:
                 # Foreign event (not created by this app) — store it for the
                 # separate "Google Calendar Events" view, do NOT create a task.

@@ -961,6 +961,34 @@ def mark_task_calendar_deleted(task_id: str) -> None:
         }).eq("id", task_id).execute()
 
 
+def get_tasks_sync_snapshot(user_id: str, task_ids: list[str]) -> dict[str, dict]:
+    """
+    The three fields the calendar pull writes back (task_name, due_date,
+    due_time), for a batch of tasks at once, scoped to user_id.
+
+    ONE query per page of Google events, deliberately — the pull used to
+    write every linked task on every tick without looking, and reading each
+    task individually before deciding would have swapped ~105 writes for
+    ~105 reads per tick, which is the same number of round trips and no
+    faster. See google_calendar.pull_calendar_changes.
+
+    Scoped by user_id even though the ids arrive from Google: they come out
+    of an event's extendedProperties, i.e. data from outside this system. A
+    task id that does not resolve to one of THIS user's tasks is simply
+    absent from the result, and the caller writes nothing for it.
+    """
+    if not task_ids:
+        return {}
+    result = (
+        supabase.table("tasks")
+        .select("id, task_name, due_date, due_time")
+        .in_("id", task_ids)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return {row["id"]: row for row in result.data}
+
+
 def update_task_from_calendar_event(task_id: str, due_date: str, due_time: Optional[str], task_name: str) -> None:
     supabase.table("tasks").update({
         "due_date": due_date,
