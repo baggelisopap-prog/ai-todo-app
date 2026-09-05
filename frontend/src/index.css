@@ -289,14 +289,15 @@ body {
    the halo, clipping it on one side only. */
 @keyframes task-flash {
   0%   { box-shadow: 0 0 0 2px var(--highlight-new), 0 0 0 0 var(--highlight-new-glow); }
-  70%  { box-shadow: 0 0 0 2px var(--highlight-new), 0 0 0 10px transparent; }
+  20%  { box-shadow: 0 0 0 5px var(--highlight-new), 0 0 0 0 var(--highlight-new-glow); }
+  60%  { box-shadow: 0 0 0 2px var(--highlight-new), 0 0 0 12px transparent; }
   100% { box-shadow: 0 0 0 2px var(--highlight-new), 0 0 0 0 transparent; }
 }
 .animate-task-flash {
   position: relative;
   z-index: 1;
   box-shadow: 0 0 0 2px var(--highlight-new);
-  animation: task-flash 1.2s ease-out 3;
+  animation: task-flash 1.1s ease-out 3;
 }
 
 @media (prefers-reduced-motion: reduce) {
