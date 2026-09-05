@@ -327,3 +327,26 @@ Not a `task_history` table: `created_at` and `completed_at` are already on the t
 Then the half that actually matters, and the reason those zeros are not enough on their own: **an empty queue and a dead sync produce the identical number**. So, exactly as the 2026-08-28 migration file insists ("step 3 is the one to insist on"), one real change was made on Google's side — one event moved at `20:12:23` — and the app was watched to see what it did with it: **exactly one row updated, at `20:14:14`, with the other 109 untouched**, the new time landing in the task itself. One tick, one change, one write. That is both halves: the writing stopped, and the syncing did not.
 
 **Not proven live, and worth saying so:** that a FOREIGN event (one of the owner's own appointments rather than an app-created one) is re-stored when it genuinely changes. Live evidence covers only that unchanged ones are left alone; the write-on-change path for that table rests on its unit tests. Closing it needs nothing more than changing the time on a personal appointment and looking.
+
+### Decision: every screen refreshes itself — on return to the app, and once a minute while open
+2026-09-05. Reported as a calendar bug and it was not one.
+
+**The symptom.** The owner created an event in Google Calendar, it did not appear in the app, and it appeared only when he turned the "show Google events" switch off and back on. His own words: «περνάει μόνο άμα κλείσω και μετά ξανά ανοίξω το κουμπί».
+
+**The sync was innocent, and this was measured before anything was changed.** The event (`Κλασε`) was created on Google at `07:02:18` UTC and was in `google_calendar_events` at `07:04:13` — **1 m 55 s**. Asked directly, Google confirmed it was the only genuinely foreign event of those days; everything else in that window carried our own task-id marker, i.e. the app had put it there. `PATCH /settings` was read to the bottom for the same reason: `calendar_show_events` is a stored boolean and **nothing else** — no Google call, no sync-token reset — so flipping it could not possibly have fetched anything from Google.
+
+**The real hole: nothing ever asked twice.** `TodayView` fetched its events when the day or the toggle changed, `CalendarView` when the visible range or the toggle changed, `App` loaded tasks when a session appeared. There was no timer and no return-to-foreground handler anywhere in `frontend/src` — the only `setInterval` in the codebase belonged to the voice recorder. So while the app sat open, the screen was a photograph of whatever the server held at launch, and **flipping that switch was the only control on the screen capable of forcing a fetch**. This is the second time a wait has been mistaken for a broken button (the first is the entry above, 2026-09-04, in the opposite direction) — and this time the button really did cure it, for a reason that had nothing to do with what the button is for.
+
+**Tasks had the identical hole and were fixed in the same pass**, at the owner's instruction: a Hostaway message, an occurrence generated at midnight, or an edit made on the other device were all invisible until a reload.
+
+**`useAutoRefresh(refresh)`**, one hook, three callers. Two rules in it are not decoration:
+- **Nothing fires while the screen is hidden.** A phone in a pocket must not spend requests, and the return-to-foreground refresh already covers everything missed while it was away.
+- **The timer calls the NEWEST refresh function, never the one it was created with.** These callbacks close over what is on screen; a timer holding the original would quietly put September's events back on an October screen. Hence the ref. `CalendarView`'s per-request id exists for the neighbouring race: the background refresh and a month change now issue overlapping requests, so newest-answer-wins has to hold across both callers, where the old `cancelled` flag only ever protected its own effect.
+
+**One minute, deliberately shorter than the server's ~2-minute pull**, because the two waits add up: 2 + 2 would have made a new calendar event take up to four minutes to appear.
+
+**A background failure only reaches the console.** `refreshTasks` toasts because a person asked for that fetch; nobody asks for these, so a phone losing signal in a lift must not raise an error the user can neither explain nor act on.
+
+**Deliberately not done.** No websocket, no push-driven invalidation, no refresh on scroll or on tap. And the Today screen still asks only for events that START today — the reported event began at 23:30 the previous night, so it would never have appeared there whatever the refresh did. Whether an event that began yesterday belongs on today's screen is a product question, not a bug, and it is not answered here.
+
+**Unseen, and it is the whole point of the change:** an event created on Google appearing on the owner's phone **without him touching anything**. Tests, lint and build prove the code is sound (`auto-refresh.test.mjs`, 7 checks, both broken models kept alongside so the scenarios are known to discriminate); they cannot prove a screen refreshed itself. That needs him, the app open on the Calendar, and about two minutes.

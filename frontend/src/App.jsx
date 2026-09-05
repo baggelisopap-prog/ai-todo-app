@@ -19,6 +19,7 @@ import AppBar from './components/AppBar';
 import WorkspaceProvider from './components/WorkspaceProvider';
 import WorkspaceBar from './components/WorkspaceBar';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { useAutoRefresh } from './hooks/useAutoRefresh';
 import { filterTasksByWorkspace } from './utils/workspaces';
 import { isVisibleTask } from './utils/taskDisplay';
 
@@ -181,6 +182,25 @@ function App() {
       .then((data) => setTasks(data.tasks))
       .catch((err) => setToast({ message: err.message, variant: 'error' }));
   }, []);
+
+  // The same fetch, run unasked: when the app returns to the foreground, and
+  // once a minute while it is open. Without it the list stays whatever the
+  // server held at launch — a Hostaway message, an occurrence generated at
+  // midnight, or an edit made on the other device were all invisible until a
+  // reload, and nothing on screen said so.
+  //
+  // A failure here only reaches the console. refreshTasks above raises a toast
+  // because a person asked for that fetch; nobody asked for this one, so a
+  // phone losing signal in a lift must not produce an error the user can
+  // neither explain nor act on.
+  const refreshTasksQuietly = useCallback(() => {
+    if (!session) return;
+    getAllTasks()
+      .then((data) => setTasks(data.tasks))
+      .catch((err) => console.error('Background task refresh failed:', err));
+  }, [session]);
+
+  useAutoRefresh(refreshTasksQuietly);
 
   function handleTasksAdded(newTasks) {
     setTasks((current) => [...newTasks, ...current]);

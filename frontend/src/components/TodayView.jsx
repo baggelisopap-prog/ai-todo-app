@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
@@ -8,6 +8,7 @@ import { toLocalISODate } from '../utils/formatDate';
 import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent } from '../api';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { isVisibleTask } from '../utils/taskDisplay';
 
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
@@ -25,13 +26,23 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
 
   const today = toLocalISODate(new Date());
 
+  const loadTodayEvents = useCallback(() => {
+    if (!showEventsEnabled) return;
+    getGoogleCalendarEvents(today).then(setTodayEvents).catch(console.error);
+  }, [today, showEventsEnabled]);
+
   useEffect(() => {
     if (!showEventsEnabled) {
       setTodayEvents([]);
       return;
     }
-    getGoogleCalendarEvents(today).then(setTodayEvents).catch(console.error);
-  }, [today, showEventsEnabled]);
+    loadTodayEvents();
+  }, [showEventsEnabled, loadTodayEvents]);
+
+  // Unasked, on return to the app and once a minute while it is open: the
+  // fetch above runs when the day or the toggle changes, and neither of those
+  // happens while a new event arrives from Google.
+  useAutoRefresh(loadTodayEvents);
 
   async function handleMakeTask(eventId) {
     try {

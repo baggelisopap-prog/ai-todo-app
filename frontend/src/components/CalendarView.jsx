@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -33,6 +33,7 @@ import { getEventLabel } from '../utils/eventType';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { isVisibleTask } from '../utils/taskDisplay';
 
 // Column headers for the Monthly grid, Monday-first, named in whatever
@@ -193,11 +194,18 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const { settings } = useAppSettings();
   const showEventsEnabled = settings ? settings.calendar_show_events : null;
 
+  // One id per request, so only the newest answer is allowed to write to the
+  // screen. This replaces a `cancelled` flag that lived inside the effect and
+  // therefore only ever protected the effect — now that the background refresh
+  // below calls the same function, a slow answer for last month can land after
+  // a quick one for this month, and newest-wins has to hold across both.
+  const eventsRequestRef = useRef(0);
+
   // Google Calendar events (display-only) for whatever range is currently
   // visible — the full Monthly grid (including lead/tail days from
   // adjacent months, same as tasks already show there via tasksByDate) or
-  // the current week. Refetches whenever the visible range changes.
-  useEffect(() => {
+  // the current week.
+  const loadCalendarEvents = useCallback(() => {
     if (showEventsEnabled === null) return; // wait until the setting is known
     // List mode draws no grid and therefore no event chips. Without this it
     // would fall into the weekly branch below and fetch a week of events that
@@ -207,7 +215,6 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     // not cleared here: writing state straight from an effect body costs an
     // extra render pass, and visibleEvents below hides it just as completely.
     if (!showEventsEnabled) return;
-    let cancelled = false;
     let startISO, endISO;
     if (viewMode === 'monthly') {
       const cells = getCalendarCells(currentMonth);
@@ -219,11 +226,22 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
       startISO = toLocalISODate(currentWeekStart);
       endISO = toLocalISODate(weekEnd);
     }
+    const requestId = ++eventsRequestRef.current;
     getCalendarEventsInRange(startISO, endISO)
-      .then(events => { if (!cancelled) setCalendarEvents(events); })
+      .then(events => { if (requestId === eventsRequestRef.current) setCalendarEvents(events); })
       .catch(console.error);
-    return () => { cancelled = true; };
   }, [viewMode, currentMonth, currentWeekStart, showEventsEnabled]);
+
+  // Whenever the visible range or the toggle changes.
+  useEffect(() => {
+    loadCalendarEvents();
+  }, [loadCalendarEvents]);
+
+  // And unasked: on return to the app, and once a minute while it is open.
+  // This screen is where the owner watched for an event he had just created in
+  // Google and never saw it arrive — the fetch above had already happened, and
+  // nothing was going to run it again.
+  useAutoRefresh(loadCalendarEvents);
 
   useEffect(() => {
     if (selectedTaskId && taskDetailRef.current) {
