@@ -13,7 +13,7 @@ Three of the four decisions were the owner's; on two of them he asked for resear
 4. **The add button** — his words were "βάλτο για αρχη όπου θέλεις", so: a full "Νέα εργασία" button at the top of the sidebar, same three choices in a dropdown.
 
 ## Where this stands
-**Written and committed. Not yet pushed** — the owner pushes.
+**Shipped to production on 2026-09-05.** Commit `bdf92dc` on `main`, pushed by the owner — Vercel and Render deploy themselves from that.
 
 Nothing in `frontend/src/components/{Inbox,Today,Calendar,Browse}View.jsx` changed except one width class in Calendar. No backend file was touched at all.
 
