@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "IN=$(cat); printf '%s' \"$IN\" | grep -qE '(^|[ \\t;&|])git[ \\t]+push([ \\t]|$)' && printf '%s' \"$IN\" | node .claude/hooks/docs-after-push.mjs || true",
+            "timeout": 15,
+            "statusMessage": "Checking whether the docs owe this push an entry"
+          }
+        ]
+      }
+    ]
+  }
+}

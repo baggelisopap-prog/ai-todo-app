@@ -370,6 +370,21 @@ Then the half that actually matters, and the reason those zeros are not enough o
 
 **Not seen:** the add-task dropdown in its sidebar shape — dictation and photo from a desktop have never been exercised. And no screenshot of either layout exists: the browser tab available to the assistant does not share the owner's session, so the visual record is his eyes, not a captured image.
 
+### Decision: the docs are asked for automatically after every push — a reminder, not a gate
+2026-09-05, in the owner's words: «μολις ολοκληρωθει ενα πθση να ενημερωνεις τα ντοκς παντα να μην χρειάζεται να σου λεω εγω. ο τρόπος που τα κανει ειναι καλος αλλα το ποτε». The WHAT was already right; the WHEN depended on somebody remembering, which is not a mechanism.
+
+**A hook, because a skill cannot fire by itself.** `.claude/skills/update-docs/SKILL.md` holds how the job is done — which file gets what, the rule that a doc disagreeing with the code is corrected out loud, the requirement to write down what is NOT verified. But a skill is instructions that get followed when invoked. What makes it happen without being asked is `.claude/hooks/docs-after-push.mjs`, wired as a PostToolUse hook on the Bash tool in `.claude/settings.json`: after a push it injects the instruction back into the conversation.
+
+**A reminder rather than a block, and that was offered as a choice.** The owner was shown a gate — a push refused until the docs were written — and asked for the opposite: let the push through, then write them. He is right for a reason worth recording: a gate stops HIM at the moment he least wants stopping, and a hook cannot write the docs anyway. "What we built, why, and what is still unproven" is judgement, not a command. So the hook's whole job is to make sure the question is always asked, at the one moment nobody asks it.
+
+**Three silences, each deliberate.** It says nothing when the command is not a push; when commits are still ahead of the remote (the push failed, or there was nothing to push); and when everything since the last docs commit is itself docs-only. The last one is what stops it looping: the docs commit it asks for is exactly what silences it next time.
+
+**It fails loudly, and that is not decoration.** The first working version had `--format=%h %s` unquoted, so the shell handed `%s` to git as a revision, git died with "bad revision", the catch swallowed it, and the check reported all-clear forever — the precise failure this project has already been burned by («ένα script που τερματίζει με 0 επειδή απέτυχε ήσυχα δεν είναι απόδειξη»). Found by testing the stale branch instead of trusting the silence. It now reports its own breakage into the conversation and keeps reporting it until fixed.
+
+**What it does not cover, and cannot.** A push the owner types in his own terminal never passes through this session, so the hook never sees it. Closing that needs a git-level `pre-push` hook, which can only warn — it cannot write anything. Not built; not needed while he asks for the pushes here.
+
+**Proven, not assumed:** all three branches piped a synthetic payload (not a push → silent; push with fresh docs → silent; push with the baseline forced back three commits → the full instruction, naming those three commits). Then the hook was proven to actually FIRE by temporarily prefixing its command with a sentinel write, running an unrelated Bash command, and reading the sentinel back — the settings watcher picked the new file up mid-session. Sentinel and file removed afterwards.
+
 ### Decision: an add lands in the Inbox, and the new task keeps its mark until it is found
 2026-09-05. Two owner requests hours apart, which turned out to be one behaviour.
 
