@@ -22,7 +22,7 @@ import TaskDetailSheet from './TaskDetailSheet';
  * print "Μπήκε …" while the list is ordered by creation date, so the ordering
  * the user chose is one they can actually see.
  */
-function TaskCard({ task, variant = 'default', showCreated = false, isExpanded, onToggleExpand, onUpdate, onTaskDeleted, onShowToast }) {
+function TaskCard({ task, variant = 'default', showCreated = false, isExpanded, isNew = false, onToggleExpand, onUpdate, onTaskDeleted, onShowToast }) {
   return (
     <>
       <TaskRow
@@ -30,6 +30,7 @@ function TaskCard({ task, variant = 'default', showCreated = false, isExpanded, 
         variant={variant}
         showCreated={showCreated}
         isSelected={isExpanded}
+        isNew={isNew}
         onOpen={onToggleExpand}
         onUpdate={onUpdate}
         onTaskDeleted={onTaskDeleted}

@@ -62,7 +62,7 @@ const TRAY_WIDTH_PX = 140;
  * - **Tapping opens a reading view, not a form.** That is the sheet's job; this
  *   component only reports the tap.
  */
-function TaskRow({ task, variant = 'default', showCreated = false, isSelected, onOpen, onUpdate, onTaskDeleted, onShowToast }) {
+function TaskRow({ task, variant = 'default', showCreated = false, isSelected, isNew = false, onOpen, onUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
   const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast });
   const { isPending, isCompleted, isRejected } = actions;
@@ -177,7 +177,11 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, o
   const offset = isTrayOpen ? -TRAY_WIDTH_PX : swipe.dx;
 
   return (
-    <div className="relative overflow-hidden rounded-lg">
+    // The mark goes on the wrapper, not on the card inside it: this element's
+    // overflow-hidden clips its CHILDREN, so a halo drawn on the card would be
+    // cut off at exactly the edge it needs to cross. Its own box-shadow is not
+    // clipped by it.
+    <div className={`relative overflow-hidden rounded-lg ${isNew ? 'animate-task-flash' : ''}`}>
       {/* Behind the row. The right-hand pair is the tray a left swipe reveals;
           the left-hand strip is only feedback that a right swipe is in
           progress, since that one acts on release rather than parking open. */}

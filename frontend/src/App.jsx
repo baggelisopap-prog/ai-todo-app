@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAllTasks, updateTask, connectGoogleCalendar, getProfile } from './api';
 import { supabase } from './supabaseClient';
@@ -28,6 +28,11 @@ import { isVisibleTask } from './utils/taskDisplay';
 // The AppBar shows the current screen's name, so the title each view used to
 // print inside its own scroll container now lives in one place. Calendar covers
 // what used to be two tabs, so it is named for the broader job.
+// How long a just-added task stays marked if nothing touches it. Long enough
+// to walk back to the phone; short enough that it is never still glowing the
+// next time you open the app.
+const NEW_TASK_HIGHLIGHT_MS = 12000;
+
 const TAB_TITLE_KEYS = {
   inbox: 'nav.inbox',
   today: 'nav.today',
@@ -78,6 +83,11 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('inbox');
   const [expandedTaskId, setExpandedTaskId] = useState(null);
+  // The tasks the last add produced. Only the Inbox reads it today — that is
+  // where an add lands — but it rides in viewProps with expandedTaskId because
+  // it is the same kind of thing: which row the screen is pointing at.
+  const [newTaskIds, setNewTaskIds] = useState([]);
+  const newTaskTimer = useRef(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
@@ -216,6 +226,9 @@ function App() {
   // only screen that lists those. Added from Calendar or Today, the task was
   // therefore invisible: a toast, a badge, and nothing on screen. So the add
   // lands you where the new tasks actually are.
+  // A timer outliving the screen that set it would try to set state on nothing.
+  useEffect(() => () => clearTimeout(newTaskTimer.current), []);
+
   function handleTasksAdded(newTasks) {
     setTasks((current) => [...newTasks, ...current]);
     const count = newTasks.length;
@@ -224,6 +237,12 @@ function App() {
       variant: 'success',
     });
     handleTabChange('inbox');
+
+    // A second add before the first has faded restarts the clock rather than
+    // letting the older timer cut the newer highlight short.
+    clearTimeout(newTaskTimer.current);
+    setNewTaskIds(newTasks.map((task) => task.record_id));
+    newTaskTimer.current = setTimeout(() => setNewTaskIds([]), NEW_TASK_HIGHLIGHT_MS);
   }
 
   // Legacy signature: handleShowToast(translationKey, variant) — used throughout
@@ -300,6 +319,10 @@ function App() {
   }
 
   function handleToggleExpand(recordId) {
+    // Opening a row is the proof it has been found, so its mark comes off —
+    // and only its own, since an add can produce several at once.
+    setNewTaskIds((ids) => ids.filter((id) => id !== recordId));
+
     setExpandedTaskId((current) => {
       if (recordId === null) return null;
       if (current === recordId) return null;
@@ -321,6 +344,7 @@ function App() {
   const viewProps = {
     tasks,
     expandedTaskId,
+    newTaskIds,
     onToggleExpand: handleToggleExpand,
     onTaskUpdate: handleUpdateTask,
     onTaskDeleted: handleTaskDeleted,

@@ -86,6 +86,14 @@
   --success-strong: #16a34a;
   --ring-soft: #dbeafe;        /* the soft halo on a focused input */
 
+  /* A task that just arrived, so the eye finds it without reading the list.
+     Amber on purpose: it is already this app's "pending approval" colour, and
+     everything the + produces IS pending, so one signal carries both. Red is
+     taken by destructive actions and blue by the open row — either would say
+     something it does not mean. */
+  --highlight-new: #f59e0b;
+  --highlight-new-glow: rgba(245, 158, 11, 0.45);
+
   /* Shadows */
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
   --shadow-card-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
@@ -167,6 +175,9 @@
   --success-text: #86efac;
   --success-strong: #4ade80;
   --ring-soft: #1e3a5f;
+
+  --highlight-new: #fbbf24;
+  --highlight-new-glow: rgba(251, 191, 36, 0.35);
 
   /* Shadows carry almost no weight on a dark ground; depth comes from the
      surface lift above. Deepened so they still separate a modal from the
@@ -266,9 +277,37 @@ body {
 .animate-fade-in {
   animation: fade-in 150ms ease-out;
 }
+
+/* The just-arrived task. Three pulses, then it STAYS marked with the steady
+   ring below until the row is touched — the point is not the animation, it is
+   that a task added from another screen can still be found half a minute
+   later. That is also why the ring is the class's own box-shadow rather than
+   an animation end-state: when the three pulses finish, the property simply
+   falls back to it, with no fill-mode to reason about.
+
+   z-index because the next card's opaque background would otherwise paint over
+   the halo, clipping it on one side only. */
+@keyframes task-flash {
+  0%   { box-shadow: 0 0 0 2px var(--highlight-new), 0 0 0 0 var(--highlight-new-glow); }
+  70%  { box-shadow: 0 0 0 2px var(--highlight-new), 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 2px var(--highlight-new), 0 0 0 0 transparent; }
+}
+.animate-task-flash {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--highlight-new);
+  animation: task-flash 1.2s ease-out 3;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-toast-in,
   .animate-fade-in {
+    animation: none;
+  }
+  /* Not `animation: none` alone — that would drop the marker entirely for the
+     people this setting exists for. The steady ring remains; only the pulsing
+     goes. */
+  .animate-task-flash {
     animation: none;
   }
 }
