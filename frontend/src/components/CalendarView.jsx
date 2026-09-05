@@ -441,7 +441,11 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="max-w-3xl mx-auto p-4 md:p-6">
+      {/* lg:max-w-none — the one screen that spreads out on a desktop. A month
+          grid is a table, and the reading-width cap that keeps task lists
+          legible only makes its day cells smaller and its titles more clipped.
+          AppBar takes a matching `wide` prop so its title stays above it. */}
+      <div className="max-w-3xl lg:max-w-none mx-auto p-4 md:p-6">
         {/* Three modes, since the old "Upcoming" tab moved in here as List —
             see UpcomingList.jsx. Ordered by how much time each one shows:
             the next few days, then a week, then a month. Zooming out along a

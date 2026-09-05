@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { GearIcon, ChatIcon } from './icons';
+import { getInitials } from '../utils/profile';
 
 /**
  * The app's top bar.
@@ -16,18 +17,18 @@ import { GearIcon, ChatIcon } from './icons';
  * Profile section a door of its own — a floating grey gear over a task list is
  * legible to the person who built it and to nobody else.
  */
-function getInitials(displayName, email) {
-  const name = displayName?.trim();
-  if (name) {
-    const parts = name.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return parts[0].slice(0, 2).toUpperCase();
-  }
-  if (email) return email[0].toUpperCase();
-  return '?';
-}
-
-function AppBar({ title, profile, onOpenAgent, onOpenSettings }) {
+/**
+ * `showProfile` — false on the desktop layout, where the avatar has a better
+ * home at the foot of SideNav and a second copy up here would be two doors to
+ * one room.
+ *
+ * `wide` — the bar normally holds the same 768px column as the list beneath
+ * it, so the title sits directly above its own content. Calendar is the one
+ * screen that spreads across the whole window on a desktop, and a title
+ * floating in the middle of a wide grid looks like a mistake, so the bar
+ * follows whatever the screen below it does.
+ */
+function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = true, wide = false }) {
   const { t } = useTranslation();
 
   return (
@@ -35,7 +36,7 @@ function AppBar({ title, profile, onOpenAgent, onOpenSettings }) {
     // sibling needs a padding-top to compensate for it — which is exactly the
     // hack the floating buttons required.
     <header className="sticky top-0 z-30 bg-[var(--bg-card)] border-b border-[var(--border-subtle)]">
-      <div className="max-w-3xl mx-auto flex items-center gap-2 px-4 h-14">
+      <div className={`${wide ? 'max-w-none md:px-6' : 'max-w-3xl'} mx-auto flex items-center gap-2 px-4 h-14`}>
         <h1 className="flex-1 min-w-0 truncate text-lg font-semibold text-[var(--text-primary)]">
           {title}
         </h1>
@@ -53,18 +54,20 @@ function AppBar({ title, profile, onOpenAgent, onOpenSettings }) {
           <span className="text-sm font-medium">{t('agent.short_label')}</span>
         </button>
 
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          className="tap-44 w-9 h-9 rounded-full bg-[var(--brand-primary)] text-white text-sm font-semibold flex items-center justify-center flex-shrink-0 hover:bg-[var(--brand-primary-hover)] transition-colors"
-          aria-label={t('settings.open')}
-        >
-          {profile ? (
-            getInitials(profile.display_name, profile.email)
-          ) : (
-            <GearIcon className="w-4 h-4" />
-          )}
-        </button>
+        {showProfile && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="tap-44 w-9 h-9 rounded-full bg-[var(--brand-primary)] text-white text-sm font-semibold flex items-center justify-center flex-shrink-0 hover:bg-[var(--brand-primary-hover)] transition-colors"
+            aria-label={t('settings.open')}
+          >
+            {profile ? (
+              getInitials(profile.display_name, profile.email)
+            ) : (
+              <GearIcon className="w-4 h-4" />
+            )}
+          </button>
+        )}
       </div>
     </header>
   );

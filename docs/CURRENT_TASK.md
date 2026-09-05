@@ -1,89 +1,40 @@
-ACTIVE TASK — Browse rebuilt: soft delete, a History tab, and filters in one row
+ACTIVE TASK — A desktop and tablet shell: the bottom tabs become a left sidebar at 1024px
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 ## What was asked
-"Την σελίδα browsing θέλω να την βελτιώσουμε, έτσι όπως είναι δεν μου αρέσει. Θέλω σίγουρα να έχει ιστορικό (input, complete, deleted), καλύτερη ταξινόμηση φίλτρων και δεν ξέρω εγώ τι άλλο." (2026-09-03)
+"θελω να φτιαξουμε ενα ξεχωριστό ui στον υπολογιστή όταν ανοίγη η εφαρμογή. το φαντάζομαι αντι να ειναι κάτω σε pills να ειναι αριστερα όπως τα dashboards. να μην αλλάκει όμως τίποτα απο την λειτουργεία και μονο για pc και tablets" (2026-09-05)
 
-Designed in chat, not as a spec file — one column and one screen did not earn a 300-line document (the owner asked; the reasoning went to `docs/DECISIONS.md` and `DATABASE_SCHEMA.md` instead, which are the files he actually reads).
+Designed in chat, not as a spec file — a shell around four unchanged screens did not earn a document. The reasoning went to `docs/DECISIONS.md`.
 
-Four decisions he made:
-1. **Soft delete AND a permanent archive**, not one or the other — once the row survives, both fall out of the same change.
-2. **Two tabs inside Browse** ("Ενεργά" / "Ιστορικό"), each with its own filters. Not a fifth bottom-nav tab: that nav is deliberately four wide, because at a fifth of a phone screen "Εισερχόμενα" was being clipped.
-3. **Every closed state goes in History**, with a "Τι" filter to narrow.
-4. **One row of controls**, always visible, matching Today/Calendar — not the three rows Browse had.
+Three of the four decisions were the owner's; on two of them he asked for research first ("κανε ερευνα τι παιζει καλυτερα και προτεινε μου") and took the recommendation:
+1. **Breakpoint 1024px** — his choice, from three offered. Tablet upright keeps the phone's bottom nav.
+2. **What the sidebar carries** — recommended from what this class of app does: Todoist's sidebar is add-button → fixed views → projects, and his workspaces are that list. So the chip row moves in. The agent stays in the top bar: an action, not a location.
+3. **Content width** — lists keep `max-w-3xl` (768px, already inside the 680–780px reading measure); Calendar alone widens, because a month grid is a table and the cap only shrinks its cells.
+4. **The add button** — his words were "βάλτο για αρχη όπου θέλεις", so: a full "Νέα εργασία" button at the top of the sidebar, same three choices in a dropdown.
 
 ## Where this stands
-**Shipped to production on 2026-09-04.** Commits `871bd9b` (backend), `7f2a826` (frontend), `33ab9e7` (the regression fix below), all on `main`, all pushed — Render and Vercel deploy themselves from that.
+**Written and committed. Not yet pushed** — the owner pushes.
 
-The migration was **run and read back by the owner** first: `select count(*) as total, count(deleted_at) as deleted from tasks` → **total 325, deleted 0**. That one query proves both halves — it names `deleted_at`, so a missing column would have raised rather than returned a number, and `deleted = 0` shows the ALTER touched no rows. (325, not the 301 quoted from 2026-09-03: Hostaway messages and daily recurrence occurrences add rows continuously.)
+Nothing in `frontend/src/components/{Inbox,Today,Calendar,Browse}View.jsx` changed except one width class in Calendar. No backend file was touched at all.
 
-**Baselines as of 2026-09-04:** backend `./venv/Scripts/python.exe -m pytest tests/ -q` → **328 passed** (was 312). Frontend `npm run check` green (two new suites: `task-visibility.test.mjs`, `task-history.test.mjs`); `npm run lint` → **12 problems**, unchanged long-standing baseline, none in the new files; `npx vite build` clean.
+**New:** `components/SideNav.jsx`, `components/navTabs.js`, `hooks/useMediaQuery.js`, `utils/profile.js`.
+**Changed:** `App.jsx` (the layout branch), `AppBar.jsx` (`showProfile`, `wide`), `BottomNav.jsx` (reads the shared TABS), `FloatingActionButtons.jsx` (a `variant`), `CalendarView.jsx` (one line), both locale files (three keys), `scripts/ui-check.mjs` (follows TABS to its new file).
 
-- Migration: `docs/migrations/2026-09-04-task-soft-delete.sql`
-- Reasoning: `docs/DECISIONS.md` (two new entries) and `docs/DATABASE_SCHEMA.md` (the `deleted_at` section)
+**Baselines as of 2026-09-05:** frontend `npm run check` → exit 0, `ui-check: OK — 71 files, 47 tokens, 416 translation keys`. `npm run lint` → **12 problems, the unchanged long-standing baseline** (it went to 13 mid-pass from a setState-in-effect in the first version of `useMediaQuery`; rewritten on `useSyncExternalStore` and back to 12). `npx vite build` clean. Backend untouched, so its 328-test baseline was not re-run.
 
 ## What a person has actually seen, and what nobody has
-The distinction matters more than usual here, because one item moved from the second list to the first by **failing**.
-
 **Seen, and it counts as evidence:**
-- [x] The migration applied and read back — total 325, deleted 0.
-- [x] `git push` → deployed.
-- [x] **The History tab renders, with completed entries in it.** Not claimed: this is how the owner discovered he could not re-open them, so the screen was demonstrably on his phone with real rows on it.
-
-- [x] **Ξανάνοιγμα** on a completed row puts it back, un-ticked — owner-confirmed 2026-09-04, the fix for the regression he found.
-- [x] **The sort menu** — owner-confirmed 2026-09-04: the two «Μπήκε…» directions flip the order and the row prints "Μπήκε <date>".
+- [x] **The desktop layout, running, logged in, against live data** — the owner ran it locally and reported it working ("εχω μπει και ολα καλα").
+- [x] **The session's backend log corroborates what he touched.** 297 tasks served; `GET /workspaces`, `/recurrences`, `/settings`, `/profile`, `/tasks`, `/calendar/events` all 200; a **weekly-range** `GET /calendar/events?start=…&end=…` (so he reached Calendar and changed its mode through the new sidebar) and a **`PATCH /settings`** (so he used the sidebar's workspace switcher and it wrote through). **Zero 4xx or 5xx in the whole session.**
 
 **Still unseen:**
-- [ ] Delete a task. It leaves Today/Browse **and appears under Ιστορικό → Σήμερα** with "Διαγράφηκε HH:MM". *(Almost certainly fine — the tab is known to render and Ξανάνοιγμα works through the same list — but the delete→History path itself has not been watched.)*
-- [ ] **Αναίρεση** on a rejected row returns it to the **Εισερχόμενα**, not to Ενεργά.
-- [ ] Old completions (pre-2026-08-13) read "η ώρα δεν καταγράφηκε" rather than inventing an hour.
-- [ ] **Λήγει: αργότερα πρώτα** — the genuinely new sort option; never used.
+- [ ] **Dictation and photo from the desktop button.** The dropdown is new geometry over old machinery; only the "Κείμενο" path is implied by anything observed, and even that is inference, not sight.
+- [ ] **A screenshot of either layout.** None exists. The browser tab available to the assistant does not share the owner's login, so it never got past the sign-in screen — the visual record is his eyes. Worth knowing for next time: driving this app through that tab needs a session in that tab.
+- [ ] **The phone, after this change.** The code path below 1024px is byte-identical in the diff and the checks pass, but nobody has opened the app on a phone since.
+- [ ] **A tablet, either way up.** 1024px is exactly the line iPads sit on; which side a given tablet lands on has not been watched.
+- [ ] **The installed PWA on a desktop.** It will get the sidebar, which is intended, but has not been opened.
 
-### BLOCKED, and not on this feature: the Google Calendar restore check
-- [ ] Delete a task **that has a Google Calendar event**, then restore it. The toast must say the calendar event did **NOT** come back (`link_cleared`). A bare "Επανήλθε" is the failure signal.
+## Two things to know if this is picked up cold
+**The navigation is one list in two shapes.** `components/navTabs.js` holds `TABS`; `BottomNav` and `SideNav` both read it, so a fifth tab or a renamed one can never appear in one and not the other. `scripts/ui-check.mjs` parses that file (it used to parse `BottomNav.jsx`) and still enforces the bottom nav's budget: four tabs, twelve characters.
 
-**Why it is parked**: the owner reported on 2026-09-04 that he **has an existing problem with Google Calendar** — he did not say what, and it was not investigated here. The check therefore cannot distinguish "our restore reports the calendar honestly" from "his calendar connection is unwell to begin with", so running it now would produce an answer nobody could trust either way.
-
-**Pick it up with the calendar work, not before.** What it is testing is `services.restore_task`'s `link_cleared` branch: deleting an `calendar_origin='app'` task removes its Google event immediately, restoring does not recreate it, so the dead `google_event_id` is cleared and the UI must say so out loud. That path has unit coverage (`test_restoring_an_app_origin_task_clears_the_dead_calendar_link`) and has never run against a real Google account. Related and possibly the same area: BACKLOG.md's "Orphaned Google Calendar events + no retry on a failed delete", open since 2026-08-07.
-- [x] ~~`created_at` actually arrives~~ — **confirmed by the owner 2026-09-04**: History rows print "Μπήκε <date>". The column reaches the frontend, so the sort has something real to sort.
-- [ ] **The sort menu, after `a0edc63`.** «Μπήκε: νεότερα πρώτα» vs «Μπήκε: παλαιότερα πρώτα» must flip the order, and each row must print "Μπήκε <date>" while either is active — that is the value being sorted, on screen. «Λήγει: αργότερα πρώτα» is new and has never been used.
-
-### The sort, and why it was not the bug it looked like
-The owner reported «Νεότερα» showing 4 Σεπ, 5 Σεπ, 6 Σεπ, 26 Αυγ, 7 Σεπ and **diagnosed it himself before being told**: the row prints the DUE date while that option ordered by the CREATION date. Two different dates, one of them invisible.
-
-So the ordering was correct and unverifiable — which is worse than it sounds, because it HAD genuinely been broken until the same day, and nothing on screen could tell the two states apart. Fixed in `a0edc63`: every option names its date and direction, «Λήγει: αργότερα πρώτα» was added (due-date sorting only ever went one way), and the row prints "Μπήκε …" while a creation ordering is active.
-
-The logic moved to `utils/sortTasks.js` with 26 checks, because inside `TaskList.jsx` the plain-node scripts could not reach it and no test could have caught the null-column bug. The first assertion is that the two directions produce **different** orders — a comparator returning 0 for everything passes any test that only asks whether the same items came back.
-
-## The regression this feature caused, and why it was predictable
-Moving completed and rejected tasks into History **took away two capabilities the owner had**: Browse's "Εμφάνιση ολοκληρωμένων" and "Εμφάνιση απορριφθέντων" toggles showed those tasks as ordinary cards, where the circle un-completed them and the ⋯ menu un-rejected them. The first version of History was read-only apart from Restore, and Restore was on deleted rows only. He hit it within minutes, on a task he had ticked by accident.
-
-Fixed in `33ab9e7`: **Ξανάνοιγμα** on completed rows, **Αναίρεση** on rejected ones, both through the same `onTaskUpdate` every other screen uses — no new backend, since `is_completed:false` already clears `completed_at`/`completed_source` and `is_rejected:false` was already an action. Missed occurrences deliberately get no button and are the one state where nothing was taken away.
-
-**The lesson worth keeping**: when a screen absorbs rows that used to live somewhere else, the question is not "does the new screen show them" but "what could I DO with them before". Two capabilities were dropped, not one — the rejected half would have gone unnoticed for longer, because nobody was looking at it.
-
-## Two bugs found on the way, both fixed here
-- **Browse leaked deleted tasks.** The "Εμφάνιση απορριφθέντων" toggle bypassed `isVisibleTask`, so a soft-deleted task would have shown up in the live list. Closed before it could ship.
-- **"Νεότερα"/"Παλαιότερα" have been sorting nothing.** `TaskList` ordered by `created_time` — the Airtable-era column, popped from both the insert and the update path, with no database default, so **nothing has ever written it**. `created_at` is now surfaced on `TaskRecord` and both the sort and the History tab read it. Worth confirming in the app: the sort should visibly change order now, where before it did nothing.
-
-## Deliberately not done
-- **`delete_tasks_by_ids` still hard-deletes** — its two callers are recurrence housekeeping (regenerating future occurrences after a rule edit, clearing them after a rule delete), not a person deleting work. Soft-deleting those would fill History with entries for acts the user never performed. Reasoning in `DECISIONS.md`.
-- **No purge and no restore cutoff.** With nothing purging rows, a 30-day limit would be code whose only job is to refuse something that works. If a purge is ever added, that decision reopens first.
-- **No "what changed when"** (who moved the date, who raised the priority). A much larger feature; History answers "what happened to this task", not "how did it get like this".
-- **No way to reopen a missed occurrence.** The one History state without a button, and the one where nothing was taken away — there is no "un-miss" in the backend and the day has passed regardless. Parked in BACKLOG.md alongside the "deleted by the system" bucket, so neither is mistaken later for the oversight the completed/rejected buttons genuinely were.
-
-## Still open from earlier tasks
-Carried forward deliberately — untouched by this work and still unverified.
-
-- [ ] **The Hostaway escalation rekey has never met a real guest message.** `get_active_hostaway_tasks` matches the category carrying `system_key='hostaway'` rather than the literal word. Both halves have tests; the pair has never run against a message actually arriving. First thing to check if it looks wrong: `select count(*) from tasks where category = 'Hostaway' and category_id is null` must be 0.
-- [ ] **Recurrence Gap 2** — a rule surviving a real midnight unattended, `materialized_through` advancing by exactly one day.
-- [ ] **Gap 3** — a missed occurrence stamping `missed_at` from the scheduler's own tick, not a test calling the function.
-- [ ] **Gap 4** — a reminder firing for a rule-generated occurrence.
-- [ ] **Gap 6** — the make-this-repeat walkthrough; Today showing exactly ONE copy of an adopted task with its checklist intact.
-- [ ] `tasks.category` still exists and is still written by the extractor; the Part B migration dropping it is unwritten.
-- [ ] `recurrence_rules.workspace_id` / `category_id` exist but nothing writes them.
-
-## How to resume
-Read this file, then `docs/DECISIONS.md` from "deleting a task stamps `deleted_at`" onward. The `deleted_at` section of `docs/DATABASE_SCHEMA.md` has the why behind every choice, including the two that look like oversights and are not.
-
-One habit worth keeping from this session: `test_the_write_path_sends_only_real_columns` fired the moment `deleted_at` reached the model, exactly as designed. It is the reason the code could not go out ahead of the migration. Do not weaken it.
+**Only one navigation is mounted at a time.** `App` branches on `useMediaQuery(DESKTOP_QUERY)` rather than hiding one with CSS, because `FloatingActionButtons` mounts a microphone and two file inputs, and two live copies of that on every screen is a real cost. If you ever make this CSS-only, that is the thing you are paying.

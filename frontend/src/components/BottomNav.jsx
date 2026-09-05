@@ -1,70 +1,13 @@
 import { useTranslation } from 'react-i18next';
+import { TABS } from './navTabs';
 
-function InboxIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-      <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />
-    </svg>
-  );
-}
-
-function TodayIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-      <line x1="12" y1="14" x2="12" y2="18" />
-      <line x1="10" y1="16" x2="14" y2="16" />
-    </svg>
-  );
-}
-
-function CalendarIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-      <line x1="7.5" y1="14" x2="7.5" y2="14" />
-      <line x1="12" y1="14" x2="12" y2="14" />
-      <line x1="16.5" y1="14" x2="16.5" y2="14" />
-      <line x1="7.5" y1="17.5" x2="7.5" y2="17.5" />
-      <line x1="12" y1="17.5" x2="12" y2="17.5" />
-    </svg>
-  );
-}
-
-function BrowseIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="6" x2="21" y2="6" />
-      <line x1="8" y1="12" x2="21" y2="12" />
-      <line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" />
-      <line x1="3" y1="12" x2="3.01" y2="12" />
-      <line x1="3" y1="18" x2="3.01" y2="18" />
-    </svg>
-  );
-}
-
-// Four, not five. "Upcoming" moved inside Calendar as its List mode — the two
-// answered the same question with two tabs (see UpcomingList.jsx) — and the
-// fifth tab was costing more than it looked like: at a fifth of a phone screen,
-// `truncate` was silently clipping the Greek "Εισερχόμενα" to something like
-// "Εισερχό…". The usual fix at five tabs is to drop labels for inactive ones;
-// this app is going to people who did not build it, so unlabelled icons are the
-// wrong trade. Removing a tab is what buys the labels their room.
-const TABS = [
-  { id: 'inbox', labelKey: 'nav.inbox', Icon: InboxIcon },
-  { id: 'today', labelKey: 'nav.today', Icon: TodayIcon },
-  { id: 'calendar', labelKey: 'nav.calendar', Icon: CalendarIcon },
-  { id: 'browse', labelKey: 'nav.browse', Icon: BrowseIcon },
-];
-
+/**
+ * The phone's navigation: four tabs across the bottom.
+ *
+ * Rendered only below 1024px — above that App swaps in SideNav, which reads
+ * the same TABS. The icons and the tab list used to live in this file; they
+ * moved to icons.jsx and navTabs.js when the second navigation needed them.
+ */
 function BottomNav({ activeTab, onTabChange, inboxCount = 0 }) {
   const { t } = useTranslation();
 

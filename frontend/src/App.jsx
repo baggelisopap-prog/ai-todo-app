@@ -4,6 +4,7 @@ import { getAllTasks, updateTask, connectGoogleCalendar, getProfile } from './ap
 import { supabase } from './supabaseClient';
 import { LoginScreen } from './components/LoginScreen';
 import BottomNav from './components/BottomNav';
+import SideNav from './components/SideNav';
 import InboxView from './components/InboxView';
 import TodayView from './components/TodayView';
 import CalendarView from './components/CalendarView';
@@ -20,6 +21,7 @@ import WorkspaceProvider from './components/WorkspaceProvider';
 import WorkspaceBar from './components/WorkspaceBar';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useAutoRefresh } from './hooks/useAutoRefresh';
+import { useMediaQuery, DESKTOP_QUERY } from './hooks/useMediaQuery';
 import { filterTasksByWorkspace } from './utils/workspaces';
 import { isVisibleTask } from './utils/taskDisplay';
 
@@ -66,6 +68,13 @@ function App() {
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Which shell to draw: the phone's bottom nav, or the desktop's left column.
+  // A width question, not a device one — a narrowed browser window on a laptop
+  // gets the phone layout, which is the honest answer to "how much room is
+  // there". Nothing below this line changes with it except where the same
+  // controls are placed.
+  const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
   const [activeTab, setActiveTab] = useState('inbox');
   const [expandedTaskId, setExpandedTaskId] = useState(null);
@@ -333,20 +342,52 @@ function App() {
         app_settings.active_workspace_id through useAppSettings. */}
     <WorkspaceProvider onShowToast={handleShowToast}>
     <RecurrenceProvider onShowToast={handleShowToast} onTasksChanged={refreshTasks}>
-    <div className="flex flex-col min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
+    <div className="flex min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
+      {isDesktop && (
+        <SideNav
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          inboxCount={pendingCount}
+          profile={profile}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+        >
+          {/* The same component the phone shows as a round button, in its
+              sidebar shape. Deliberately outside the expandedTaskId guard the
+              phone version carries: that guard exists because the round button
+              sits on top of an expanded card, and nothing in this column
+              overlaps the list. */}
+          <FloatingActionButtons
+            variant="sidebar"
+            onAddClick={() => setIsAddModalOpen(true)}
+            onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
+            onPhotoComplete={(newTasks) => handleTasksAdded(newTasks)}
+          />
+        </SideNav>
+      )}
+
+      {/* min-w-0 so a wide child — the calendar grid — shrinks to fit this
+          column instead of shoving the sidebar off the screen. */}
+      <div className="flex flex-col flex-1 min-w-0">
       <AppBar
         title={t(TAB_TITLE_KEYS[activeTab])}
         profile={profile}
         onOpenAgent={() => setIsAgentOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        showProfile={!isDesktop}
+        wide={isDesktop && activeTab === 'calendar'}
       />
 
-      <WorkspaceBar />
+      {/* The chips move into SideNav on a desktop. One switcher either way —
+          both call the same setActiveId. */}
+      {!isDesktop && <WorkspaceBar />}
 
       {/* No pt-* here any more. The old one existed only to push content out
           from under two fixed circular buttons; AppBar is sticky and in flow,
-          so it takes its own space. */}
-      <main className="flex-1 pb-48">
+          so it takes its own space.
+
+          pb-48 is clearance for the phone's bottom nav and its floating
+          button. Neither is rendered on a desktop, so neither is the gap. */}
+      <main className={`flex-1 ${isDesktop ? 'pb-8' : 'pb-48'}`}>
         {isLoading && (
           <div className="max-w-3xl mx-auto p-4 text-[var(--text-muted)] text-sm italic">
             {t('app.loading_tasks')}
@@ -371,7 +412,7 @@ function App() {
         )}
       </main>
 
-      {expandedTaskId === null && (
+      {!isDesktop && expandedTaskId === null && (
         <FloatingActionButtons
           onAddClick={() => setIsAddModalOpen(true)}
           onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
@@ -379,7 +420,10 @@ function App() {
         />
       )}
 
-      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} inboxCount={pendingCount} />
+      {!isDesktop && (
+        <BottomNav activeTab={activeTab} onTabChange={handleTabChange} inboxCount={pendingCount} />
+      )}
+      </div>
 
       {isAddModalOpen && (
         <AddTaskModal

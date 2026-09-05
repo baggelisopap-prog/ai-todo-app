@@ -4,7 +4,9 @@
     "today": "Today",
     "calendar": "Calendar",
     "inbox_pending": "Inbox, {{count}} awaiting approval",
-    "browse": "All"
+    "browse": "All",
+    "label": "Navigation",
+    "workspaces": "Workspaces"
   },
   "hostaway": {
     "title": "Hostaway",
@@ -274,7 +276,8 @@
   "fab": {
     "open": "Open actions",
     "close": "Close actions",
-    "photo": "Photo"
+    "photo": "Photo",
+    "new_task": "New task"
   },
   "settings": {
     "open": "Settings",

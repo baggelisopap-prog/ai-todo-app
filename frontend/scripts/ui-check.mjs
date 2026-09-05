@@ -188,10 +188,14 @@ if (!lightTokens || !darkTokens) {
 const TAB_LIMIT = 4;
 const LABEL_CHAR_LIMIT = 12;
 
-const navSource = readFileSync(join(srcDir, 'components/BottomNav.jsx'), 'utf8');
+// navTabs.js, not BottomNav.jsx: the list moved there when SideNav needed the
+// same four tabs. The budget below is still the BOTTOM nav's — the sidebar is
+// 256px wide and has room to spare — but both navigations read this one list,
+// so checking it here covers the narrow case that can actually clip.
+const navSource = readFileSync(join(srcDir, 'components/navTabs.js'), 'utf8');
 const tabsBlock = navSource.match(/const TABS = \[([\s\S]*?)\];/)?.[1];
 if (!tabsBlock) {
-  fail('nav-unreadable', 'could not find the TABS array in BottomNav.jsx');
+  fail('nav-unreadable', 'could not find the TABS array in navTabs.js');
 } else {
   const labelKeys = [...tabsBlock.matchAll(/labelKey: '([^']+)'/g)].map((m) => m[1]);
   if (labelKeys.length > TAB_LIMIT) {
