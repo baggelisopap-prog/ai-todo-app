@@ -211,6 +211,11 @@ function App() {
 
   useAutoRefresh(refreshTasksQuietly);
 
+  // Everything the "+" produces — typed, dictated, photographed — comes back
+  // without `approval_status`, i.e. waiting to be approved, and Inbox is the
+  // only screen that lists those. Added from Calendar or Today, the task was
+  // therefore invisible: a toast, a badge, and nothing on screen. So the add
+  // lands you where the new tasks actually are.
   function handleTasksAdded(newTasks) {
     setTasks((current) => [...newTasks, ...current]);
     const count = newTasks.length;
@@ -218,6 +223,7 @@ function App() {
       message: count === 1 ? t('toast.added_one') : t('toast.added_many', { count }),
       variant: 'success',
     });
+    handleTabChange('inbox');
   }
 
   // Legacy signature: handleShowToast(translationKey, variant) — used throughout
