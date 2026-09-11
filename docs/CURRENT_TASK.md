@@ -41,9 +41,9 @@ workspaces spec deliberately refused to design before the container existed.
 
 ## Where this stands
 
-**Slices 1 and 2 of 5 are built and committed to `main`. NOTHING IS PUSHED and the
+**Slices 1, 2 and most of 3 are built and committed to `main`. NOTHING IS PUSHED and the
 migration has NOT been applied.** Nothing is live and nobody has seen a line of it run.
-17 commits, starting at `336fd6d`.
+20 commits, starting at `336fd6d`.
 
 Design: `docs/superpowers/specs/2026-09-11-multi-user-workspace-sharing-design.md`
 Plan (slice 1 only): `docs/superpowers/plans/2026-09-11-multi-user-slice-1-reads-and-gate.md`
@@ -115,6 +115,34 @@ no Personal, no `default_workspace_id`, with every task they create unfiled fore
 is the exact failure `ensure_account_workspaces` was written to prevent, returning through
 a side door. It asks `get_owned_workspaces` now.
 
+## What slice 3 built — handing the work over
+
+**The rule that carries it: you may only hand work to somebody who is in the room.**
+Without it a task can carry an assignee who cannot see it, is never notified about it and
+cannot complete it — handed over in appearance only, which is worse than not handed over
+at all. An unfiled task gets its own separate refusal, because the problem there is not
+that the person is missing from the room, it is that there is no room.
+
+Clearing is checked first and always allowed: putting work back on the pile needs nobody's
+permission. `"assigned_to" in updates` rather than a truth test, so an explicit null
+survives and a rename never pays for a membership lookup.
+
+**The agent became personal.** `build_day_view` is injected into EVERY question, so its
+size is a permanent per-question bill — the wide list would have put four other people's
+work on it forever. «Τι έχω σήμερα» now answers: what I created, plus what anyone assigned
+to me. An unassigned task in a shared room is nobody's work until somebody takes it.
+
+**The Υπεύθυνος picker** appears in the task sheet only when there is somebody to hand the
+task to — a workspace with one member is every solo account, and a picker whose only
+option is yourself asks a question with one answer.
+
+### Not built in slice 3
+
+- **The assignee's initials on the task card.** Nothing on a list shows who has a task;
+  you have to open it.
+- **The «Δικά μου / Όλα» filter.** There is no way to narrow a shared list to your own
+  work on screen. The agent does it, the screen does not.
+
 ## Changed
 
 Backend: `access.py` and `sharing.py` (new), `models.py`, `repository.py`, `services.py`,
@@ -125,11 +153,11 @@ files.
 ## Baselines, as the commands printed them
 
 ```
-466 passed in 4.21s                                    (backend, was 348)
-ui-check: OK — 72 files, 49 tokens, 439 translation keys
+478 passed in 4.19s                                    (backend, was 348)
+ui-check: OK — 72 files, 49 tokens, 441 translation keys
 all passed                                             (the 11 node test scripts)
 ✖ 12 problems (12 errors, 0 warnings)                  (npm run lint — the baseline, unchanged)
-✓ built in 326ms                                       (vite build)
+✓ built in 366ms                                       (vite build)
 ```
 
 Verified before running the backend suite that no test reaches a real model —
@@ -166,14 +194,16 @@ has not been applied, the code has not been deployed, and no second account exis
 
 ## Next
 
-**Slice 3: assignment.** `assigned_to` is a column, an index and a model field, and
-nothing writes it yet — no picker, no initials on the card, no «Δικά μου / Όλα» filter,
-and the agent's day view still reads the wide list. That is the slice that makes
-«προιστάμενος στέλνει δουλειά στον υφιστάμενο» actually work.
+**Finish slice 3** — two visible pieces are missing and both are small: the assignee's
+initials on the task card (today you have to open a task to see who has it), and a
+«Δικά μου / Όλα» filter on the shared lists (the agent narrows to your own work; the
+screen does not).
 
-Then slice 4 (notifications to the assignee, and `notify_all` actually changing who gets
-pushed) and slice 5 (the Ιστορικό screen — the activity log is being WRITTEN already, by
-invites, joins, removals and archiving; nothing reads it yet).
+Then slice 4 — notifications actually going to the assignee, and `notify_all` actually
+changing who gets pushed. The switch is stored and honoured by nothing yet.
+
+Then slice 5 — the Ιστορικό screen. The activity log is already being WRITTEN, by invites,
+joins, removals, archiving and every handover; nothing reads it.
 
 **Two small questions parked with a proposed answer, neither confirmed:**
 - An **empty** workspace — no tasks, nobody else in it — should probably still be
