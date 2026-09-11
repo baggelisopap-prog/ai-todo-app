@@ -191,7 +191,19 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         run["system_instruction_sha"] = agent_tools.system_instruction_sha(system_instruction)
 
         try:
-            cached_tasks = repository.get_tasks_for_user(user_id=user_id)
+            # belongs_to, NOT visible_to (2026-09-11). "Τι έχω σήμερα" means
+            # what I have to do: tasks I created, plus tasks anyone assigned to
+            # me, in any workspace. Not everything I can see.
+            #
+            # Two reasons it is this one. build_day_view is injected into EVERY
+            # question, always — so its size is a permanent per-question bill,
+            # and a five-person workspace would put four other people's work on
+            # it forever. And an unassigned task in a shared room is nobody's
+            # work until somebody takes it, which is the honest reading of the
+            # question rather than a gap.
+            #
+            # A team-scoped agent is the owner's own idea for a later phase.
+            cached_tasks = repository.get_owned_or_assigned_tasks(user_id=user_id)
         except Exception as e:
             logging.error(f"[agent] Failed to fetch tasks: {e}")
             raise RuntimeError(f"Could not load task data: {e}")

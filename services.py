@@ -16,6 +16,7 @@ import hostaway_threading
 import recurrence
 import repository
 import access
+import sharing
 
 logger = logging.getLogger(__name__)
 
@@ -585,6 +586,16 @@ class TaskService:
         """
         access.require_write(user_id, record_id)
 
+        # Handing work to somebody. `in updates` rather than a truth test: an
+        # explicit null is how a client puts work back on the pile, and it must
+        # not be confused with "not mentioned", which is every rename and every
+        # completion and must not pay for a membership lookup.
+        assignment_target = None
+        if "assigned_to" in updates:
+            existing = self.repository.get_task(user_id, record_id)
+            assignment_target = existing.workspace_id if existing else None
+            sharing.validate_assignment(assignment_target, updates["assigned_to"])
+
         if "is_completed" in updates:
             # A new dict, never the caller's: this method is handed request
             # bodies and agent payloads that the caller may still be using.
@@ -601,6 +612,20 @@ class TaskService:
             updates = {**updates, **stamp}
 
         updated_task = self.repository.update_task(user_id, record_id, updates)
+
+        # Recorded AFTER the write, so the log never claims something that did
+        # not happen. log_workspace_activity never raises — the handover has
+        # already occurred and must not be reported as a failure because the
+        # diary could not be written.
+        if "assigned_to" in updates and assignment_target:
+            repository.log_workspace_activity(
+                workspace_id=assignment_target,
+                actor_user_id=user_id,
+                action="task_assigned",
+                task_id=record_id,
+                task_name=updated_task.task_name,
+                details={"assigned_to": updates["assigned_to"]},
+            )
 
         if "is_completed" in updates:
             try:

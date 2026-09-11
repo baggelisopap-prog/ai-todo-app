@@ -83,6 +83,13 @@ class UpdateTaskRequest(BaseModel):
     # from "not mentioned", which is how a client moves a task to Unfiled.
     workspace_id: Optional[str] = None
     category_id: Optional[str] = None
+    # Who is responsible. An explicit null puts the work back on the pile, and
+    # exclude_unset keeps that distinct from "not mentioned" — which is every
+    # rename and every completion, and must not pay for a membership lookup.
+    # services.update_task refuses an assignee who is not in the task's
+    # workspace: a task handed to somebody who cannot see it is handed over in
+    # appearance only.
+    assigned_to: Optional[str] = None
 
 class CreateTaskRequest(BaseModel):
     """Request body for manual task creation via POST /tasks"""
@@ -451,6 +458,17 @@ _SHARING_STATUS = {
     "invite_revoked": status.HTTP_410_GONE,
     "invite_expired": status.HTTP_410_GONE,
     "workspace_archived": status.HTTP_410_GONE,
+    # 422, matching the category-placement rule in PATCH /tasks: the request is
+    # well-formed and the caller is allowed to assign — the STATE is wrong.
+    # That person is not in this room, or the task is not in a room at all.
+    #
+    # _CONTENT, not _ENTITY. Starlette deprecated the old spelling, and this
+    # dict is built at IMPORT time, so using it here made every `import main`
+    # emit a DeprecationWarning — which is how it was noticed. The three older
+    # uses of the old name in this file sit inside function bodies and warn
+    # only when those endpoints run; left alone as unrelated.
+    "assignee_not_a_member": status.HTTP_422_UNPROCESSABLE_CONTENT,
+    "assignee_needs_a_workspace": status.HTTP_422_UNPROCESSABLE_CONTENT,
 }
 
 

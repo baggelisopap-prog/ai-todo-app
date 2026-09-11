@@ -62,6 +62,8 @@ _MESSAGES = {
     "cannot_remove_owner": "Ο ιδιοκτήτης δεν μπορεί να αφαιρεθεί από το δικό του workspace.",
     "owner_cannot_leave": "Ο ιδιοκτήτης δεν μπορεί να αποχωρήσει από το δικό του workspace. Αρχειοθέτησέ το.",
     "not_a_member": "Δεν είσαι μέλος αυτού του workspace.",
+    "assignee_not_a_member": "Αυτό το άτομο δεν είναι μέλος του workspace. Κάλεσέ το πρώτα.",
+    "assignee_needs_a_workspace": "Βάλε πρώτα το task σε ένα workspace, και μετά ανάθεσέ το.",
 }
 
 
@@ -234,6 +236,33 @@ def set_notify_all(user_id: str, workspace_id: str, enabled: bool) -> None:
     if workspace_id not in repository.get_member_workspace_ids(user_id):
         _fail("not_a_member")
     repository.set_member_notify_all(workspace_id, user_id, enabled)
+
+
+# -------------------------------------------------------------- assignment
+
+
+def validate_assignment(workspace_id, assignee_user_id) -> None:
+    """
+    You may only hand work to somebody who is in the room.
+
+    Without this rule a task can carry an assignee who cannot see it, will
+    never be notified about it and cannot complete it — handed over in
+    appearance only, which is worse than not handed over at all.
+
+    Clearing (assignee_user_id is None) is always allowed and is checked FIRST:
+    putting work back on the pile needs nobody's permission, and running None
+    through a membership test would refuse it.
+
+    An unfiled task gets its own refusal rather than falling through to the
+    membership one, which would say something untrue — the problem is not that
+    the person is missing from the room, it is that there is no room.
+    """
+    if assignee_user_id is None:
+        return
+    if not workspace_id:
+        _fail("assignee_needs_a_workspace")
+    if workspace_id not in repository.get_member_workspace_ids(assignee_user_id):
+        _fail("assignee_not_a_member")
 
 
 # --------------------------------------------------------------- archiving
