@@ -1739,6 +1739,252 @@ def is_workspace_owner(user_id: str, workspace_id: str) -> bool:
     )
     return bool(response.data)
 
+# ------------------------------------------------------- workspace invites
+# The link is a bearer credential. Nothing here ever sees the raw token —
+# sharing.py hashes it before it reaches this layer, and the hash is all that
+# is stored. See the 2026-09-11 design.
+
+
+# What a caller outside this module is allowed to see about an invite. The
+# token_hash is deliberately absent: it is useless to anyone who cannot reverse
+# it, but it has no business on a screen either, and a field that reaches the
+# API is a field somebody eventually logs.
+_INVITE_PUBLIC_FIELDS = (
+    "id", "workspace_id", "invited_by", "email", "role", "expires_at",
+    "accepted_at", "accepted_by", "revoked_at", "created_at",
+)
+
+
+def _invite_public(row: dict) -> dict:
+    return {k: row.get(k) for k in _INVITE_PUBLIC_FIELDS}
+
+
+def create_workspace_invite(
+    workspace_id: str, invited_by: str, token_hash: str, role: str, expires_at: str
+) -> dict:
+    """Stores the HASH. The raw token is returned to the caller by sharing.py
+    and is unrecoverable afterwards."""
+    fields = {
+        "workspace_id": workspace_id,
+        "invited_by": invited_by,
+        "token_hash": token_hash,
+        "role": role,
+        "expires_at": expires_at,
+    }
+    response = supabase.table("workspace_invites").insert(fields).execute()
+    row = (response.data or [{}])[0]
+    logger.info(f"[invites] created invite {row.get('id')} for workspace {workspace_id}")
+    return _invite_public(row)
+
+
+def get_invite_by_token_hash(token_hash: str) -> Optional[dict]:
+    """
+    DELIBERATELY UNSCOPED, for the same reason access.task_ownership is: this
+    lookup is what DECIDES who the caller is allowed to become, and the person
+    accepting an invitation is by definition not yet a member of anything.
+
+    Returns the FULL row, including the state columns the caller has to check
+    (accepted_at, revoked_at, expires_at). Validity is decided in sharing.py,
+    not here — a repository function that silently returned None for an expired
+    invite could not tell the user WHY it did not work.
+    """
+    response = (
+        supabase.table("workspace_invites")
+        .select("*")
+        .eq("token_hash", token_hash)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
+def mark_invite_accepted(invite_id: str, user_id: str, accepted_at: str) -> None:
+    """Single use: filling accepted_at is what kills the link."""
+    (
+        supabase.table("workspace_invites")
+        .update({"accepted_at": accepted_at, "accepted_by": user_id})
+        .eq("id", invite_id)
+        .execute()
+    )
+    logger.info(f"[invites] invite {invite_id} accepted by {user_id}")
+
+
+def revoke_workspace_invite(invite_id: str, revoked_at: str) -> None:
+    """
+    Stamps rather than deletes. A withdrawn invitation is a fact worth keeping
+    — it is what the activity log points at — and removing the row would also
+    free its token_hash for a collision that cannot otherwise happen.
+    """
+    (
+        supabase.table("workspace_invites")
+        .update({"revoked_at": revoked_at})
+        .eq("id", invite_id)
+        .execute()
+    )
+    logger.info(f"[invites] invite {invite_id} revoked")
+
+
+def get_workspace_invites(workspace_id: str) -> list[dict]:
+    """Every invite ever made for this workspace, used and unused. The screen
+    decides which to show; this does not hide history."""
+    response = (
+        supabase.table("workspace_invites")
+        .select("*")
+        .eq("workspace_id", workspace_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [_invite_public(r) for r in (response.data or [])]
+
+
+# ------------------------------------------------------ membership changes
+
+
+def remove_workspace_member(workspace_id: str, user_id: str) -> None:
+    """Both filters, always. A workspace_id alone would empty the room; a
+    user_id alone would remove that person from every workspace they are in."""
+    (
+        supabase.table("workspace_members")
+        .delete()
+        .eq("workspace_id", workspace_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    logger.info(f"[members] {user_id} removed from workspace {workspace_id}")
+
+
+def unassign_tasks_for_member(workspace_id: str, user_id: str) -> None:
+    """
+    Clears assigned_to on that person's tasks IN THAT WORKSPACE ONLY.
+
+    The tasks stay where they are and become unclaimed, visible to the owner
+    the moment it happens. Leaving the name in place would keep a departed
+    person attached to work nobody is going to do and nobody is watching for.
+
+    Both filters matter: removing somebody from the cleaning team must not
+    unassign their work in the office.
+    """
+    (
+        supabase.table("tasks")
+        .update({"assigned_to": None})
+        .eq("workspace_id", workspace_id)
+        .eq("assigned_to", user_id)
+        .execute()
+    )
+    logger.info(f"[members] unassigned {user_id}'s tasks in workspace {workspace_id}")
+
+
+def set_member_notify_all(workspace_id: str, user_id: str, enabled: bool) -> None:
+    """The switch for an owner who wants the team's reminders too. Per
+    workspace, because wanting the cleaning team's reminders is not the same as
+    wanting the office's."""
+    (
+        supabase.table("workspace_members")
+        .update({"notify_all": enabled})
+        .eq("workspace_id", workspace_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+
+# ------------------------------------------------------ workspace archiving
+
+
+def set_workspace_archived(user_id: str, workspace_id: str, archived_at: Optional[str]) -> None:
+    """
+    Archiving replaces deletion. Pass None to restore.
+
+    Owner-scoped: archiving is administration, and administration is
+    workspaces.user_id's question, not membership's.
+    """
+    (
+        supabase.table("workspaces")
+        .update({"archived_at": archived_at})
+        .eq("id", workspace_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    logger.info(f"[workspaces] {workspace_id} archived_at={archived_at}")
+
+
+def clear_workspace_from_all_settings(workspace_id: str, fallback_default: Optional[str]) -> None:
+    """
+    Repoints the two per-user settings that can name a workspace, FOR EVERY
+    USER, not just the owner.
+
+    app_settings.active_workspace_id and default_workspace_id are per-user
+    rows. Archiving a shared workspace without this leaves a colleague looking
+    at a workspace that is not there — and, worse, hands the extractor the
+    category vocabulary of an archived workspace.
+
+    active_workspace_id falls back to NULL, which already means "Όλα" and is
+    the default for anyone who never touched the switcher. default_workspace_id
+    falls back to Business, which ensure_account_workspaces guarantees exists.
+    """
+    (
+        supabase.table("app_settings")
+        .update({"active_workspace_id": None})
+        .eq("active_workspace_id", workspace_id)
+        .execute()
+    )
+    (
+        supabase.table("app_settings")
+        .update({"default_workspace_id": fallback_default})
+        .eq("default_workspace_id", workspace_id)
+        .execute()
+    )
+    logger.info(f"[workspaces] repointed settings away from {workspace_id}")
+
+
+# ------------------------------------------------------- workspace activity
+
+
+def log_workspace_activity(
+    workspace_id: str,
+    actor_user_id: str,
+    action: str,
+    task_id: Optional[str] = None,
+    task_name: Optional[str] = None,
+    details: Optional[dict] = None,
+) -> None:
+    """
+    NEVER RAISES.
+
+    The log is a record of work, not a participant in it. By the time this is
+    called the thing the user asked for has already happened, and reporting a
+    failure because the diary could not be written would be a lie about what
+    occurred. A failure is logged to the application log and swallowed.
+
+    task_name is stored alongside task_id on purpose — with the id alone,
+    deleting a task turns its whole history into "somebody did something to
+    something".
+    """
+    try:
+        supabase.table("workspace_activity").insert({
+            "workspace_id": workspace_id,
+            "actor_user_id": actor_user_id,
+            "action": action,
+            "task_id": task_id,
+            "task_name": task_name,
+            "details": details,
+        }).execute()
+    except Exception as e:
+        logger.error(f"[activity] failed to record {action} in {workspace_id}: {e}")
+
+
+def get_workspace_activity(workspace_id: str, limit: int = 100) -> list[dict]:
+    """Newest first, capped. The screen pages by lowering the cap rather than
+    by offset — the log only grows at one end."""
+    response = (
+        supabase.table("workspace_activity")
+        .select("*")
+        .eq("workspace_id", workspace_id)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return list(response.data or [])
 
 # --------------------------------------------------------------- categories
 
