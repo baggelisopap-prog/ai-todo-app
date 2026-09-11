@@ -35,6 +35,8 @@ import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { isVisibleTask } from '../utils/taskDisplay';
+import { filterTasksByAssignment, ASSIGNMENT_ALL } from '../utils/assignment';
+import { useMembers } from '../hooks/useMembers';
 
 // Column headers for the Monthly grid, Monday-first, named in whatever
 // language the UI is in. Derived from a week that is known to start on a
@@ -175,6 +177,8 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const [manualCreateSlot, setManualCreateSlot] = useState(null); // { date, time }
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
+  const [selectedAssignment, setSelectedAssignment] = useState(ASSIGNMENT_ALL);
+  const { myId } = useMembers();
   const [calendarEvents, setCalendarEvents] = useState([]);
   const taskDetailRef = useRef(null);
 
@@ -401,9 +405,13 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     handleReschedule(task, over.id);
   }
 
-  const filteredTasks = tasks.filter((task) =>
-    (selectedCategory === 'All' || matchesCategory(task, selectedCategory)) &&
-    (selectedPriority === 'All' || task.priority === selectedPriority)
+  const filteredTasks = filterTasksByAssignment(
+    tasks.filter((task) =>
+      (selectedCategory === 'All' || matchesCategory(task, selectedCategory)) &&
+      (selectedPriority === 'All' || task.priority === selectedPriority)
+    ),
+    selectedAssignment,
+    myId
   );
 
   const tasksByDate = filteredTasks.reduce((acc, task) => {
@@ -479,6 +487,8 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
           onCategoryChange={setSelectedCategory}
           priority={selectedPriority}
           onPriorityChange={setSelectedPriority}
+          assignment={selectedAssignment}
+          onAssignmentChange={setSelectedAssignment}
           t={t}
         />
 

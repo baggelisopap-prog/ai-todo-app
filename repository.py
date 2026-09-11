@@ -98,6 +98,14 @@ class AirtableTaskRepository:
         fields.pop("category_name", None)
         fields.pop("workspace_name", None)
 
+        # created_by is a READ-ONLY view of the `user_id` column under a
+        # readable name (see models.TaskRecord). There is no `created_by`
+        # column, so leaving it in would be PGRST204 — Supabase rejects the
+        # WHOLE statement for one unknown key — on every single task write, the
+        # exact way `category_name` took down all four creation paths at once
+        # on 2026-09-01. `user_id` itself is added by save_task afterwards.
+        fields.pop("created_by", None)
+
         # checklist is a JSONB column now — hand it a plain list of dicts,
         # no manual JSON string encoding needed.
         fields["checklist"] = self._checklist_to_jsonb(task.checklist)
@@ -179,6 +187,27 @@ class AirtableTaskRepository:
             # task.model_dump(), so a new model field travels on its own.
             workspace_id=row.get("workspace_id"),
             category_id=row.get("category_id"),
+            # WAS MISSING UNTIL 2026-09-11, and the failure was silent in the
+            # worst direction: services.update_task hands `updates` straight to
+            # the column, so a handover was written correctly every time and
+            # then dropped on the way back — the picker showed "Χωρίς
+            # υπεύθυνο" again the moment the task was reloaded, while the
+            # database held the right person and the reminder loop used it.
+            assigned_to=row.get("assigned_to"),
+            # WHO CREATED IT. The surrounding docstring's rule — user_id is a
+            # data-layer scoping concern and does not reach the model — still
+            # holds for scoping. This is a different question, asked by a
+            # different consumer: a screen filtering a SHARED list down to
+            # "mine" has to mean exactly what get_owned_or_assigned_tasks means
+            # by it ("assigned to me, OR created by me and taken by nobody"),
+            # and without the creator the screen can only manage the first half.
+            # A list that answers 18 while the agent answers 21 looks like a
+            # bug in both.
+            #
+            # Reveals nothing new: every member of a shared workspace already
+            # sees the task itself, and workspace_activity already names who
+            # did what in the room.
+            created_by=row.get("user_id"),
         )
 
     def save_task(self, user_id: str, task: TaskRecord) -> TaskRecord:
@@ -1606,6 +1635,13 @@ def _supabase_row_to_workspace(row: dict) -> Workspace:
         color=row.get("color"),
         position=_get(row, "position", 0),
         created_at=row.get("created_at"),
+        # Surfaced so the Αρχειοθετημένα screen can say WHEN, which is the only
+        # thing distinguishing two archived rooms with similar names. Always
+        # None on every live read, because those all filter it to null.
+        # Safe in both directions: the write paths build their `fields` dicts
+        # by hand rather than from model_dump(), so this cannot leak into an
+        # UPDATE and move a date.
+        archived_at=row.get("archived_at"),
     )
 
 
@@ -1658,6 +1694,30 @@ def get_owned_workspaces(user_id: str) -> list[Workspace]:
     return [_supabase_row_to_workspace(row) for row in (response.data or [])]
 
 
+def get_archived_workspaces(user_id: str) -> list[Workspace]:
+    """
+    Workspaces this person archived. The other side of get_workspaces, which
+    hides them from everybody.
+
+    OWNED, not visible. Restoring is _require_owner in sharing.py, so a member
+    listed here would get a room they cannot bring back — and an archived
+    workspace is out of the switcher for the whole team anyway, so there is
+    nothing for a member to do about it.
+
+    Newest first: what you archived by accident five seconds ago is the reason
+    anybody opens this, and it must not be at the bottom of a list.
+    """
+    response = (
+        supabase.table("workspaces")
+        .select("*")
+        .eq("user_id", user_id)
+        .not_.is_("archived_at", "null")
+        .order("archived_at", desc=True)
+        .execute()
+    )
+    return [_supabase_row_to_workspace(row) for row in (response.data or [])]
+
+
 def get_visible_workspace_ids(user_id: str) -> list[str]:
     """Ids of every live workspace this person may see — owned or joined. The
     one place that definition lives, so categories and workspaces cannot drift
@@ -1694,7 +1754,23 @@ def get_workspaces(user_id: str) -> list[Workspace]:
         .order("created_at", desc=False)
         .execute()
     )
-    return [_supabase_row_to_workspace(row) for row in (response.data or [])]
+    workspaces = [_supabase_row_to_workspace(row) for row in (response.data or [])]
+
+    # How many people are in each room, in ONE extra query for the whole list.
+    #
+    # The screen needs this to know which workspaces are shared at all, and it
+    # must not cost a request per workspace: without it, deciding whether to
+    # draw an assignee badge would mean calling /members once per workspace on
+    # every app open.
+    counts = get_member_counts([w.record_id for w in workspaces if w.record_id])
+    for w in workspaces:
+        # Falls back to the model default rather than 0. A workspace with no
+        # membership row cannot happen — create_workspace adds the owner's and
+        # the migration backfilled the rest — and if one ever did, "1" reads as
+        # a solo room while "0" would read as a room with nobody in it, which
+        # would hide the owner's own name from their own screen.
+        w.member_count = counts.get(w.record_id) or 1
+    return workspaces
 
 
 def get_workspace(user_id: str, workspace_id: str) -> Optional[Workspace]:
@@ -1795,6 +1871,36 @@ def get_member_workspace_ids(user_id: str) -> list[str]:
         .execute()
     )
     return [r["workspace_id"] for r in (response.data or []) if r.get("workspace_id")]
+
+
+def get_member_counts(workspace_ids: list[str]) -> dict[str, int]:
+    """
+    How many people are in each of these workspaces, counted in the client.
+
+    PostgREST can group and count server-side, but only through an RPC or a
+    view — neither of which exists here, and adding one would put a second
+    migration in front of a screen change. A membership row is four small
+    columns and the realistic ceiling is a handful of people per workspace, so
+    reading the ids and counting them is cheaper than the migration it saves.
+
+    Returns {} for an empty input rather than issuing `workspace_id.in.()`,
+    which PostgREST rejects as a syntax error instead of matching nothing —
+    the same trap get_all_tasks and get_workspaces both guard.
+    """
+    if not workspace_ids:
+        return {}
+    response = (
+        supabase.table("workspace_members")
+        .select("workspace_id")
+        .in_("workspace_id", workspace_ids)
+        .execute()
+    )
+    counts: dict[str, int] = {}
+    for row in (response.data or []):
+        wid = row.get("workspace_id")
+        if wid:
+            counts[wid] = counts.get(wid, 0) + 1
+    return counts
 
 
 def add_workspace_member(workspace_id: str, user_id: str, role: str = "member") -> WorkspaceMember:

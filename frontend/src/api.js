@@ -724,6 +724,18 @@ export async function archiveWorkspace(workspaceId) {
   return request(`/workspaces/${workspaceId}/archive`, { method: 'POST' });
 }
 
+/**
+ * GET /workspaces/archived — the owner's own archived workspaces, newest
+ * first. Categories come back empty; this list exists to press Restore.
+ *
+ * Its own call rather than a flag on getWorkspaces: the shared provider holds
+ * what every screen filters against, and putting archived rooms in it would
+ * mean every consumer had to remember to exclude them.
+ */
+export async function getArchivedWorkspaces() {
+  return request('/workspaces/archived');
+}
+
 /** POST /workspaces/{id}/restore — owner only. */
 export async function restoreWorkspace(workspaceId) {
   return request(`/workspaces/${workspaceId}/restore`, { method: 'POST' });

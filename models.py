@@ -168,6 +168,19 @@ class TaskRecord(SingleTask):
     # deleting a person must never delete work.
     assigned_to: Optional[str] = None
 
+    # WHO CREATED IT — the `user_id` column, under a name that says what it
+    # means to a reader rather than what it does to a query.
+    #
+    # It is surfaced, and the rule above is not broken by that. `user_id` stays
+    # a scoping concern: no caller passes it, no write accepts it, and the
+    # repository still scopes every query itself. What this adds is one READ,
+    # for the one consumer that cannot work without it — a shared list being
+    # narrowed to "mine", which must mean exactly what the reminder loop and
+    # the agent mean by it: assigned to me, OR created by me and taken by
+    # nobody. Read-only and never written: _task_to_supabase_fields drops it
+    # for the same reason it drops created_at.
+    created_by: Optional[str] = None
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str
@@ -230,6 +243,22 @@ class Workspace(BaseModel):
     # loses what was assigned to her, while still being the person who has to
     # do it.
     archived_at: Optional[str] = None
+
+    # How many people are in this room, INCLUDING the owner. Never 0: creating
+    # a workspace adds the owner's own membership row.
+    #
+    # It exists so a screen can tell a shared workspace from a solo one WITHOUT
+    # asking per workspace. Everything the list shows about other people — the
+    # assignee badge on a row, the "Δικά μου / Όλα" filter — must be absent on a
+    # solo account, and finding that out by calling /members once per workspace
+    # would be one request per workspace on every app open.
+    #
+    # ONLY get_workspaces fills this truthfully; it is the screen's read. The
+    # other paths (create, update, get_owned_workspaces) leave the default,
+    # which is correct for a workspace just created and merely stale for the
+    # others — and the frontend re-reads through get_workspaces after every
+    # write, so nothing displays the stale value.
+    member_count: int = 1
 
 
 class WorkspaceMember(BaseModel):

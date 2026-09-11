@@ -1142,6 +1142,33 @@ def list_workspaces(user_id: str = Depends(get_current_user_id)):
         raise HTTPException(status_code=500, detail=f"Failed to list workspaces: {str(e)}")
 
 
+@app.get("/workspaces/archived", response_model=WorkspacesListResponse)
+def list_archived_workspaces(user_id: str = Depends(get_current_user_id)):
+    """
+    The way back. Archiving replaced deleting on the owner's rule that work is
+    never lost — and until this existed the rule was only half true: the tasks
+    survived, and the room holding them could not be reached from any screen.
+    Restoring worked the whole time; there was simply nothing that could name a
+    workspace to restore.
+
+    Declared before /workspaces/{workspace_id} would matter if that route
+    existed for GET — it does not — but it is kept above the id routes anyway,
+    because the day somebody adds one, "archived" must not be read as an id.
+
+    Categories come back empty: this list exists to press one button, and the
+    categories of an archived workspace are already on screen the moment it is
+    live again.
+    """
+    try:
+        return WorkspacesListResponse(
+            workspaces=repository.get_archived_workspaces(user_id),
+            categories=[],
+        )
+    except Exception as e:
+        logger.exception("Failed to list archived workspaces")
+        raise HTTPException(status_code=500, detail=f"Failed to list archived workspaces: {str(e)}")
+
+
 @app.post("/workspaces", response_model=WorkspaceWriteResponse, status_code=status.HTTP_201_CREATED)
 def create_workspace(payload: WorkspaceCreateRequest, user_id: str = Depends(get_current_user_id)):
     # Checked here rather than left to the database's unique(user_id, name),
@@ -1348,11 +1375,32 @@ def list_workspace_activity(
     workspace_id: str, limit: int = 100, user_id: str = Depends(get_current_user_id)
 ):
     """What has happened in this room, newest first. A member's right: this is
-    what makes "anyone may edit anything" honest rather than merely permissive."""
+    what makes "anyone may edit anything" honest rather than merely permissive.
+
+    Each row carries the ACTOR'S NAME, resolved here in one batched read of
+    `profiles` — the same join the members endpoint above does, for the same
+    reason. Without it the log reads "8f3a1c…-…-… added somebody", which is a
+    record of what happened that cannot tell you who did it; and it cannot be
+    resolved on the frontend either, because that only knows the people who are
+    in the room NOW, and half of what a log is for is the ones who have left.
+
+    `actor_user_id` is ON DELETE SET NULL. A row whose actor is gone from
+    auth.users entirely keeps its verb and its task name and loses only the
+    name — so the caller gets None and says so in its own words, rather than
+    this inventing one.
+    """
     _require_membership(user_id, workspace_id)
-    return ActivityListResponse(
-        activity=repository.get_workspace_activity(workspace_id, limit=min(limit, 500))
-    )
+
+    rows = repository.get_workspace_activity(workspace_id, limit=min(limit, 500))
+    profiles = repository.get_profiles([r.get("actor_user_id") for r in rows])
+    return ActivityListResponse(activity=[
+        {
+            **row,
+            "actor_name": (profiles.get(row.get("actor_user_id")) or {}).get("display_name")
+            or (profiles.get(row.get("actor_user_id")) or {}).get("email"),
+        }
+        for row in rows
+    ])
 
 # ---------------------------------------------------------------- categories
 

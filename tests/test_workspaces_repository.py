@@ -41,6 +41,7 @@ class _FakeQuery:
 
     def __init__(self, sink, rows):
         self.sink, self.rows = sink, rows
+        self._negated = False
 
     def select(self, *a, **kw):
         self.sink["select"] = a
@@ -65,7 +66,20 @@ class _FakeQuery:
 
     def is_(self, col, val):
         # get_workspaces excludes archived rows since 2026-09-11.
-        self.sink.setdefault("is", []).append((col, val))
+        if self._negated:
+            self._negated = False
+            self.sink.setdefault("not_is", []).append((col, val))
+        else:
+            self.sink.setdefault("is", []).append((col, val))
+        return self
+
+    @property
+    def not_(self):
+        # postgrest spells negation as a property that flips the NEXT operator:
+        # `.not_.is_("archived_at", "null")`. Recording it as its own slot is
+        # what lets a test tell "archived" from "not archived", which is the
+        # difference between a restore list and every live workspace.
+        self._negated = True
         return self
 
     def in_(self, col, vals):
@@ -113,6 +127,10 @@ def test_listing_workspaces_is_scoped_to_the_user_and_ordered(monkeypatch):
     fake = _FakeSupabase([_ws_row()])
     monkeypatch.setattr(repository, "supabase", fake)
     monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: [])
+    # Stubbed so the sink still describes the WORKSPACES query. The fake keeps
+    # one shared sink and `table` is its only single-assignment slot, so the
+    # member-count query that follows would otherwise be the one it remembers.
+    monkeypatch.setattr(repository, "get_member_counts", lambda ids: {})
 
     result = repository.get_workspaces("user-1")
 
@@ -352,3 +370,92 @@ def test_the_models_answer_never_reaches_the_database():
 
     assert "category_name" not in fields
     assert fields["category_id"] == "c1"
+
+
+def test_member_counts_are_grouped_per_workspace(monkeypatch):
+    """Three membership rows across two workspaces must come back as two
+    numbers, not three rows — this is what tells a screen which room is
+    shared."""
+    fake = _FakeSupabase([
+        {"workspace_id": "ws-1"},
+        {"workspace_id": "ws-1"},
+        {"workspace_id": "ws-2"},
+    ])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    assert repository.get_member_counts(["ws-1", "ws-2"]) == {"ws-1": 2, "ws-2": 1}
+    assert fake.sink["table"] == "workspace_members"
+
+
+def test_member_counts_of_nothing_issues_no_query(monkeypatch):
+    """An empty list must not reach PostgREST as `workspace_id.in.()`, which is
+    a syntax error rather than an empty match — the same trap get_all_tasks and
+    get_workspaces both guard."""
+    fake = _FakeSupabase([])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    assert repository.get_member_counts([]) == {}
+    assert fake.sink == {}
+
+
+def test_listing_workspaces_carries_how_many_people_are_in_each(monkeypatch):
+    """The number the screen uses to decide whether anything about other people
+    is drawn at all."""
+    fake = _FakeSupabase([_ws_row()])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: [])
+    monkeypatch.setattr(repository, "get_member_counts", lambda ids: {"ws-1": 3})
+
+    assert repository.get_workspaces("user-1")[0].member_count == 3
+
+
+def test_a_workspace_with_no_membership_row_still_reads_as_one_person(monkeypatch):
+    """Cannot happen — create_workspace adds the owner's row and the migration
+    backfilled the rest — but 0 would read as a room with nobody in it and hide
+    the owner's own name from their own screen."""
+    fake = _FakeSupabase([_ws_row()])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: [])
+    monkeypatch.setattr(repository, "get_member_counts", lambda ids: {})
+
+    assert repository.get_workspaces("user-1")[0].member_count == 1
+
+
+def test_the_archived_read_asks_for_rows_that_ARE_archived(monkeypatch):
+    """The mirror image of get_workspaces, which filters archived_at to null.
+    Getting this backwards would list every live workspace under a heading that
+    says "Archived" and offer to restore rooms nobody archived."""
+    fake = _FakeSupabase([_ws_row(archived_at="2026-09-11T12:00:00Z")])
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    result = repository.get_archived_workspaces("user-1")
+
+    assert fake.sink["table"] == "workspaces"
+    assert ("user_id", "user-1") in fake.sink["eq"]
+    assert ("archived_at", "null") in fake.sink.get("not_is", [])
+    assert fake.sink["orders"][0] == ("archived_at", {"desc": True})
+    assert result[0].archived_at == "2026-09-11T12:00:00Z"
+
+
+def test_the_archived_read_is_owned_and_not_merely_visible(monkeypatch):
+    """Restoring is the owner's alone (sharing._require_owner), so a member
+    listed here would be offered a room they cannot bring back."""
+    fake = _FakeSupabase([])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids",
+                        lambda u: (_ for _ in ()).throw(AssertionError("must not ask membership")))
+
+    repository.get_archived_workspaces("user-1")
+
+    assert "or" not in fake.sink
+
+
+def test_a_live_workspace_reads_as_not_archived(monkeypatch):
+    """archived_at is surfaced now; every live read filters it to null, so it
+    must come back as None rather than as a missing attribute."""
+    fake = _FakeSupabase([_ws_row()])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: [])
+    monkeypatch.setattr(repository, "get_member_counts", lambda ids: {})
+
+    assert repository.get_workspaces("user-1")[0].archived_at is None

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  createWorkspace, updateWorkspace, archiveWorkspace,
+  createWorkspace, updateWorkspace, archiveWorkspace, restoreWorkspace,
   createCategory, updateCategory, deleteCategory,
 } from '../api';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAppSettings } from '../hooks/useAppSettings';
 import CustomSelect from './CustomSelect';
 import MembersPanel from './MembersPanel';
+import ArchivedPanel from './ArchivedPanel';
 import { nextPosition } from '../utils/workspaces';
 
 /**
@@ -34,6 +35,9 @@ function WorkspacesView({ onShowToast }) {
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [newCategoryFor, setNewCategoryFor] = useState(null); // workspace_id
   const [newCategoryName, setNewCategoryName] = useState('');
+  // Bumped whenever a workspace is archived or restored, so the Αρχειοθετημένα
+  // section below refetches instead of waiting for the next visit to Settings.
+  const [archivedVersion, setArchivedVersion] = useState(0);
 
   // Every write goes through here: one place that reports failure, reloads the
   // shared copy so the chip row updates too, and cannot leave `busy` stuck on
@@ -69,7 +73,38 @@ function WorkspacesView({ onShowToast }) {
     // for the same reason the old one did: the number is not the part you need
     // before clicking.
     if (!window.confirm(t('workspace.archive_workspace_confirm', { name: workspace.name }))) return;
-    run(() => archiveWorkspace(workspace.record_id), 'workspace.archived');
+
+    // Archiving, then an UNDO in the toast. The confirmation already asked, so
+    // this is not a second gate — it is the one-tap way back for the case a
+    // confirmation cannot catch: the right answer given to the wrong row.
+    // Restoring is one write and nothing was taken apart, so there is no state
+    // to reconstruct and no reason to make somebody hunt for the section below.
+    setBusy(true);
+    archiveWorkspace(workspace.record_id)
+      .then(async () => {
+        await reload();
+        setArchivedVersion((v) => v + 1);
+        onShowToast?.({
+          message: t('workspace.archived'),
+          variant: 'success',
+          // Longer than the default 3s: an undo nobody has time to read is a
+          // toast with a decoration on it.
+          duration: 8000,
+          action: {
+            label: t('workspace.undo'),
+            onClick: () => {
+              restoreWorkspace(workspace.record_id)
+                .then(async () => {
+                  await reload();
+                  setArchivedVersion((v) => v + 1);
+                })
+                .catch((err) => onShowToast?.(err.detail || err.message, 'error'));
+            },
+          },
+        });
+      })
+      .catch((err) => onShowToast?.(err.detail || err.message, 'error'))
+      .finally(() => setBusy(false));
   }
 
   function handleDeleteCategory(category) {
@@ -248,6 +283,12 @@ function WorkspacesView({ onShowToast }) {
           </div>
         );
       })}
+
+      <ArchivedPanel
+        version={archivedVersion}
+        onShowToast={onShowToast}
+        onRestored={() => { reload(); setArchivedVersion((v) => v + 1); }}
+      />
 
       <form
         onSubmit={(e) => {

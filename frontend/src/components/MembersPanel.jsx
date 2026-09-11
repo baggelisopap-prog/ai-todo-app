@@ -1,32 +1,39 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  getWorkspaceMembers, removeWorkspaceMember, leaveWorkspace,
-  setWorkspaceNotifyAll, createWorkspaceInvite, inviteLink,
+  getWorkspaceMembers, removeWorkspaceMember, leaveWorkspace, setWorkspaceNotifyAll,
 } from '../api';
+import { useMembers } from '../hooks/useMembers';
+import { personName } from '../utils/people';
 import Switch from './Switch';
+import Avatar from './Avatar';
+import InvitePanel from './InvitePanel';
+import ActivityPanel from './ActivityPanel';
 
 /**
- * Who is in one workspace, and the link that puts somebody else in it.
+ * Who is in one workspace, and what this person may do about it.
  *
  * Rendered collapsed inside a WorkspacesView row, because a solo account has
  * exactly one member and should not pay a screenful for it. Opening it is what
  * fetches — a list of workspaces must not become one members request per
  * workspace on every visit to Settings.
  *
- * The invite link appears ONCE. Only a hash of it is stored, so there is no
- * "show it again" to build: the panel keeps it in state until the user leaves,
- * says out loud that it will not be shown again, and offers Copy.
+ * Each member is a FACE, not a line of text. The names in a shared workspace
+ * are the same names that appear on task rows and in the activity log, and
+ * Avatar derives its colour from the user id — so the person who is teal here
+ * is teal everywhere, and recognising them stops depending on reading.
+ *
+ * Minting and revoking links moved to InvitePanel: "who is here" and "how
+ * somebody else gets in" are two jobs, and the second had grown a share dialog.
  */
 function MembersPanel({ workspace, onShowToast, onChanged }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [members, setMembers] = useState(null);
   const [busy, setBusy] = useState(false);
-  // The freshly minted link. Deliberately NOT persisted anywhere: it exists in
-  // this component's state and nowhere else, which is the honest shape for
-  // something the server cannot give back.
-  const [freshLink, setFreshLink] = useState(null);
+  // So the avatars on task rows update the moment somebody joins or leaves,
+  // rather than at the next full reload of the app.
+  const { reload: reloadMembers } = useMembers();
 
   // `is_me` comes from the server, which already knows who asked. The
   // alternative — reading the session here and comparing ids — is a second
@@ -53,6 +60,7 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
       const data = await getWorkspaceMembers(workspace.record_id);
       setMembers(data.members);
       onChanged?.();
+      reloadMembers();
       if (successKey) onShowToast?.(t(successKey), 'success');
     } catch (err) {
       onShowToast?.(err.detail || err.message, 'error');
@@ -61,32 +69,8 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
     }
   }
 
-  async function handleInvite() {
-    setBusy(true);
-    try {
-      const result = await createWorkspaceInvite(workspace.record_id);
-      setFreshLink(inviteLink(result.token));
-    } catch (err) {
-      onShowToast?.(err.detail || err.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(freshLink);
-      onShowToast?.(t('members.copied'), 'success');
-    } catch {
-      // Clipboard access can be refused (insecure context, permissions). The
-      // link is on screen and selectable, so this is a nuisance, not a failure
-      // — say so rather than reporting an error for something that still works.
-      onShowToast?.(t('members.copy_failed'), 'error');
-    }
-  }
-
   function handleRemove(member) {
-    const name = member.display_name || member.email || member.user_id;
+    const name = personName(member);
     if (!window.confirm(t('members.remove_confirm', { name }))) return;
     run(() => removeWorkspaceMember(workspace.record_id, member.user_id), 'members.removed');
   }
@@ -99,39 +83,37 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
   const count = members?.length;
 
   return (
-    <div className="pl-9 pt-1">
+    <div className="pt-2 border-t border-[var(--border-subtle)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="tap-44 text-xs text-[var(--text-secondary)] hover:underline"
+        className="tap-44 flex items-center gap-2 w-full text-left text-xs font-medium text-[var(--text-secondary)]"
         aria-expanded={open}
       >
+        <span aria-hidden="true" className="text-[10px] text-[var(--text-muted)]">
+          {open ? '▾' : '▸'}
+        </span>
         {count === undefined ? t('members.title') : t('members.title_count', { count })}
       </button>
 
       {open && (
-        <div className="mt-2 space-y-2">
+        <div className="mt-2 space-y-3">
           {members === null && (
             <p className="text-xs text-[var(--text-muted)]">{t('members.loading')}</p>
           )}
 
-          {members?.map((member) => {
-            const name = member.display_name || member.email || member.user_id;
-            const isMe = member.is_me;
-            return (
+          <div className="space-y-1.5">
+            {members?.map((member) => (
               <div key={member.user_id} className="flex items-center gap-2">
-                <span className="flex-1 min-w-0 truncate text-sm text-[var(--text-primary)]">
-                  {name}
-                  {member.role === 'owner' && (
-                    <span className="ml-1 text-xs text-[var(--text-muted)]">
-                      {t('members.owner')}
-                    </span>
-                  )}
-                  {isMe && (
-                    <span className="ml-1 text-xs text-[var(--text-muted)]">
-                      {t('members.you')}
-                    </span>
-                  )}
+                <Avatar member={member} size="md" />
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate text-sm text-[var(--text-primary)]">
+                    {personName(member)}
+                  </span>
+                  <span className="block text-[11px] text-[var(--text-muted)]">
+                    {member.role === 'owner' ? t('members.owner') : t('members.member')}
+                    {member.is_me && ` · ${t('members.you')}`}
+                  </span>
                 </span>
                 {/* No button for the owner: the backend answers 409 and a
                     button that always fails is worse than no button — the same
@@ -141,14 +123,16 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
                     type="button"
                     disabled={busy}
                     onClick={() => handleRemove(member)}
-                    className="tap-44 px-2 text-xs text-[var(--danger-text)] hover:underline flex-shrink-0"
+                    aria-label={`${t('members.remove')} ${personName(member)}`}
+                    title={t('members.remove')}
+                    className="tap-44 px-2 text-sm text-[var(--danger-text)] hover:underline flex-shrink-0"
                   >
-                    {t('members.remove')}
+                    ✕
                   </button>
                 )}
               </div>
-            );
-          })}
+            ))}
+          </div>
 
           {me && (
             <Switch
@@ -165,32 +149,15 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
             />
           )}
 
-          {isOwner && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={handleInvite}
-              className="tap-44 text-xs text-[var(--brand-primary)] hover:underline"
-            >
-              {t('members.invite')}
-            </button>
+          {members && (
+            <InvitePanel
+              workspace={workspace}
+              isOwner={isOwner}
+              onShowToast={onShowToast}
+            />
           )}
 
-          {freshLink && (
-            <div className="rounded border border-[var(--border-subtle)] p-2 space-y-1">
-              <p className="text-xs text-[var(--text-secondary)]">
-                {t('members.link_once')}
-              </p>
-              <p className="text-xs break-all text-[var(--text-primary)]">{freshLink}</p>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="tap-44 text-xs text-[var(--brand-primary)] hover:underline"
-              >
-                {t('members.copy')}
-              </button>
-            </div>
-          )}
+          {members && <ActivityPanel workspace={workspace} members={members} />}
 
           {members && !isOwner && (
             <button

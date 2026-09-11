@@ -201,3 +201,64 @@ def test_every_code_sharing_can_raise_has_a_status():
     missing = set(sharing._MESSAGES) - set(main._SHARING_STATUS)
 
     assert not missing, f"no HTTP status decided for: {sorted(missing)}"
+
+
+# --------------------------------------------------------- the activity log
+
+
+def test_activity_rows_carry_the_actors_name(monkeypatch):
+    """A log of ids is a record of what happened that cannot say who did it.
+    The join has to happen HERE: the frontend only knows the people who are in
+    the room now, and half of what a log is for is the ones who have left."""
+    monkeypatch.setattr(main.repository, "get_workspace_activity", lambda w, limit=100: [
+        {"id": "a-1", "actor_user_id": "user-2", "action": "member_joined",
+         "task_name": None, "created_at": "2026-09-11T10:00:00Z"},
+        {"id": "a-2", "actor_user_id": "user-1", "action": "task_assigned",
+         "task_name": "Καθαρισμός Arachova", "created_at": "2026-09-11T09:00:00Z"},
+    ])
+    monkeypatch.setattr(main.repository, "get_profiles", lambda ids: {
+        "user-1": {"id": "user-1", "display_name": "Βαγγέλης", "email": "v@x.gr"},
+        "user-2": {"id": "user-2", "display_name": "Μαρία", "email": "m@x.gr"},
+    })
+
+    result = main.list_workspace_activity("ws-1", user_id="user-1")
+
+    assert [r["actor_name"] for r in result.activity] == ["Μαρία", "Βαγγέλης"]
+    # Nothing else about the row is disturbed — the verb and the remembered
+    # task name are what keep a row readable after its task is gone.
+    assert result.activity[1]["action"] == "task_assigned"
+    assert result.activity[1]["task_name"] == "Καθαρισμός Arachova"
+
+
+def test_an_actor_with_no_profile_falls_back_to_the_email(monkeypatch):
+    monkeypatch.setattr(main.repository, "get_workspace_activity", lambda w, limit=100: [
+        {"id": "a-1", "actor_user_id": "user-3", "action": "invite_created"},
+    ])
+    monkeypatch.setattr(main.repository, "get_profiles", lambda ids: {
+        "user-3": {"id": "user-3", "display_name": None, "email": "kostas@x.gr"},
+    })
+
+    result = main.list_workspace_activity("ws-1", user_id="user-1")
+
+    assert result.activity[0]["actor_name"] == "kostas@x.gr"
+
+
+def test_a_departed_actor_leaves_the_name_empty_rather_than_inventing_one(monkeypatch):
+    """actor_user_id is ON DELETE SET NULL. The row keeps its verb and its
+    remembered task name; only the name is gone, and the screen says so in its
+    own words rather than this guessing."""
+    monkeypatch.setattr(main.repository, "get_workspace_activity", lambda w, limit=100: [
+        {"id": "a-1", "actor_user_id": None, "action": "workspace_archived"},
+    ])
+
+    result = main.list_workspace_activity("ws-1", user_id="user-1")
+
+    assert result.activity[0]["actor_name"] is None
+    assert result.activity[0]["action"] == "workspace_archived"
+
+
+def test_reading_the_log_is_a_members_right_and_nobody_elses(monkeypatch):
+    monkeypatch.setattr(main.repository, "get_member_workspace_ids", lambda u: [])
+
+    with pytest.raises(Exception):
+        main.list_workspace_activity("ws-1", user_id="stranger")

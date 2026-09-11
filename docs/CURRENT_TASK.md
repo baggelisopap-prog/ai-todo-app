@@ -258,11 +258,130 @@ What is functionally present but visually unfinished, in the order it will be no
 - **No Ιστορικό screen**, though the log is already being written by every invite, join,
   removal, archive and handover. There is real content waiting for a screen.
 
-**Nothing in that list is blocked on backend work.** Every endpoint it needs exists and is
-live.
+**CORRECTED 2026-09-11, same day.** This line used to read: *"Nothing in that list is
+blocked on backend work. Every endpoint it needs exists and is live."* **It was wrong on
+two of the six items, and checking the code is what showed it.**
+
+- **Αρχειοθετημένα had no read at all.** `POST /workspaces/{id}/restore` does exist — but
+  `get_workspaces` filters `archived_at` to null (`repository.py`), and nothing else
+  returned archived rows. There was no way for any screen to NAME a workspace to restore.
+  Added: `repository.get_archived_workspaces` and `GET /workspaces/archived`.
+- **The activity log returns an id, not a name.** Only the server can name somebody who
+  has since LEFT the room — which is half of what a log is read for — so the join could
+  not be done on the frontend. `GET /workspaces/{id}/activity` now carries `actor_name`,
+  the same batched `profiles` read the members endpoint already does.
+
+A third backend addition was needed that the list did not mention at all: `member_count`
+on each workspace, so a screen can tell a shared room from a solo one without one
+`/members` request per workspace on every app open.
 
 Two conventions any UI work here has to respect, both enforced by `npm run check`:
 `node scripts/ui-check.mjs` fails the build for a CSS variable that is not defined in
 `index.css` (it caught `--accent`, which does not exist — the token is `--brand-primary`),
 and every user-facing string goes through `t('...')` with a key in **both** `el.json` and
 `en.json`. ESLint baseline is **12** and must not go up.
+
+
+---
+
+## Slice 4 — the UX of workspaces (2026-09-11, NOT COMMITTED, NOT DEPLOYED)
+
+Asked for as: «παμε στο ux τον workspaces» and then, when offered a choice of which
+pieces: «ολα κανε ερευνα πως θα ειναι το ποιο διαδραστικο και ωραιο και πρακτικο συμφωνα
+με το πως το έχουν μεγαλες εφαρμογες».
+
+### What the research settled
+
+Todoist puts an assignee chip beside the task name and offers "Only me" INSIDE team
+projects and nowhere else; Trello draws initials in a circle on the card itself and leaves
+an unassigned card blank. Both were followed. Trello's "View all closed boards" is the
+shape of the archived section — out of sight, one tap away, never mixed with the live
+list. Activity-feed guidance is unanimous that rows group under date headings and that an
+avatar needs the actor's NAME beside it, because a face alone is not recognised by
+somebody who does not know the person well.
+
+### His decision inside it
+
+**Three buttons, not two** — «Όλα / Δικά μου / Αδιάθετα». Todoist ships two; the third was
+offered because for a cleaning team "what has nobody picked up" is the question actually
+asked, and he took it.
+
+### THREE BUGS FOUND, all of them live in production since the 2026-09-11 push
+
+1. **The assignee was written and never read back.** `_supabase_row_to_task` had no
+   `assigned_to=` line. `services.update_task` hands its `updates` dict straight to the
+   column, so every handover was stored correctly and dropped on the way home: the picker
+   read "Χωρίς υπεύθυνο" again the moment the task reloaded, while the database held the
+   right person and the reminder loop was using it. Nothing raised, nothing logged.
+   Regression test: `tests/test_task_assignee_roundtrip.py`, and it was CONFIRMED by
+   stashing the fix — 3 of its 4 tests fail without it.
+2. **Every toast raised from a modal was invisible.** `Toast` was `z-50`, every modal in
+   the app is `z-50`, and App renders the toast BEFORE the modals — so the later element
+   won and the toast was painted underneath a full-screen overlay. «Αποθηκεύτηκε» and
+   «Αντιγράφηκε» had been firing correctly and reaching nobody. Now `z-[60]`.
+3. **A live invitation could not be seen or revoked.** `getWorkspaceInvites` and
+   `revokeWorkspaceInvite` existed in `api.js` and no component imported either. Minting a
+   link and closing the panel left a working seven-day key in circulation that its owner
+   could neither list nor withdraw.
+
+### What was built
+
+- **A shared members cache** (`MembersProvider`, `useMembers`) — one fetch per SHARED
+  workspace, zero on a solo account, because `member_count` now rides along with the
+  workspaces themselves and settles "is anybody else in here" before any request is made.
+- **The assignee on the row** — a coloured circle of initials plus the first name, in the
+  meta line beside the placement chip. Colour is derived from the user id (the Slack and
+  Trello trick), so the same person is the same colour on a row, in the members panel and
+  in the log, with nothing stored and no CSS token added.
+- **«Όλα / Δικά μου / Αδιάθετα»** in `FilterBar`, shown only where more than one person
+  can hold a task. "Mine" is defined in `utils/assignment.js` to mean EXACTLY what
+  `get_owned_or_assigned_tasks` means — assigned to me, OR created by me and taken by
+  nobody — which is why `created_by` had to be surfaced on `TaskRecord`. Two definitions
+  of that word is a screen answering 18 beside an agent answering 21, with nothing on
+  either side looking broken.
+- **The members panel as faces**, role and «Εσύ» underneath, ✕ instead of a text link.
+- **`InvitePanel`** — copy, the OS share sheet (feature-detected: `navigator.share` is on
+  phones and Chrome for Windows, absent on Firefox), a WhatsApp destination, the link in
+  monospace, the "shown once" warning in danger colours, and the live-invitations list
+  with Ακύρωση.
+- **`ArchivedPanel`** — Trello's shape, plus an **Αναίρεση in the toast** for eight
+  seconds right after archiving.
+- **`ActivityPanel`** — grouped by day, «Σήμερα»/«Χθες», avatar + Greek sentence for all
+  eight verbs, and an unknown verb prints itself rather than vanishing (the vocabulary is
+  meant to grow — comments are next).
+
+### Changed
+
+Backend: `models.py`, `repository.py`, `main.py`.
+Frontend, new: `MembersProvider.jsx`, `Avatar.jsx`, `InvitePanel.jsx`, `ArchivedPanel.jsx`,
+`ActivityPanel.jsx`, `hooks/useMembers.js`, `utils/people.js`, `utils/assignment.js`,
+`scripts/assignment.test.mjs`.
+Frontend, changed: `App.jsx`, `api.js`, `TaskRow.jsx`, `FilterBar.jsx`, `TodayView.jsx`,
+`CalendarView.jsx`, `MembersPanel.jsx`, `WorkspacesView.jsx`, `Toast.jsx`,
+`package.json`, both locale files.
+
+### Baselines, as the commands printed them
+
+```
+493 passed in 5.08s                                    (backend, was 478)
+ui-check: OK — 80 files, 49 tokens, 476 translation keys
+✖ 12 problems (12 errors, 0 warnings)                  (npm run lint — baseline, unchanged)
+✓ built in 527ms                                       (vite build)
+```
+
+### What a person has actually SEEN: NOTHING
+
+Not one line of this has run in a browser. Everything above is tests and a clean build.
+What would settle each piece, and nothing else will:
+
+- **The avatar and the filter need two real accounts in one workspace.** A solo account
+  renders neither by design, so opening the app alone proves only that nothing broke.
+- **The assignee round-trip.** Assign a task, reload, and see the name still there — this
+  is the production bug above, and it is the single most valuable thing to check.
+- **The invitation.** Mint a link, watch the pending row appear with its expiry, revoke it,
+  and confirm the revoked link is refused with the right Greek sentence.
+- **The toast fix.** Rename a workspace in Settings; «Αποθηκεύτηκε» must now be visible,
+  where before it never was.
+- **Archiving and Αναίρεση**, then the Αρχειοθετημένα section and Επαναφορά.
+- **The activity screen against real rows** — the only place the Greek sentences and the
+  day grouping can be judged.

@@ -1,6 +1,12 @@
 import CustomSelect from './CustomSelect';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useMembers } from '../hooks/useMembers';
 import { UNFILED } from '../utils/workspaces';
+import {
+  ASSIGNMENT_ALL,
+  ASSIGNMENT_MINE,
+  ASSIGNMENT_UNASSIGNED,
+} from '../utils/assignment';
 
 /**
  * Shared category + priority filter row used by Today, Upcoming, and Calendar views.
@@ -12,8 +18,14 @@ import { UNFILED } from '../utils/workspaces';
  * menu — and the chips above are already doing the coarse filtering that the old
  * hardcoded Business/Personal/Unknown/Hostaway dropdown used to do.
  */
-function FilterBar({ category, onCategoryChange, priority, onPriorityChange, t }) {
+function FilterBar({
+  category, onCategoryChange,
+  priority, onPriorityChange,
+  assignment, onAssignmentChange,
+  t,
+}) {
   const { activeId, categoriesFor } = useWorkspaces();
+  const { hasAnyShared, isShared } = useMembers();
 
   // UNFILED is a view, not a workspace: it has no categories of its own, so the
   // category control stays hidden there too.
@@ -33,28 +45,82 @@ function FilterBar({ category, onCategoryChange, priority, onPriorityChange, t }
     { value: 'P3', label: 'P3' },
   ];
 
+  // Only where more than one person can hold a task.
+  //
+  // On a solo account every task is yours, so the control would be three
+  // buttons that all produce the same list — and it would sit on every screen
+  // of an app most of whose users never share anything. This is the same test
+  // the handover picker in the task sheet already applies, and the same one
+  // Todoist applies: "Only me" exists inside team projects and nowhere else.
+  //
+  // On "Όλα" (activeId null) the list genuinely mixes workspaces, so the
+  // question still makes sense as long as ANY room is shared — hence two
+  // different checks rather than one.
+  const showAssignment = Boolean(onAssignmentChange)
+    && (activeId ? isShared(activeId) : hasAnyShared);
+
+  const assignmentOptions = [
+    { value: ASSIGNMENT_ALL, label: t('assignment.all') },
+    { value: ASSIGNMENT_MINE, label: t('assignment.mine') },
+    { value: ASSIGNMENT_UNASSIGNED, label: t('assignment.unassigned') },
+  ];
+
   return (
-    <div className="mb-3 flex gap-2">
-      {categoryOptions && (
+    <div className="mb-3 space-y-2">
+      <div className="flex gap-2">
+        {categoryOptions && (
+          <div className="flex-1 min-w-0">
+            <CustomSelect
+              compact
+              value={category}
+              options={categoryOptions}
+              onChange={onCategoryChange}
+              ariaLabel={t('workspace.category_label')}
+            />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <CustomSelect
             compact
-            value={category}
-            options={categoryOptions}
-            onChange={onCategoryChange}
-            ariaLabel={t('workspace.category_label')}
+            value={priority}
+            options={priorityOptions}
+            onChange={onPriorityChange}
+            ariaLabel={t('task.priority_label')}
           />
         </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <CustomSelect
-          compact
-          value={priority}
-          options={priorityOptions}
-          onChange={onPriorityChange}
-          ariaLabel={t('task.priority_label')}
-        />
       </div>
+
+      {/* A segmented control rather than a fourth dropdown. Three short,
+          mutually exclusive answers that are looked at constantly: putting them
+          behind a tap means the current one is invisible until you open it,
+          which for "am I looking at everything or only my own?" is the one
+          thing you must be able to see without asking. */}
+      {showAssignment && (
+        <div
+          role="group"
+          aria-label={t('assignment.label')}
+          className="flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-input)] p-0.5"
+        >
+          {assignmentOptions.map((option) => {
+            const isActive = (assignment || ASSIGNMENT_ALL) === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onAssignmentChange(option.value)}
+                className={`tap-40 flex-1 min-w-0 truncate rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-[var(--brand-primary)] text-white'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

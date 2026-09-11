@@ -14,7 +14,9 @@ import { useTaskActions } from '../hooks/useTaskActions';
 import { useSwipeRow } from '../hooks/useSwipeRow';
 import { useRecurrence } from '../hooks/useRecurrence';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useMembers } from '../hooks/useMembers';
 import { describePlacement } from '../utils/workspaces';
+import Avatar from './Avatar';
 import TaskMenu from './TaskMenu';
 import QuickReschedule from './QuickReschedule';
 import {
@@ -113,6 +115,28 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
   // marker that says slightly less. The full sentence, time included, is on
   // the title and the accessible name either way.
   const { workspaces, categories } = useWorkspaces();
+
+  // Who holds this task, resolved from an id to a person.
+  //
+  // `isShared` is answered from member_count, which arrives with the workspaces
+  // themselves — so a solo account settles this without a single request and
+  // the branch below costs nothing on 340 rows.
+  //
+  // The FIRST WORD of the name, not all of it. This meta line already carries a
+  // date, a workspace and up to four other chips on a 400px screen, and
+  // "Μαρία Παπαδοπούλου" would push the row to wrap. The full name is on the
+  // avatar's title and accessible name, where a hover or a screen reader finds
+  // it — the same bargain the recurrence badge already makes.
+  const { isShared, personFor } = useMembers();
+  const isSharedRoom = isShared(task.workspace_id);
+  const assignee = isSharedRoom ? personFor(task.workspace_id, task.assigned_to) : null;
+  const assigneeFullName = assignee
+    ? (assignee.display_name || assignee.email || assignee.user_id)
+    : null;
+  const assigneeLabel = assigneeFullName
+    ? assigneeFullName.trim().split(/\s+/)[0]
+    : t('members.former_member');
+
   const recurrence = useRecurrence();
   const rule = recurrence.ruleFor(task);
   const recurrenceBadge = rule
@@ -341,6 +365,34 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
                 />
                 <span className="truncate">
                   {describePlacement(task, workspaces, categories, t)}
+                </span>
+              </span>
+            )}
+
+            {/* Who is holding this. Beside the placement chip on purpose: WHERE
+                it lives and WHO has it are the two facts a shared list is
+                scanned for, and separating them makes the eye travel twice.
+
+                Drawn only in a workspace with somebody else in it. On a solo
+                account the answer is always "you", and your own initials
+                stamped on all three hundred rows is decoration that costs a
+                line of width on a phone.
+
+                NOTHING IS DRAWN WHEN NOBODY HOLDS IT, which is the same choice
+                Trello makes and it is information rather than an omission: in a
+                shared room an unassigned task is nobody's work until somebody
+                takes it — the identical rule the agent follows when it answers
+                "τι έχω σήμερα". */}
+            {isSharedRoom && task.assigned_to && (
+              <span className="flex items-center gap-1 min-w-0">
+                <Avatar
+                  member={assignee}
+                  userId={task.assigned_to}
+                  size="xs"
+                  unknownLabel={t('members.former_member')}
+                />
+                <span className="truncate text-[var(--text-secondary)]">
+                  {assigneeLabel}
                 </span>
               </span>
             )}

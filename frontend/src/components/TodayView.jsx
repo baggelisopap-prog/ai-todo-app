@@ -4,6 +4,8 @@ import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
 import { filterTasksByCategory } from '../utils/workspaces';
+import { filterTasksByAssignment, ASSIGNMENT_ALL } from '../utils/assignment';
+import { useMembers } from '../hooks/useMembers';
 import { toLocalISODate } from '../utils/formatDate';
 import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent } from '../api';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
@@ -15,6 +17,11 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
+  // Per view, like the two filters above it. Today and Upcoming already keep
+  // their own category and priority, and a fourth filter that alone followed
+  // you between screens would be the odd one out.
+  const [selectedAssignment, setSelectedAssignment] = useState(ASSIGNMENT_ALL);
+  const { myId } = useMembers();
   const [overdueExpanded, setOverdueExpanded] = useState(true);
   const [todayEvents, setTodayEvents] = useState([]);
   const { settings } = useAppSettings();
@@ -64,9 +71,13 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
 
   // Category is now the user's OWN category (tasks.category_id), not the old
   // four-word column. 'All' means no filter; UNFILED means the ones with none.
-  const filteredTasks = filterTasksByCategory(
-    tasks, selectedCategory === 'All' ? null : selectedCategory
-  ).filter((task) => selectedPriority === 'All' || task.priority === selectedPriority);
+  const filteredTasks = filterTasksByAssignment(
+    filterTasksByCategory(
+      tasks, selectedCategory === 'All' ? null : selectedCategory
+    ).filter((task) => selectedPriority === 'All' || task.priority === selectedPriority),
+    selectedAssignment,
+    myId
+  );
 
   const todayTasks = filteredTasks.filter((task) =>
     task.approval_status &&
@@ -100,6 +111,8 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
         onCategoryChange={setSelectedCategory}
         priority={selectedPriority}
         onPriorityChange={setSelectedPriority}
+        assignment={selectedAssignment}
+        onAssignmentChange={setSelectedAssignment}
         t={t}
       />
 

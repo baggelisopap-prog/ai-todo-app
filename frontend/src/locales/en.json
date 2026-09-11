@@ -480,7 +480,13 @@
     "remove": "Delete",
     "archive": "Archive",
     "archive_workspace_confirm": "Archive “{{name}}”? It leaves the list for everyone who can see it. NOTHING is lost — tasks keep their workspace, category and assignee, and all of it comes back if you restore it.",
-    "archived": "Archived"
+    "archived": "Archived",
+    "archived_title": "Archived ({{count}})",
+    "archived_hint": "Nothing was lost. Tasks, categories and members are as you left them — restoring brings all of it back.",
+    "archived_on": "Archived {{date}}",
+    "restore": "Restore",
+    "restored": "Restored",
+    "undo": "Undo"
   },
   "members": {
     "title": "Members",
@@ -495,13 +501,46 @@
     "leave_confirm": "Leave “{{name}}”? You will no longer see it. Tasks you had taken stay there.",
     "left": "You left",
     "invite": "+ Invite",
-    "link_once": "Send this link to whoever should join. One use, 7 days. It will NOT be shown again.",
+    "link_once": "Careful: this link is shown ONLY now and never again. One use, 7 days. Anyone holding it gets in.",
     "copy": "Copy",
     "copied": "Copied",
     "copy_failed": "Copy failed — select the link and copy it by hand.",
     "notify_all": "Notifications for the whole team",
     "notify_all_hint": "Normally only the assignee's phone rings. Turn this on to get this workspace's notifications too.",
     "joined": "You joined the workspace.",
-    "already_member": "You are already a member of this workspace."
+    "already_member": "You are already a member of this workspace.",
+    "former_member": "Former member",
+    "member": "Member",
+    "share": "Send it",
+    "share_text": "Join the «{{name}}» workspace in our task app.",
+    "pending_title": "Live invitations ({{count}})",
+    "pending_expires": "Expires in {{count}} days",
+    "pending_expires_soon": "Expires in under a day",
+    "revoke": "Revoke",
+    "revoke_confirm": "Revoke this invitation? Whoever holds the link will no longer be able to join.",
+    "revoked": "Invitation revoked"
+  },
+  "assignment": {
+    "label": "Whose",
+    "all": "All",
+    "mine": "Mine",
+    "unassigned": "Unclaimed"
+  },
+  "activity": {
+    "title": "History",
+    "empty": "Nothing has happened here yet.",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "somebody": "Somebody",
+    "a_task": "a task",
+    "invite_created": "{{actor}}: created an invitation",
+    "invite_revoked": "{{actor}}: revoked an invitation",
+    "member_joined": "{{actor}}: joined the workspace",
+    "member_removed": "{{actor}}: removed {{member}}",
+    "member_left": "{{actor}}: left",
+    "workspace_archived": "{{actor}}: archived the workspace",
+    "workspace_restored": "{{actor}}: restored the workspace",
+    "task_assigned": "{{actor}}: assigned «{{task}}» to {{member}}",
+    "task_unassigned": "{{actor}}: put «{{task}}» back on the pile"
   }
 }

@@ -28,10 +28,18 @@ function Toast({ message, onDismiss, duration = 3000, variant = 'success', actio
   return (
     // bottom-safe-20 keeps the old 5rem gap above the nav and adds the home
     // indicator's inset underneath it, so the toast clears both.
+    //
+    // z-[60], ABOVE the z-50 every modal in this app uses. It was z-50 too, and
+    // App renders the toast before the modals — so with equal z-index the later
+    // element won and every toast raised from inside Settings, the agent chat
+    // or the add-task sheet was painted underneath a full-screen overlay.
+    // Invisible, not merely dim. "Αποθηκεύτηκε" and "Αντιγράφηκε" have been
+    // firing correctly and reaching nobody, and an Undo nobody can see is not
+    // an Undo at all.
     // The animation ends at translate(-50%, 0), which is exactly what
     // -translate-x-1/2 provides — so the two agree and the toast does not jump
     // when the animation finishes.
-    <div className={`fixed bottom-safe-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg border shadow-[var(--shadow-modal)] text-sm font-medium flex items-center gap-2 animate-toast-in ${VARIANT_CLASSES[variant]}`}>
+    <div className={`fixed bottom-safe-20 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-lg border shadow-[var(--shadow-modal)] text-sm font-medium flex items-center gap-2 animate-toast-in ${VARIANT_CLASSES[variant]}`}>
       {variant === 'success' && <span className={VARIANT_ICON_CLASSES.success}>✓</span>}
       {variant === 'error' && <span className={VARIANT_ICON_CLASSES.error}>✕</span>}
       <span>{message}</span>

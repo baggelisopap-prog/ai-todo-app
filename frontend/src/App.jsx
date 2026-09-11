@@ -18,6 +18,7 @@ import { AgentChatModal } from './components/AgentChatModal';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
 import AppBar from './components/AppBar';
 import WorkspaceProvider from './components/WorkspaceProvider';
+import MembersProvider from './components/MembersProvider';
 import WorkspaceBar from './components/WorkspaceBar';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useAutoRefresh } from './hooks/useAutoRefresh';
@@ -429,6 +430,10 @@ function App() {
         app_settings.active_workspace_id through useAppSettings. */}
     <WorkspaceProvider onShowToast={handleShowToast}>
       <InviteAcceptor onShowToast={handleShowToast} />
+    {/* Below WorkspaceProvider because it reads workspaces[].member_count to
+        decide which rooms are shared — and on a solo account that answer is
+        "none", so it never issues a request at all. */}
+    <MembersProvider>
     <RecurrenceProvider onShowToast={handleShowToast} onTasksChanged={refreshTasks}>
     <div className="flex min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       {isDesktop && (
@@ -547,6 +552,7 @@ function App() {
       )}
     </div>
     </RecurrenceProvider>
+    </MembersProvider>
     </WorkspaceProvider>
     </AppSettingsProvider>
   );
