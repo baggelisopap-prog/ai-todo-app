@@ -41,23 +41,41 @@ workspaces spec deliberately refused to design before the container existed.
 
 ## Where this stands
 
-**Slices 1, 2 and most of 3 are built and committed to `main`. NOTHING IS PUSHED and the
-migration has NOT been applied.** Nothing is live and nobody has seen a line of it run.
-20 commits, starting at `336fd6d`.
+**MIGRATION APPLIED AND PUSHED, 2026-09-11.** `f860456..a60d9bd`, 21 commits. Vercel and
+Render deploy themselves from `main`, so slices 1, 2 and most of 3 are live in the
+business.
 
 Design: `docs/superpowers/specs/2026-09-11-multi-user-workspace-sharing-design.md`
 Plan (slice 1 only): `docs/superpowers/plans/2026-09-11-multi-user-slice-1-reads-and-gate.md`
 
-### Two things must happen before this is deployed, in this order
+### The migration, verified by the owner reading the numbers back
 
-1. **Run `docs/migrations/2026-09-11-multi-user-sharing.sql` in the Supabase SQL Editor**,
-   then uncomment its verification block and read the three numbers back.
-2. Only then push.
+Owner ran `docs/migrations/2026-09-11-multi-user-sharing.sql` in the Supabase SQL Editor
+and read the verification block: **`workspaces` total 4, archived 0**; memberships and
+owners both landed where they had to. Two accounts exist — `baggelisopap@gmail.com` with
+340 tasks and 2 workspaces, and a second real account with 44 tasks and 2 workspaces —
+so the backfill's 4 memberships / 4 owners is exactly right, two per account.
 
-**The order is not a formality.** `tasks.assigned_to` is now written on every task insert,
-and Supabase rejects a write containing an unknown column **wholesale** (PGRST204). Deploy
-before the migration and every task-creation path fails at once — manual, all three AI
-paths, and the Hostaway webhook. That is exactly what `category_name` did on 2026-09-01.
+### The sharpest open risk is CLOSED, with real numbers
+
+Every doc before this one said the same thing: the PostgREST filter strings had only ever
+been asserted against a fake, and the nested `and(user_id.eq.X,assigned_to.is.null)` was
+syntax no test here could validate. Once the migration was applied that became checkable,
+and it was checked read-only against the live database, on the owner's own account:
+
+```
+membership ids      : 2
+visible_to  (or)    : 340
+belongs_to  (and)   : 340
+old plain filter    : 340
+workspaces (wide)   : 2
+workspaces (owned)  : 2
+categories          : 4
+```
+
+**340 = 340 = 340.** The widened read returns exactly what the old one did, not one row
+more — which is the failure that would have been worse than an error, because it does not
+announce itself. Every filter string parsed. Checked on the second account too (44 = 44).
 
 ## What slice 1 built — the foundations
 
