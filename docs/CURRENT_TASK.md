@@ -41,11 +41,12 @@ workspaces spec deliberately refused to design before the container existed.
 
 ## Where this stands
 
-**Slice 1 of 5 is built and committed to `main`. NOT pushed, and the migration has NOT
-been applied.** Nothing is live. Seven commits, `336fd6d` through `1de22b1`.
+**Slices 1 and 2 of 5 are built and committed to `main`. NOTHING IS PUSHED and the
+migration has NOT been applied.** Nothing is live and nobody has seen a line of it run.
+17 commits, starting at `336fd6d`.
 
 Design: `docs/superpowers/specs/2026-09-11-multi-user-workspace-sharing-design.md`
-Plan: `docs/superpowers/plans/2026-09-11-multi-user-slice-1-reads-and-gate.md`
+Plan (slice 1 only): `docs/superpowers/plans/2026-09-11-multi-user-slice-1-reads-and-gate.md`
 
 ### Two things must happen before this is deployed, in this order
 
@@ -58,7 +59,7 @@ and Supabase rejects a write containing an unknown column **wholesale** (PGRST20
 before the migration and every task-creation path fails at once — manual, all three AI
 paths, and the Hostaway webhook. That is exactly what `category_name` did on 2026-09-01.
 
-## What it does
+## What slice 1 built — the foundations
 
 **The finding that shaped everything.** `get_all_tasks` fed two different machines — the
 screens and the scheduler tick — and nobody ever had to notice, because both halves wanted
@@ -77,64 +78,107 @@ So the spine is **two reads, never one**:
 **The write gate did not exist and had to be built.** It had been described to the owner as
 already present; checking proved otherwise and he was told before he approved. The check
 was copy-pasted into each query — 19 of the 29 statements touching `tasks` — and
-`services.update_task` never asked at all. It is now `access.py`, one place, and his
+`services.update_task` never asked at all. It is now `access.py`, one place, and the
 eventual tightening («αλλάζει μόνο τα δικά του») is an `if` inside one function.
 
 **Only three tables become shared**: `workspaces`, `categories`, `tasks`. Settings, push
 subscriptions, Google, Hostaway, token usage, agent history **and recurrence rules** all
 stay strictly personal.
 
+## What slice 2 built — a second person
+
+**Invitations.** The owner presses Πρόσκληση and gets a link to send on WhatsApp. Single
+use, seven days, revocable. **Only a hash of the link is stored** — same standard as the
+Hostaway secret, because a leaked invites table would otherwise be a working set of keys
+to every shared workspace. The link is `?invite=<token>`, a query parameter rather than a
+path, because the app has no router and a path would need a Vercel rewrite that is right
+locally and wrong in production.
+
+**Every refusal names itself.** Unknown link, used, revoked, expired, or into an archived
+workspace — five different sentences in Greek, five different HTTP statuses. 410 Gone for
+the dead ones: the link existed, the colleague is not wrong to have tried, and a 404 would
+send them hunting for a typo that is not there.
+
+**Members panel**, collapsed inside each workspace in Settings. Who is in the room, remove
+(owner only), leave (anyone but the owner), and the «Ειδοποιήσεις για όλη την ομάδα»
+switch — the «υπεελεγχτικο προιστάμενο» toggle, off by default.
+
+**Archiving replaced deleting.** The Settings button now archives, and the confirmation
+changed with it: the old one promised tasks survive and become unfiled, which is true of a
+delete and **wrong** about an archive, where nothing is unlinked at all. Half the change
+would have put a lie on screen.
+
+**A second read had to exist here too, for a reason that would have been invisible.** If
+`get_workspaces` widens to include workspaces you were merely invited into, then a
+colleague invited BEFORE they first open the app looks furnished — and gets no Business,
+no Personal, no `default_workspace_id`, with every task they create unfiled forever. That
+is the exact failure `ensure_account_workspaces` was written to prevent, returning through
+a side door. It asks `get_owned_workspaces` now.
+
 ## Changed
 
-`access.py` (new, 145 lines). `models.py` (+51: `assigned_to`, `archived_at`,
-`WorkspaceMember`). `repository.py` (+185: membership reads, `visible_to`, `belongs_to`,
-`mark_notification_sent` fix). `services.py` (+28: the gate on three write paths, the tick
-repointed). `main.py` (+22: the 403 handler). One migration, 228 lines.
-**Zero frontend files** — `git diff --name-only f860456..HEAD -- frontend/` returns 0.
+Backend: `access.py` and `sharing.py` (new), `models.py`, `repository.py`, `services.py`,
+`main.py`, one migration.
+Frontend: `MembersPanel.jsx` (new), `api.js`, `App.jsx`, `WorkspacesView.jsx`, both locale
+files.
 
-## Baselines, as the command printed them
+## Baselines, as the commands printed them
 
 ```
-392 passed in 4.44s
+466 passed in 4.21s                                    (backend, was 348)
+ui-check: OK — 72 files, 49 tokens, 439 translation keys
+all passed                                             (the 11 node test scripts)
+✖ 12 problems (12 errors, 0 warnings)                  (npm run lint — the baseline, unchanged)
+✓ built in 326ms                                       (vite build)
 ```
 
-Baseline before this work was **348 passed in 4.70s**, run on 2026-09-11 before anything
-changed. `PROJECT_STATUS.md` said 312; that was the 2026-09-03 figure and had gone stale
-when the soft-delete and Inbox work added tests. Corrected there.
+Verified before running the backend suite that no test reaches a real model —
+`test_task_agent_categories` monkeypatches `generate_content`, `test_webhook_fanout`
+monkeypatches `classify_message` — so it costs nothing to run.
 
-Verified before running that no test reaches a real model — `test_task_agent_categories`
-monkeypatches `generate_content`, `test_webhook_fanout` monkeypatches `classify_message` —
-so the suite costs nothing to run.
-
-Frontend `npm run check` **was not run**: no frontend file changed.
+**One thing worth knowing about this suite**: a forgotten stub is not an error, it is a
+LIVE query against the real Supabase project. That is how a missing `get_owned_workspaces`
+stub announced itself, and how one test in `test_sharing.py` was found making a real
+network call that a `try/except` was swallowing — removing it dropped that file from 1.66s
+to 0.64s, which is the evidence the call was real.
 
 ## What a person has actually SEEN
 
-**Nothing.** Not one line of this has run against the real database or in a browser. The
-migration has not been applied, the code has not been deployed, and no second account
-exists.
+**Nothing.** Not one line has run against the real database or in a browser. The migration
+has not been applied, the code has not been deployed, and no second account exists.
 
 ## What nobody has watched, and what would settle it
 
 - **The migration applying.** Run it, uncomment the verification block: memberships and
   owners must both equal the current workspace count, and `assigned` and `archived` must
   both be 0.
-- **That the owner's own app is unchanged.** This is the claim slice 1 rests on and only a
-  browser settles it: after deploying, tasks list, create, edit, complete, delete and
-  restore exactly as before. `test_a_user_who_belongs_to_nothing_is_queried_EXACTLY_as_before`
-  is the test that pins it, but a passing test is not a person looking at the app.
-- **That reminders still fire.** The scheduler now reads a different function. Nothing has
-  watched a real reminder arrive since the change.
-- **The 403.** A refused write returning «Δεν έχετε δικαίωμα να αλλάξετε αυτό το task.»
-  has only been exercised by calling the handler directly, never through HTTP.
-- **The `or` filters against real PostgREST.** Both `visible_to` and `belongs_to` build
-  filter strings that have only ever been asserted against a fake. The nested
-  `and(user_id.eq.X,assigned_to.is.null)` in particular is syntax no test can validate.
-  **This is the sharpest open risk in slice 1** and it is settled the first time the app
+- **That the owner's own app is unchanged.** The claim everything rests on, and only a
+  browser settles it: tasks list, create, edit, complete, delete and restore exactly as
+  before.
+- **The PostgREST filter strings.** `visible_to`, `belongs_to` and the workspace read all
+  build filter text that has only ever been asserted against a fake. The nested
+  `and(user_id.eq.X,assigned_to.is.null)` in particular is syntax no test here can
+  validate. **This is the sharpest open risk** and it is settled the first time the app
   lists tasks against the real database.
+- **The whole invitation round trip**, which needs two real accounts: make a link, open it
+  in another browser, sign up, land in the workspace, see the tasks.
+- **That reminders still fire.** The scheduler reads a different function now.
 
 ## Next
 
-Slice 2: invites and members — the first slice where a second person exists. Archiving,
-removal and leaving land there too, because all three need membership to exist before they
-can be tested against anything real.
+**Slice 3: assignment.** `assigned_to` is a column, an index and a model field, and
+nothing writes it yet — no picker, no initials on the card, no «Δικά μου / Όλα» filter,
+and the agent's day view still reads the wide list. That is the slice that makes
+«προιστάμενος στέλνει δουλειά στον υφιστάμενο» actually work.
+
+Then slice 4 (notifications to the assignee, and `notify_all` actually changing who gets
+pushed) and slice 5 (the Ιστορικό screen — the activity log is being WRITTEN already, by
+invites, joins, removals and archiving; nothing reads it yet).
+
+**Two small questions parked with a proposed answer, neither confirmed:**
+- An **empty** workspace — no tasks, nobody else in it — should probably still be
+  hard-deletable, since there is no work to protect and refusing to remove something
+  created by mistake only annoys. `DELETE /workspaces/{id}` still exists and the UI no
+  longer calls it, which is why this is worth deciding rather than leaving.
+- A task assigned to you inside an **archived** workspace should probably NOT appear in
+  the agent's «τι έχω σήμερα» — archived means "not live work".
