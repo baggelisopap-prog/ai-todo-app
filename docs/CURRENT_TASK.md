@@ -210,23 +210,59 @@ has not been applied, the code has not been deployed, and no second account exis
   in another browser, sign up, land in the workspace, see the tasks.
 - **That reminders still fire.** The scheduler reads a different function now.
 
-## Next
+## The AI was checked after the change, and it is untouched
 
-**Finish slice 3** — two visible pieces are missing and both are small: the assignee's
-initials on the task card (today you have to open a task to see who has it), and a
-«Δικά μου / Όλα» filter on the shared lists (the agent narrows to your own work; the
-screen does not).
+Run 2026-09-11, after the push. **The cheap check first, and it is the one that
+settles it**: what the agent is handed was measured before and after the swap from
+`get_tasks_for_user` to `get_owned_or_assigned_tasks` — **340 tasks both times, the same
+ids, a 21-row day view both times, and byte-identical text**. The change moved which
+function feeds it, not what it sees.
 
-Then slice 4 — notifications actually going to the assignee, and `notify_all` actually
-changing who gets pushed. The switch is stored and honoured by nothing yet.
+Then ten deliberately hard questions at the real model (89.462 tokens,
+`gemini-3.1-flash-lite`, logged in `token_usage_log` and `agent_runs`). All ten returned
+`outcome=ok`, no exceptions. Every checkable claim was then verified against the live
+database and **every one was exactly right**:
 
-Then slice 5 — the Ιστορικό screen. The activity log is already being WRITTEN, by invites,
-joins, removals, archiving and every handover; nothing reads it.
+| Asked | Answered | Verified |
+|---|---|---|
+| πόσα ληξιπρόθεσμα, ποιο το πιο παλιό | 9, Booking.com 26/8 | 9, Booking.com 26/8 |
+| τι έχω για Οκτώβριο | κανένα | 0 |
+| τι έχω για το Παρίσι | δεν βρέθηκε | 0 — nothing invented |
+| πόσα Business / Personal ανοιχτά | 10 / 19 | 10 / 19 |
+| κλείσε το task «end» | proposed 2 | exactly the overdue one and today's; the other 14 are future occurrences of a recurring task and were correctly left alone |
+| «την Παρασκευή στις 11» | Friday 18/9 | correct — it was Friday 11/9 at 16:44, so today's 11:00 had passed |
 
-**Two small questions parked with a proposed answer, neither confirmed:**
-- An **empty** workspace — no tasks, nobody else in it — should probably still be
-  hard-deletable, since there is no work to protect and refusing to remove something
-  created by mistake only annoys. `DELETE /workspaces/{id}` still exists and the UI no
-  longer calls it, which is why this is worth deciding rather than leaving.
-- A task assigned to you inside an **archived** workspace should probably NOT appear in
-  the agent's «τι έχω σήμερα» — archived means "not live work".
+One thing the probe found and the multi-user work did not cause: see "The agent picks a
+target when you never gave it one" in BACKLOG.md.
+
+## Next: the UX of workspaces, and the appearance generally
+
+The owner's next session is about **how this looks and feels**, not about more plumbing.
+What is functionally present but visually unfinished, in the order it will be noticed:
+
+- **Nothing on a list says who holds a task.** You have to open a task to find out. The
+  assignee is a column, a picker and an API field; there is no avatar, no initials, no
+  badge anywhere on `TaskCard` / `TaskRow`.
+- **No «Δικά μου / Όλα» filter.** In a shared workspace every member sees every task with
+  no way to narrow to their own. The agent narrows (`belongs_to`); the screen does not.
+  `FilterBar.jsx` is where the other filters live.
+- **The members panel is a text list.** `MembersPanel.jsx` renders names, a Remove link
+  and a switch — it works, and it is plainer than the rest of Settings. It has never been
+  looked at by a person.
+- **The invite link is a wall of characters** in a bordered box with a Copy button. No QR,
+  no share sheet, no "send on WhatsApp" affordance, and the "shown once" warning is a
+  sentence rather than something that looks urgent.
+- **Archiving has no way back in the UI.** `POST /workspaces/{id}/restore` exists and
+  works; there is no Αρχειοθετημένα screen to reach it from, so an archived workspace is
+  currently unreachable for the owner without an API call.
+- **No Ιστορικό screen**, though the log is already being written by every invite, join,
+  removal, archive and handover. There is real content waiting for a screen.
+
+**Nothing in that list is blocked on backend work.** Every endpoint it needs exists and is
+live.
+
+Two conventions any UI work here has to respect, both enforced by `npm run check`:
+`node scripts/ui-check.mjs` fails the build for a CSS variable that is not defined in
+`index.css` (it caught `--accent`, which does not exist — the token is `--brand-primary`),
+and every user-facing string goes through `t('...')` with a key in **both** `el.json` and
+`en.json`. ESLint baseline is **12** and must not go up.
