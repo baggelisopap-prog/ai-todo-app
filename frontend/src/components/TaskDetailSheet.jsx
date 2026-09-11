@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { agentEditTask, getWorkspaceMembers } from '../api';
 import { formatDate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
-import { categoryColor, categoryLabel, describeRecurrence, dueTone, DUE_TONE_CLASSES, priorityLabel } from '../utils/taskDisplay';
+import { describeRecurrence, dueTone, DUE_TONE_CLASSES, priorityLabel } from '../utils/taskDisplay';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { useRecurrence } from '../hooks/useRecurrence';
@@ -13,7 +13,10 @@ import DictateButton from './DictateButton';
 import Switch from './Switch';
 import TaskMenu from './TaskMenu';
 import { SparkleIcon, SpinnerIcon, SendIcon } from './icons';
-import { CheckIcon, CheckedBox, EmptyBox } from './TaskIcons';
+import {
+  CheckIcon, CheckedBox, EmptyBox,
+  CalendarIcon, ChecklistIcon, ClockIcon, FlagIcon, FolderIcon, PersonIcon, TextLinesIcon,
+} from './TaskIcons';
 
 // Confirmed against a real inbox URL, not documentation: a conversation's id
 // from the Hostaway API is exactly the id in this path.
@@ -92,16 +95,126 @@ function draftFromTask(task) {
   };
 }
 
-function Field({ label, children }) {
+/**
+ * A row's drawing, which is also its name.
+ *
+ * REPLACES the uppercase caption that used to sit above every control. Nine of
+ * those captions were costing a line each on a phone, and most of them were
+ * saying what the value underneath already said — "ΗΜΕΡΟΜΗΝΙΑ ΛΗΞΗΣ" above
+ * 26/08/2026.
+ *
+ * A drawing is LEARNED, though, where a word is READ — so the word stays one
+ * gesture away, and never disappears for assistive technology:
+ *
+ * - `aria-label` means a screen reader says "Λήξη, 26 Αυγούστου", not "image".
+ *   Dropping the caption without this would have made the sheet worse for
+ *   somebody who cannot see it at all.
+ * - `title` is the desktop hover, free and native.
+ * - Press-and-hold is the touchscreen's only honest equivalent of hover: a
+ *   finger is either down or it is not, so there is no "passing over". ~400ms
+ *   is long enough not to fire on an ordinary tap. Any movement cancels it, or
+ *   every scroll that began on an icon would throw a label; and it lingers
+ *   after the finger lifts, because while you are pressing, your own finger is
+ *   covering the thing you are trying to read.
+ */
+function FieldIcon({ label, color, children }) {
+  const [showing, setShowing] = useState(false);
+  const holdTimer = useRef(null);
+
+  function clearHold() {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }
+
+  useEffect(() => clearHold, []);
+
   return (
-    <label className="block">
-      <span className="text-xs text-[var(--text-secondary)] font-medium uppercase tracking-wide block mb-1">
-        {label}
-      </span>
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      style={color ? { color } : undefined}
+      onTouchStart={() => {
+        clearHold();
+        holdTimer.current = setTimeout(() => setShowing(true), 400);
+      }}
+      onTouchMove={() => { clearHold(); setShowing(false); }}
+      onTouchCancel={() => { clearHold(); setShowing(false); }}
+      onTouchEnd={() => {
+        clearHold();
+        holdTimer.current = setTimeout(() => setShowing(false), 1200);
+      }}
+      className={`relative flex-shrink-0 w-5 h-5 flex items-center justify-center select-none ${
+        color ? '' : 'text-[var(--text-secondary)]'
+      }`}
+    >
       {children}
-    </label>
+      {showing && (
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-[var(--text-primary)] text-[var(--bg-card)] text-[11px] font-medium whitespace-nowrap pointer-events-none z-10">
+          {label}
+        </span>
+      )}
+    </span>
   );
 }
+
+/**
+ * One line of the sheet: drawing on the left, controls filling the rest.
+ *
+ * Hairlines between rows instead of a bordered box per field. A border, a
+ * radius and a background around every single control made nine separate
+ * objects out of what is one object with nine facts about it.
+ */
+function SheetRow({ icon, children }) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 border-b border-[var(--border-subtle)] last:border-b-0">
+      {icon}
+      <div className="flex-1 min-w-0 flex items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * An offer, or a thing that already has content.
+ *
+ * The two look different on purpose. A dashed, muted pill is an empty field
+ * you may fill; a solid one with a dot is holding something you cannot see
+ * from here. Without that difference, the only way to find out whether a task
+ * has a description is to tap and look.
+ */
+function SheetPill({ filled, expanded, icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={expanded}
+      className={`tap-40 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors ${
+        filled
+          ? 'border border-[var(--border-medium)] bg-[var(--bg-card)] text-[var(--text-primary)] font-medium'
+          : 'border border-dashed border-[var(--border-medium)] bg-[var(--bg-app)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+      }`}
+    >
+      <span className="w-4 h-4 flex-shrink-0">{icon}</span>
+      {label}
+      {filled && (
+        <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[var(--text-secondary)] flex-shrink-0" />
+      )}
+    </button>
+  );
+}
+
+/**
+ * A control with no box around it.
+ *
+ * The rows in the edit sheet already carry their own hairline and padding, so
+ * an input that brings a second border and a second background draws a box
+ * inside a box — which is most of what made the old form look like a form.
+ * Focus stays visible; only the resting border goes.
+ */
+const BARE_INPUT_CLASSES =
+  `flex-1 min-w-0 bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] border-0 p-0 focus:outline-none`;
 
 const INPUT_CLASSES =
   'w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors';
@@ -138,6 +251,18 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const [draft, setDraft] = useState(() => draftFromTask(task));
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+
+  // WHAT HAS BEEN ASKED FOR but is still empty. A field holding nothing is a
+  // pill at the foot of the sheet until one of these is flipped; then it is a
+  // row like any other.
+  //
+  // Reset by startEditing rather than left standing: open a task, tap "+ Ώρα",
+  // change your mind, close it, then open a DIFFERENT task — without the reset
+  // that second task would show an empty time row nobody asked it for.
+  const [showTime, setShowTime] = useState(false);
+  const [showAssignee, setShowAssignee] = useState(false);
+  const [showChecklist, setShowChecklist] = useState(false);
+  const [descOpen, setDescOpen] = useState(false);
 
   // Who this task could be handed to: the members of ITS workspace.
   //
@@ -191,12 +316,6 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const showDescription = task.description && task.description !== task.task_name;
   const tone = dueTone(task);
 
-  const categoryOptions = [
-    { value: 'Business', label: t('browse.filter_business') },
-    { value: 'Personal', label: t('browse.filter_personal') },
-    { value: 'Unknown', label: t('browse.filter_unknown') },
-    { value: 'Hostaway', label: t('browse.filter_hostaway') },
-  ];
   const priorityOptions = [
     { value: 'P1', label: 'P1' },
     { value: 'P2', label: 'P2' },
@@ -206,6 +325,10 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   function startEditing() {
     setDraft(draftFromTask(task));
     setSaveError(null);
+    setShowTime(false);
+    setShowAssignee(false);
+    setShowChecklist(false);
+    setDescOpen(false);
     setIsEditing(true);
   }
 
@@ -414,9 +537,35 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
           </button>
 
-          <h2 className={`flex-1 min-w-0 text-base font-semibold break-words ${isCompleted ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
-            {task.task_name}
-          </h2>
+          {/* While editing, the heading IS the field. It used to be printed
+              twice on one screen — here, and again inside a box captioned
+              "ΟΝΟΜΑ ΕΡΓΑΣΙΑΣ" a few pixels below — which cost a block of
+              height to say something already on screen.
+
+              A textarea, not an <input>: a task name wraps to two lines here
+              and an input would scroll it sideways while you type. Growing it
+              on each keystroke keeps the whole name visible, and Enter is
+              swallowed because a newline in a task name is never wanted and
+              the sheet has a Save button of its own. */}
+          {isEditing ? (
+            <textarea
+              value={draft.task_name}
+              onChange={(e) => updateDraft('task_name', e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+              onInput={(e) => {
+                e.target.style.height = 'auto';
+                e.target.style.height = `${e.target.scrollHeight}px`;
+              }}
+              rows={1}
+              placeholder={t('task.name_placeholder')}
+              aria-label={t('task.name_placeholder')}
+              className="flex-1 min-w-0 resize-none bg-transparent text-base font-semibold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+            />
+          ) : (
+            <h2 className={`flex-1 min-w-0 text-base font-semibold break-words ${isCompleted ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+              {task.task_name}
+            </h2>
+          )}
 
           <TaskMenu
             isPending={isPending}
@@ -454,11 +603,18 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                 >
                   {priorityLabel(task.priority)}
                 </span>
-                {task.category && (
-                  <span style={{ color: categoryColor(task.category) }}>
-                    {categoryLabel(task.category, t)}
-                  </span>
-                )}
+                {/* The old four-word `category` column is no longer PRINTED
+                    anywhere — the owner's decision, 2026-09-11, and the second
+                    half of a removal that began on 2026-09-02 when it left the
+                    task row for causing exactly this confusion: the sheet was
+                    showing "Αταξινόμητα" (his own category, inside a workspace)
+                    and "Επαγγελματικά" (the AI's word) side by side, both
+                    captioned "category".
+
+                    The COLUMN is untouched. The extractor still writes it, the
+                    Hostaway integration still keys off it, Browse still filters
+                    on it, and handleSave still carries draft.category through
+                    unchanged. It is simply not shown to a person any more. */}
                 {task.due_date && (
                   <span className={DUE_TONE_CLASSES[tone]}>
                     {formatDate(task.due_date, task.due_time)}
@@ -550,154 +706,218 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             </>
           ) : (
             <>
-              <Field label={t('task.name_placeholder')}>
-                <input
-                  type="text"
-                  value={draft.task_name}
-                  onChange={(e) => updateDraft('task_name', e.target.value)}
-                  placeholder={t('task.name_placeholder')}
-                  className={INPUT_CLASSES}
-                />
-              </Field>
+              {/* WHAT IS THERE, as rows. What is NOT, as pills underneath.
+                  The form this replaces showed nine captioned boxes whether or
+                  not they held anything — an empty "ΩΡΑ ΛΗΞΗΣ" took as much of
+                  a phone screen as the date beside it. */}
+              <div className="rounded-lg border border-[var(--border-subtle)] overflow-hidden">
 
-              <Field label={t('task.description_label')}>
-                <textarea
-                  value={draft.description}
-                  onChange={(e) => updateDraft('description', e.target.value)}
-                  rows={3}
-                  className={`${INPUT_CLASSES} resize-none`}
-                />
-              </Field>
+                {/* Where it lives. Two selects, ONE row: "Business ·
+                    Αταξινόμητα" is one answer to one question, and splitting it
+                    across two captioned boxes made it look like two.
 
-              {/* Workspace first, then its category. Changing the workspace
-                  CLEARS the category in the same draft update: the backend
-                  refuses a category from another workspace with a 422
-                  (services.validate_workspace_placement), so carrying the old
-                  one over would fail the whole save and lose the workspace
-                  change with it.
-
-                  The category select appears only once a workspace is chosen.
-                  Without that, the sheet would show two fields both labelled
-                  "Category" — this one and the old `category` word below, which
-                  is still the live column until the AI learns the new one. */}
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={t('workspace.label')}>
-                  <CustomSelect
-                    value={draft.workspace_id}
-                    options={[
-                      { value: '', label: t('workspace.unfiled') },
-                      ...workspaces.map((w) => ({ value: w.record_id, label: w.name })),
-                    ]}
-                    onChange={(value) => setDraft((d) => ({ ...d, workspace_id: value, category_id: '' }))}
-                    ariaLabel={t('workspace.label')}
-                  />
-                </Field>
-                {draft.workspace_id && (
-                  <Field label={t('workspace.category_label')}>
+                    Changing the workspace CLEARS the category in the same draft
+                    update: the backend refuses a category from another
+                    workspace with a 422 (services.validate_workspace_placement),
+                    so carrying the old one over would fail the whole save and
+                    lose the workspace change with it. */}
+                <SheetRow icon={<FieldIcon label={t('workspace.label')}><FolderIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
+                  <div className="flex-1 min-w-0">
                     <CustomSelect
-                      value={draft.category_id}
+                      compact
+                      value={draft.workspace_id}
                       options={[
                         { value: '', label: t('workspace.unfiled') },
-                        ...categoriesFor(draft.workspace_id).map((c) => ({
-                          value: c.record_id, label: c.name,
-                        })),
+                        ...workspaces.map((w) => ({ value: w.record_id, label: w.name })),
                       ]}
-                      onChange={(value) => updateDraft('category_id', value)}
-                      ariaLabel={t('workspace.category_label')}
+                      onChange={(value) => setDraft((d) => ({ ...d, workspace_id: value, category_id: '' }))}
+                      ariaLabel={t('workspace.label')}
                     />
-                  </Field>
-                )}
-              </div>
+                  </div>
+                  {draft.workspace_id && (
+                    <div className="flex-1 min-w-0">
+                      <CustomSelect
+                        compact
+                        value={draft.category_id}
+                        options={[
+                          { value: '', label: t('workspace.unfiled') },
+                          ...categoriesFor(draft.workspace_id).map((c) => ({
+                            value: c.record_id, label: c.name,
+                          })),
+                        ]}
+                        onChange={(value) => updateDraft('category_id', value)}
+                        ariaLabel={t('workspace.category_label')}
+                      />
+                    </div>
+                  )}
+                </SheetRow>
 
-              {/* Only when there is somebody to hand it to. A workspace with
-                  one member is every solo account, and a picker whose only
-                  option is yourself is a field that asks a question with one
-                  answer. */}
-              {members.length > 1 && (
-                <Field label={t('task.assignee_label')}>
-                  <CustomSelect
-                    value={draft.assigned_to}
-                    options={[
-                      { value: '', label: t('task.unassigned') },
-                      ...members.map((m) => ({
-                        value: m.user_id,
-                        label: m.display_name || m.email || m.user_id,
-                      })),
-                    ]}
-                    onChange={(value) => updateDraft('assigned_to', value)}
-                    ariaLabel={t('task.assignee_label')}
-                  />
-                </Field>
-              )}
+                {/* When. Date and time are two columns in the database and ONE
+                    thought in a person's head, so they share a row.
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={t('task.category_label')}>
-                  <CustomSelect
-                    value={draft.category}
-                    options={categoryOptions}
-                    onChange={(value) => updateDraft('category', value)}
-                    ariaLabel={t('task.category_label')}
-                  />
-                </Field>
-                <Field label={t('task.priority_label')}>
-                  <CustomSelect
-                    value={draft.priority}
-                    options={priorityOptions}
-                    onChange={(value) => updateDraft('priority', value)}
-                    ariaLabel={t('task.priority_label')}
-                  />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={t('task.due_date_label')}>
+                    It also puts the missing half where it gets noticed: a
+                    reminder needs a due_time, and an empty time two rows below
+                    was never seen while the date was being set — the task was
+                    simply silent on the day. */}
+                <SheetRow icon={<FieldIcon label={t('task.due_date_label')}><CalendarIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
                   <input
                     type="date"
                     value={draft.due_date}
                     onChange={(e) => updateDraft('due_date', e.target.value)}
-                    className={INPUT_CLASSES}
+                    aria-label={t('task.due_date_label')}
+                    className={BARE_INPUT_CLASSES}
                   />
-                </Field>
-                <Field label={t('task.due_time_label')}>
-                  <input
-                    type="time"
-                    value={draft.due_time}
-                    onChange={(e) => updateDraft('due_time', e.target.value)}
-                    className={INPUT_CLASSES}
-                  />
-                </Field>
-              </div>
-
-              <Field label={t('task.checklist_label')}>
-                <div className="space-y-2">
-                  {draft.checklist.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                  {draft.due_time || showTime ? (
+                    <>
+                      <FieldIcon label={t('task.due_time_label')}>
+                        <ClockIcon className="w-[18px] h-[18px]" />
+                      </FieldIcon>
                       <input
-                        type="text"
-                        value={item.text}
-                        onChange={(e) => updateChecklistItem(index, { ...item, text: e.target.value })}
-                        placeholder={t('task.checklist_item_placeholder', { n: index + 1 })}
-                        className={`${INPUT_CLASSES} flex-1 py-1.5 text-xs`}
+                        type="time"
+                        autoFocus={showTime && !draft.due_time}
+                        value={draft.due_time}
+                        onChange={(e) => updateDraft('due_time', e.target.value)}
+                        aria-label={t('task.due_time_label')}
+                        className={BARE_INPUT_CLASSES}
                       />
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowTime(true)}
+                      className="tap-40 flex-shrink-0 px-2.5 py-1 rounded-full border border-dashed border-[var(--border-medium)] text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                    >
+                      + {t('task.due_time_label')}
+                    </button>
+                  )}
+                </SheetRow>
+
+                {/* The flag is the priority's own colour — the same red, amber
+                    and blue the dots use everywhere else in this app. That is
+                    what lets the caption go: a flag shape means "priority" only
+                    to somebody who learned it, but the colour is already
+                    learned from every list in the app. */}
+                <SheetRow
+                  icon={(
+                    <FieldIcon label={t('task.priority_label')} color={priorityColor(draft.priority)}>
+                      <FlagIcon className="w-[18px] h-[18px]" />
+                    </FieldIcon>
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <CustomSelect
+                      compact
+                      value={draft.priority}
+                      options={priorityOptions}
+                      onChange={(value) => updateDraft('priority', value)}
+                      ariaLabel={t('task.priority_label')}
+                    />
+                  </div>
+                </SheetRow>
+
+                {/* Only when there is somebody to hand it to. A workspace with
+                    one member is every solo account, and a picker whose only
+                    option is yourself is a field that asks a question with one
+                    answer. */}
+                {members.length > 1 && (draft.assigned_to || showAssignee) && (
+                  <SheetRow icon={<FieldIcon label={t('task.assignee_label')}><PersonIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
+                    <div className="flex-1 min-w-0">
+                      <CustomSelect
+                        compact
+                        value={draft.assigned_to}
+                        options={[
+                          { value: '', label: t('task.unassigned') },
+                          ...members.map((m) => ({
+                            value: m.user_id,
+                            label: m.display_name || m.email || m.user_id,
+                          })),
+                        ]}
+                        onChange={(value) => updateDraft('assigned_to', value)}
+                        ariaLabel={t('task.assignee_label')}
+                      />
+                    </div>
+                  </SheetRow>
+                )}
+
+                {(draft.checklist.length > 0 || showChecklist) && (
+                  <SheetRow icon={<FieldIcon label={t('task.checklist_label')}><ChecklistIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
+                    <div className="flex-1 min-w-0 space-y-1.5 py-0.5">
+                      {draft.checklist.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={item.text}
+                            onChange={(e) => updateChecklistItem(index, { ...item, text: e.target.value })}
+                            placeholder={t('task.checklist_item_placeholder', { n: index + 1 })}
+                            className={BARE_INPUT_CLASSES}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeChecklistItem(index)}
+                            className="tap-40 px-1 text-xs text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors flex-shrink-0"
+                            title={t('task.remove_item')}
+                            aria-label={t('task.remove_item')}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
                       <button
                         type="button"
-                        onClick={() => removeChecklistItem(index)}
-                        className="px-2 py-1.5 rounded-md text-xs text-[var(--text-secondary)] hover:text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors"
-                        title={t('task.remove_item')}
+                        onClick={addChecklistItem}
+                        className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                       >
-                        ✕
+                        {t('task.add_checklist_item')}
                       </button>
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addChecklistItem}
-                    className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                  >
-                    {t('task.add_checklist_item')}
-                  </button>
-                </div>
-              </Field>
+                  </SheetRow>
+                )}
+              </div>
+
+              {/* The pills. Words here, drawings above — deliberately: you scan
+                  a row you have seen a hundred times, but you READ a thing you
+                  are adding for the first time.
+
+                  The description one is always offered and carries its filled
+                  state, because a description is usually long, usually
+                  machine-written (a Hostaway message, an extracted e-mail) and
+                  almost never the reason the sheet was opened — it was taking
+                  the top of the screen to say something rarely wanted. */}
+              <div className="flex flex-wrap gap-2">
+                <SheetPill
+                  filled={Boolean(draft.description)}
+                  expanded={descOpen}
+                  icon={<TextLinesIcon className="w-4 h-4" />}
+                  label={t('task.description_label')}
+                  onClick={() => setDescOpen((v) => !v)}
+                />
+                {members.length > 1 && !draft.assigned_to && !showAssignee && (
+                  <SheetPill
+                    icon={<PersonIcon className="w-4 h-4" />}
+                    label={t('task.assignee_label')}
+                    onClick={() => setShowAssignee(true)}
+                  />
+                )}
+                {draft.checklist.length === 0 && !showChecklist && (
+                  <SheetPill
+                    icon={<ChecklistIcon className="w-4 h-4" />}
+                    label={t('task.checklist_label')}
+                    onClick={() => { setShowChecklist(true); addChecklistItem(); }}
+                  />
+                )}
+              </div>
+
+              {descOpen && (
+                <textarea
+                  autoFocus
+                  value={draft.description}
+                  onChange={(e) => updateDraft('description', e.target.value)}
+                  rows={3}
+                  placeholder={t('task.description_label')}
+                  aria-label={t('task.description_label')}
+                  className={`${INPUT_CLASSES} resize-none`}
+                />
+              )}
             </>
           )}
 

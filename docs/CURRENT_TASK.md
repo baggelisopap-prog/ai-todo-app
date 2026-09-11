@@ -385,3 +385,99 @@ What would settle each piece, and nothing else will:
 - **Archiving and Αναίρεση**, then the Αρχειοθετημένα section and Επαναφορά.
 - **The activity screen against real rows** — the only place the Greek sentences and the
   day grouping can be judged.
+
+
+---
+
+## Slice 5 — the task sheet, tidied (2026-09-11, NOT COMMITTED)
+
+Asked for after he sent two phone screenshots side by side, his app and Todoist:
+«καπως ποιο ξεκαθαρα θελω να φαινονται ισως αντι για λεξεις να εχει σχεδιακια πψ το
+προτεραιοτητα και το ληξη», and on how far to go: «δεν θελω ακριβει αντιγραφη απλα να
+ειναι μαζεμενα οπως εκει».
+
+Designed in a mockup he could open on his own phone before any code was written
+(claude.ai/code/artifact/8785d076-bf46-496f-9d52-e97cb682567c), which is where each of the
+decisions below was actually made.
+
+### His decisions, each one his
+
+1. **Σχεδιάκια, not words**, as the row labels.
+2. **Press-and-hold shows the word** — «αν πηγαινει πανω το χερι να γραφει τι ειναι απο
+   πανω (ΑΝ ΓΙΝΕΤΑΙ ΣΕ ΚΙΝΗΤΟ ΑΥΤΟ ΑΛΛΙΩς ΩΣ ΕΧΕΙ)». He was told plainly that hover does
+   not exist on a touchscreen and that press-and-hold is the nearest honest equivalent.
+3. **Time beside the date** — «η ωρα μηπως να ειναι διπλα διπλα απο την ημερομηνια?».
+   His idea, and better than what had been proposed: it also puts the missing half where
+   it is noticed, since a reminder needs a due_time and an empty one two rows down was
+   never seen while the date was being set.
+4. **Description behind a pill** — «το description να ειναι σε pill κατω».
+5. **The old four-word `category` leaves the screen.** Shown to him because his own
+   screenshot had «ΚΑΤΗΓΟΡΙΑ ΧΩΡΟΥ: Αταξινόμητα» and «ΚΑΤΗΓΟΡΙΑ: Επαγγελματικά» one above
+   the other. It left the task ROW on 2026-09-02 for causing exactly that confusion; the
+   confusion had simply moved into the sheet.
+
+### What the sheet is now
+
+Title → 4 rows → pills → Αποθήκευση. Nine captioned boxes became four hairline rows.
+
+- **The heading IS the name field while editing.** The name used to be printed twice on
+  one screen — in the header and again inside a box captioned «ΟΝΟΜΑ ΕΡΓΑΣΙΑΣ».
+- **A row's drawing is its label**, and the word stays one gesture away three ways:
+  `aria-label` (so a screen reader says «Λήξη, 26 Αυγούστου», not «image» — dropping the
+  caption without this would have made the sheet worse for somebody who cannot see it),
+  `title` for a desktop hover, and press-and-hold on touch. ~400ms; movement cancels it so
+  a scroll beginning on an icon says nothing; it lingers 1.2s after the finger lifts,
+  because while pressing, your own finger covers what you are trying to read.
+- **The flag takes the priority's own colour** — the same red/amber/blue the dots use
+  everywhere else. That is what lets the caption go: the shape is learned, the colour
+  already is.
+- **Empty fields are pills, not empty boxes.** Description (always offered, and drawn
+  FILLED with a dot when it holds text, so you can tell without tapping), Υπεύθυνος, Λίστα
+  ελέγχου. The missing time is different: it is an inline «+ Ώρα» inside the Λήξη row,
+  because that row already exists and only half of it is empty.
+
+### Deliberately NOT built, and it was in the mockup
+
+**The «+ Επανάληψη» pill.** Recurrence is not a field on this form — it is a button in the
+READ view that opens a separate modal (RecurrenceModal). Adding a pill for it would have
+meant opening a second modal on top of a form with unsaved changes. The mockup showed it;
+the code does not, and that is the mockup being wrong rather than the code being short.
+
+### Changed
+
+`TaskDetailSheet.jsx` (the edit form rewritten; `Field` replaced by `FieldIcon`,
+`SheetRow`, `SheetPill`; `BARE_INPUT_CLASSES` added), `TaskIcons.jsx` (five icons:
+folder, clock, flag, person, text-lines — all on the file's existing 24×24 grid and stroke
+weight, because a second grid is how one icon ends up visibly heavier than its neighbour
+in the same column).
+
+**No backend, no translation keys.** Every string the new layout uses already existed.
+The `category` COLUMN is untouched: the extractor still writes it, Hostaway still keys off
+it, Browse still filters on it, and handleSave still carries it through unchanged. It is
+only no longer shown to a person.
+
+### Baselines, as the commands printed them
+
+```
+493 passed in 5.80s                                    (backend — unchanged, nothing touched it)
+ui-check: OK — 80 files, 49 tokens, 476 translation keys
+✖ 12 problems (12 errors, 0 warnings)                  (npm run lint — baseline, unchanged)
+✓ built in 488ms                                       (vite build)
+```
+
+Lint went to 14 mid-change (two imports left unused by the removals) and was brought back
+to the baseline before this was written down.
+
+### What a person has actually SEEN: NOTHING
+
+The sheet has not been opened in a browser. What would settle it, in order of what would
+be worst if wrong:
+
+- **Press-and-hold on a phone.** Everything else here is layout; this is the one piece of
+  behaviour that can simply fail to work, or worse, interfere with an ordinary tap.
+- **Saving after an edit**, because the name field moved into the header and the old
+  category select was deleted from the form while `draft.category` still travels in the
+  PATCH.
+- **A task with no date at all**, and one with a date but no time — the two states the new
+  Λήξη row has to handle and the old two boxes did not have to.
+- **The pills** on a solo account: Υπεύθυνος must not appear at all.
