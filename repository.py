@@ -1630,6 +1630,31 @@ def get_workspace(user_id: str, workspace_id: str) -> Optional[Workspace]:
     return _supabase_row_to_workspace(rows[0]) if rows else None
 
 
+def get_workspace_row(workspace_id: str) -> Optional[dict]:
+    """
+    One workspace as a raw row, WITHOUT user scoping.
+
+    Deliberately unscoped, and the third function in this file that is — the
+    others being access.task_ownership and get_invite_by_token_hash. All three
+    exist to DECIDE something about a caller who is not yet established as
+    entitled: here, somebody holding an invitation link, who is by definition
+    not a member yet and cannot be scoped against the workspace they are trying
+    to join.
+
+    Returns the raw dict rather than a Workspace, because the caller needs
+    archived_at and user_id — neither of which the model surfaces.
+    """
+    response = (
+        supabase.table("workspaces")
+        .select("*")
+        .eq("id", workspace_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
 def update_workspace(user_id: str, workspace_id: str, updates: dict) -> Optional[Workspace]:
     if not updates:
         return get_workspace(user_id, workspace_id)
