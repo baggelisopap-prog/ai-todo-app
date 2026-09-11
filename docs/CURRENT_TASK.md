@@ -536,3 +536,57 @@ caught it, and both were back to baseline before this was written down.
 
 **Still nothing verified in a browser** — including the clipping fix, which is the second
 attempt at the same feature.
+
+
+### Slice 5b — the agent on one line (2026-09-11)
+
+«θελω να φτιαξουμε λιγο το αι εκει κατω μονο την εμφανιση οχι λειτουργια να ειναι σε μια
+γραμμη οχι την μιση οθονη δοσε 2 3 εναλακτικες σε σελιδα πρωτα να το δω».
+
+Three alternatives were drawn first
+(claude.ai/code/artifact/1378a12f-1fb2-4191-894d-f75558ac53ab): **Α** one line always
+present, **Β** a pill that opens (zero height at rest, one extra tap every time), **Γ**
+stuck to the foot like a chat composer. He chose **Α**, which was also the recommendation
+— the agent saves more taps than anything else on the sheet, and a tool you have to
+remember exists does not get used. Γ was argued against on a ground layout cannot fix: it
+puts two buttons that "send" on adjacent rows, its arrow and Αποθήκευση.
+
+**Four stacked things became one row.** Three of the four earned their way out rather than
+being squeezed:
+
+- The caption «ΒΟΗΘΟΣ AI» said what the sparkle and the placeholder underneath it already
+  said. The sparkle moved INTO the field, where it labels what it belongs to.
+- The bordered grey card went with it. A border and a fill say "separate object"; this is
+  one line of the sheet, not a panel.
+- The suggestions wait until the field is touched. They are a way in for somebody who does
+  not know what to type, and they were being shown permanently to somebody who does.
+- The send button appears only once there is something to send — it used to be drawn
+  disabled, a 44px square of nothing on a line whose whole point is that it is one line.
+  **The microphone stays**, because dictating is how you START from an empty field; it is
+  not the same kind of control.
+
+**The trap in this, and it is the reason `agentOpen` is never set back to false:** the
+obvious version hides the suggestions when the field loses focus, and that breaks the only
+thing they are for — tapping a chip blurs the input first, so the chip is gone by the time
+the tap lands. Leaving them up once asked for costs a row the user has just shown they
+want, and closing the sheet resets it.
+
+**Nothing about behaviour changed.** Same call, same server, same rule that nothing
+touches the task until it is approved.
+
+```
+493 passed in 4.87s                                    (backend — untouched)
+ui-check: OK — 80 files, 49 tokens, 476 translation keys
+✖ 12 problems (12 errors, 0 warnings)                  (lint baseline, unchanged)
+✓ built in 454ms
+```
+
+Not seen in a browser. **What to watch is the suggestion chips**: they are the one part
+with a known failure mode (the blur/tap race above), and the fix for it is a rule about
+when they stop being shown rather than anything visible.
+
+### And the three things from 5a were confirmed working
+
+«δοκιμασα το δουλευει ολα καλα» — the in-row label, the returning checklist pill and the
+typography pass were all checked on his phone against the deployed `20e9da9`. That is the
+first part of this whole UX run that a person has actually seen.

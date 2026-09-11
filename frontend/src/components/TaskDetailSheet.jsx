@@ -310,6 +310,11 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const [toggleError, setToggleError] = useState(null);
 
   const [agentInput, setAgentInput] = useState('');
+  // Has the agent field been touched. Gates the ready-made suggestions,
+  // which are a way IN for somebody who does not know what to type and were
+  // being shown permanently to somebody who does — a wrapping row of chips
+  // under every task, forever.
+  const [agentOpen, setAgentOpen] = useState(false);
   // What was in the box when dictation started. Interim results replace the
   // tail as the recogniser revises its guess, so without an anchor each
   // revision would append and the field would fill with half-heard repeats.
@@ -961,49 +966,84 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
           {/* Inline task agent, in BOTH modes. It suits a reading context as
               well as an editing one — it is a sentence, not a form — and
               "move it to next week" is exactly what someone who just opened a
-              task to look at it wants to say. */}
-          <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-hover)] p-3 space-y-2">
-            <div className="flex items-center gap-1.5 text-[var(--brand-primary)]">
-              <SparkleIcon className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide">
-                {t('task.agent_title')}
-              </span>
-            </div>
+              task to look at it wants to say.
 
+              ONE LINE AT REST, as of 2026-09-11. It used to be four stacked
+              things inside a bordered grey card: a caption, the input row, a
+              wrapping row of suggestions, and the room for an answer — which
+              on a phone was most of the space below the task itself.
+
+              Three of the four earned their way out rather than being
+              squeezed:
+
+              - The caption «ΒΟΗΘΟΣ AI» said what the sparkle and the
+                placeholder underneath it already said. The sparkle moved INTO
+                the field, where it labels the thing it belongs to.
+              - The card went with it. A border and a fill around a control say
+                "separate object"; this is one line of the sheet, not a panel.
+              - The suggestions wait until the field is touched. They are a way
+                IN for somebody who does not know what to type, and they were
+                being shown permanently to somebody who does.
+
+              What did NOT change: what it does, what it asks the server, and
+              the fact that nothing happens to the task until you approve it. */}
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={agentInput}
-                onChange={(e) => setAgentInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAgentEdit();
-                  }
-                }}
-                disabled={isAgentBusy || isSaving || actions.isDeleting}
-                placeholder={t('task.agent_placeholder')}
-                className={`${INPUT_CLASSES} flex-1 disabled:opacity-60`}
-              />
+              <div className="flex-1 min-w-0 flex items-center gap-2 rounded-md border border-[var(--border-medium)] bg-[var(--bg-input)] px-2.5 py-2 focus-within:border-[var(--border-focus)] focus-within:ring-2 focus-within:ring-[color:var(--ring-soft)] transition-colors">
+                <SparkleIcon className="w-4 h-4 shrink-0 text-[var(--brand-primary)]" />
+                <input
+                  type="text"
+                  value={agentInput}
+                  onChange={(e) => setAgentInput(e.target.value)}
+                  // Once. Never turned off again by a blur.
+                  //
+                  // The obvious version — hide the suggestions when the field
+                  // loses focus — breaks the only thing they are for: tapping
+                  // one blurs the input first, so the chip is gone by the time
+                  // the tap lands on it. Leaving them up once asked for costs a
+                  // row that the user has just shown they want, and the sheet
+                  // closing resets it.
+                  onFocus={() => setAgentOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAgentEdit();
+                    }
+                  }}
+                  disabled={isAgentBusy || isSaving || actions.isDeleting}
+                  placeholder={t('task.agent_placeholder')}
+                  aria-label={t('task.agent_title')}
+                  className="flex-1 min-w-0 bg-transparent border-0 p-0 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none disabled:opacity-60"
+                />
+              </div>
+
               <DictateButton
                 onTranscript={handleTranscript}
                 onError={() => setAgentError(t('voice.permission_denied'))}
                 disabled={isAgentBusy || isSaving || actions.isDeleting}
               />
-              <button
-                type="button"
-                onClick={() => handleAgentEdit()}
-                disabled={isAgentBusy || isSaving || actions.isDeleting || !agentInput.trim()}
-                className="w-11 h-11 flex items-center justify-center rounded-md bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-card)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors shrink-0"
-                aria-label={t('task.agent_send')}
-              >
-                {/* Was a literal '↵', which rendered at the button's font-size
-                    and came out tiny. An icon has a size of its own. */}
-                {isAgentBusy ? <SpinnerIcon className="w-5 h-5 animate-spin" /> : <SendIcon className="w-5 h-5" />}
-              </button>
+
+              {/* Only once there is something to send. The button was always
+                  drawn and disabled, which is a 44px square of nothing on a
+                  line whose whole point is now that it is one line. The mic
+                  stays, because dictating is how you START when the field is
+                  empty — it is not the same kind of control. */}
+              {(agentInput.trim() || isAgentBusy) && (
+                <button
+                  type="button"
+                  onClick={() => handleAgentEdit()}
+                  disabled={isAgentBusy || isSaving || actions.isDeleting}
+                  className="w-11 h-11 flex items-center justify-center rounded-md bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0"
+                  aria-label={t('task.agent_send')}
+                >
+                  {/* Was a literal '↵', which rendered at the button's font-size
+                      and came out tiny. An icon has a size of its own. */}
+                  {isAgentBusy ? <SpinnerIcon className="w-5 h-5 animate-spin" /> : <SendIcon className="w-5 h-5" />}
+                </button>
+              )}
             </div>
 
-            {!agentInput && !agentResult && !agentNote && !isAgentBusy && (
+            {agentOpen && !agentInput && !agentResult && !agentNote && !isAgentBusy && (
               <div className="flex flex-wrap gap-1.5">
                 {agentSuggestionKeys(task).map((key) => (
                   <button
@@ -1027,7 +1067,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                 outlives the sheet; this holds the detail, which the toast has
                 no room for and which vanishes with it after 7 seconds. */}
             {agentResult && (
-              <div className="rounded-md bg-[var(--bg-card)] border border-[var(--border-subtle)] px-3 py-2 space-y-1">
+              <div className="rounded-md bg-[var(--bg-hover)] border border-[var(--border-subtle)] px-3 py-2 space-y-1">
                 <p className="text-xs text-[var(--text-primary)]">{agentResult.message}</p>
                 {agentResult.changes.map((c) => (
                   <div key={c.field} className="flex items-baseline gap-2 text-[11px]">
