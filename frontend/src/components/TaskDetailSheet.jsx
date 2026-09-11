@@ -146,13 +146,20 @@ function FieldIcon({ label, color, children }) {
         clearHold();
         holdTimer.current = setTimeout(() => setShowing(false), 1200);
       }}
-      className={`relative flex-shrink-0 w-5 h-5 flex items-center justify-center select-none ${
+      className={`flex-shrink-0 inline-flex items-center gap-1.5 select-none ${
         color ? '' : 'text-[var(--text-secondary)]'
       }`}
     >
-      {children}
+      <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{children}</span>
+      {/* INSIDE the row, not floating above it.
+          A bubble anchored to the icon was the obvious shape and it was wrong
+          here: the rows container is overflow-hidden so its corners stay round,
+          the sheet body scrolls, and the first row has nothing above it anyway —
+          so the label was clipped on exactly the rows somebody would press
+          first. Sitting in the row costs a little width, which the value beside
+          it gives up (every one of them is min-w-0), and can never be cut off. */}
       {showing && (
-        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-[var(--text-primary)] text-[var(--bg-card)] text-[11px] font-medium whitespace-nowrap pointer-events-none z-10">
+        <span className="text-[11px] font-medium text-[var(--text-secondary)] whitespace-nowrap">
           {label}
         </span>
       )}
@@ -169,9 +176,9 @@ function FieldIcon({ label, color, children }) {
  */
 function SheetRow({ icon, children }) {
   return (
-    <div className="flex items-center gap-3 px-3 py-2 border-b border-[var(--border-subtle)] last:border-b-0">
+    <div className="flex items-center gap-3 px-3 py-2.5 border-b border-[var(--border-subtle)] last:border-b-0">
       {icon}
-      <div className="flex-1 min-w-0 flex items-center gap-2">{children}</div>
+      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">{children}</div>
     </div>
   );
 }
@@ -190,7 +197,7 @@ function SheetPill({ filled, expanded, icon, label, onClick }) {
       type="button"
       onClick={onClick}
       aria-expanded={expanded}
-      className={`tap-40 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors ${
+      className={`tap-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] transition-colors ${
         filled
           ? 'border border-[var(--border-medium)] bg-[var(--bg-card)] text-[var(--text-primary)] font-medium'
           : 'border border-dashed border-[var(--border-medium)] bg-[var(--bg-app)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -214,7 +221,7 @@ function SheetPill({ filled, expanded, icon, label, onClick }) {
  * Focus stays visible; only the resting border goes.
  */
 const BARE_INPUT_CLASSES =
-  `flex-1 min-w-0 bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] border-0 p-0 focus:outline-none`;
+  `flex-1 min-w-0 bg-transparent text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] placeholder:font-normal border-0 p-0 focus:outline-none`;
 
 const INPUT_CLASSES =
   'w-full px-3 py-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[color:var(--ring-soft)] transition-colors';
@@ -504,7 +511,14 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const addChecklistItem = () =>
     setDraft((d) => ({ ...d, checklist: [...d.checklist, { text: '', done: false }] }));
   const removeChecklistItem = (index) =>
-    setDraft((d) => ({ ...d, checklist: d.checklist.filter((_, i) => i !== index) }));
+    setDraft((d) => {
+      const checklist = d.checklist.filter((_, i) => i !== index);
+      // Emptying the list puts its pill back. Without this the row simply
+      // stays on screen with nothing in it — which is the empty captioned box
+      // this whole layout exists to get rid of, rebuilt by hand.
+      if (checklist.length === 0) setShowChecklist(false);
+      return { ...d, checklist };
+    });
 
   return (
     <div
@@ -559,10 +573,10 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
               rows={1}
               placeholder={t('task.name_placeholder')}
               aria-label={t('task.name_placeholder')}
-              className="flex-1 min-w-0 resize-none bg-transparent text-base font-semibold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+              className="flex-1 min-w-0 resize-none bg-transparent text-[17px] leading-snug font-semibold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
             />
           ) : (
-            <h2 className={`flex-1 min-w-0 text-base font-semibold break-words ${isCompleted ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+            <h2 className={`flex-1 min-w-0 text-[17px] leading-snug font-semibold break-words ${isCompleted ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
               {task.task_name}
             </h2>
           )}
@@ -722,9 +736,8 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                     so carrying the old one over would fail the whole save and
                     lose the workspace change with it. */}
                 <SheetRow icon={<FieldIcon label={t('workspace.label')}><FolderIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-[8rem]">
                     <CustomSelect
-                      compact
                       value={draft.workspace_id}
                       options={[
                         { value: '', label: t('workspace.unfiled') },
@@ -735,10 +748,9 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                     />
                   </div>
                   {draft.workspace_id && (
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-[8rem]">
                       <CustomSelect
-                        compact
-                        value={draft.category_id}
+                          value={draft.category_id}
                         options={[
                           { value: '', label: t('workspace.unfiled') },
                           ...categoriesFor(draft.workspace_id).map((c) => ({
@@ -806,7 +818,6 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                 >
                   <div className="flex-1 min-w-0">
                     <CustomSelect
-                      compact
                       value={draft.priority}
                       options={priorityOptions}
                       onChange={(value) => updateDraft('priority', value)}
@@ -823,8 +834,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                   <SheetRow icon={<FieldIcon label={t('task.assignee_label')}><PersonIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
                     <div className="flex-1 min-w-0">
                       <CustomSelect
-                        compact
-                        value={draft.assigned_to}
+                          value={draft.assigned_to}
                         options={[
                           { value: '', label: t('task.unassigned') },
                           ...members.map((m) => ({

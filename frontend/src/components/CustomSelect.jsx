@@ -88,7 +88,11 @@ export function CustomSelect({ value, options, onChange, placeholder, ariaLabel,
           transition-colors
         `}
       >
-        <span className="truncate">{selectedLabel}</span>
+        {/* font-medium: this is the ANSWER the control holds, and it used to be
+            set in the same weight as every label and hairline around it —
+            which is what made a screen of these read as one flat block
+            instead of a list of values. */}
+        <span className="truncate font-medium">{selectedLabel}</span>
         <svg className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} flex-shrink-0 text-[var(--text-muted)]`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>

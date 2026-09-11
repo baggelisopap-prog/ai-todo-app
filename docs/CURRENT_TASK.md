@@ -481,3 +481,58 @@ be worst if wrong:
 - **A task with no date at all**, and one with a date but no time — the two states the new
   Λήξη row has to handle and the old two boxes did not have to.
 - **The pills** on a solo account: Υπεύθυνος must not appear at all.
+
+
+### Slice 5a — what he found the moment he opened it (2026-09-11)
+
+He tested `12cce2e` on his phone and reported three things. All three were right.
+
+1. **«βγαινει αλλα ειναι εκτος πλαισιου»** — the press-and-hold label appeared and was
+   CLIPPED. Predictable in hindsight and missed because nothing had been opened in a
+   browser: the label was a bubble anchored above the icon, the rows container is
+   `overflow-hidden` so its corners stay round, the sheet body is `overflow-y-auto`, and
+   the first row has nothing above it anyway — so it was cut off on exactly the rows
+   somebody presses first. He offered to drop the feature («αν δεν μπορεις απλα σβηστω»).
+   It did not need dropping: **the label now sits INSIDE the row, beside the icon**, where
+   no ancestor can clip it. It costs a little width, which the value beside it gives up.
+2. **«αν την σβισεις δεν ξανα βγαινει το πιλλ»** — emptying the checklist left an empty
+   row on screen and no way back to its pill. `removeChecklistItem` now clears
+   `showChecklist` when the last item goes. Without it the layout was rebuilding by hand
+   the empty captioned box it exists to remove.
+3. **«λιγο ποιο χοντρα και μαυρα ισως τα γραμματα να ξεχωριζει ειναι λιγο σαν ενοιεο ολο»**
+   — and the code agreed with him. Every value in the sheet was a `compact` CustomSelect:
+   **12px at normal weight**, the same size and weight as the labels and hairlines around
+   it, and sitting beside 14px date inputs in the same row. Nothing led the eye.
+
+### What the typography pass actually changed
+
+- **`compact` dropped from all four selects in the sheet** — 12px → 14px, one size for
+  every value in a row.
+- **`CustomSelect`'s chosen value is `font-medium`**, app-wide. It is the ANSWER the
+  control holds and it was set in the same weight as the chrome. One line, and it lifts
+  the filter bar and the workspaces screen too.
+- **Bare inputs are `font-medium`**, placeholders deliberately left normal weight so an
+  empty field still reads as empty.
+- **The title is 17px**, up from 16 — it was the same size as the values under it.
+- **Rows breathe** (`py-2` → `py-2.5`); pills are 13px, not 12.
+- **The icons stayed grey.** Deliberate, and the opposite of what "make it all bolder"
+  would do: for the values to stand out, something beside them has to be quieter.
+  Darkening everything together leaves it flat again, which was the complaint.
+
+**One problem the pass created and fixed in the same breath:** two full-size selects side
+by side in the placement row leave about eleven characters each on a 400px phone, and
+«Αταξινόμητα» is eleven. The row now wraps (`flex-wrap`, and the selects carry a
+`min-w-[8rem]` floor so they wrap instead of shrinking to nothing) — a longer row is
+better than a truncated name.
+
+```
+ui-check: OK — 80 files, 49 tokens, 476 translation keys
+✖ 12 problems (12 errors, 0 warnings)                  (lint baseline, unchanged)
+✓ built in 461ms
+```
+
+Lint hit 13 mid-change on a template literal this session wrote malformed; the build
+caught it, and both were back to baseline before this was written down.
+
+**Still nothing verified in a browser** — including the clipping fix, which is the second
+attempt at the same feature.
