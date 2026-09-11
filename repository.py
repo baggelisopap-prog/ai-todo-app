@@ -596,6 +596,27 @@ def get_profile(user_id: str) -> dict:
     return result.data[0] if result.data else {"id": user_id, "email": None, "display_name": None}
 
 
+def get_profiles(user_ids: list[str]) -> dict[str, dict]:
+    """
+    Several profiles in ONE read, keyed by id.
+
+    The members panel needs a name per person, and the owner's Hostaway account
+    has fifteen staff on it — one get_profile each would be fifteen round trips
+    every time the panel opens.
+
+    Not scoped by the caller: a profile row is a display name and an email, and
+    you are looking at people you already share a workspace with. The caller
+    establishes membership before asking.
+    """
+    ids = [u for u in dict.fromkeys(user_ids) if u]
+    if not ids:
+        # An empty list would reach PostgREST as `id.in.()`, a syntax error
+        # rather than an empty match.
+        return {}
+    result = supabase.table("profiles").select("*").in_("id", ids).execute()
+    return {row["id"]: row for row in (result.data or []) if row.get("id")}
+
+
 def update_profile(user_id: str, display_name: str) -> dict:
     result = supabase.table("profiles").update({"display_name": display_name}).eq("id", user_id).execute()
     return result.data[0]

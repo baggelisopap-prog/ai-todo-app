@@ -38,6 +38,7 @@ import hostaway_integration
 import hostaway_threading
 import repository
 import access
+import sharing
 import token_tracker
 import os
 from dotenv import load_dotenv
@@ -180,6 +181,51 @@ class WorkspaceUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=40)
     color: Optional[str] = None
     position: Optional[int] = None
+
+
+class WorkspaceMemberView(BaseModel):
+    """One person in a workspace, as a screen needs them: who they are, what
+    they may do, and how loud their phone is for this room."""
+    user_id: str
+    role: str
+    notify_all: bool = False
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    joined_at: Optional[str] = None
+
+
+class MembersListResponse(BaseModel):
+    members: list[WorkspaceMemberView]
+
+
+class SharingActionResponse(BaseModel):
+    """Deliberately bare. These endpoints either did the thing or raised, and a
+    payload nobody reads is a payload that drifts."""
+    ok: bool
+
+
+class NotifyAllRequest(BaseModel):
+    notify_all: bool
+
+
+class InviteCreateResponse(BaseModel):
+    """`token` appears here and nowhere else, ever. Only its hash is stored."""
+    token: str
+    invite_id: str
+    expires_at: str
+
+
+class InvitesListResponse(BaseModel):
+    invites: list[dict]
+
+
+class InviteAcceptResponse(BaseModel):
+    status: str
+    workspace_id: str
+
+
+class ActivityListResponse(BaseModel):
+    activity: list[dict]
 
 
 class CategoryWriteResponse(BaseModel):
@@ -383,6 +429,42 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+# What each refusal from sharing.py means over HTTP.
+#
+# 410 Gone for the three dead-link cases and for an archived workspace: the
+# thing existed, the caller is not wrong to have tried, and it is finished.
+# A 404 there would send a colleague hunting for a typo that is not in the link.
+_SHARING_STATUS = {
+    "not_owner": status.HTTP_403_FORBIDDEN,
+    "not_a_member": status.HTTP_403_FORBIDDEN,
+    "cannot_remove_owner": status.HTTP_409_CONFLICT,
+    "owner_cannot_leave": status.HTTP_409_CONFLICT,
+    "invite_not_found": status.HTTP_404_NOT_FOUND,
+    "workspace_not_found": status.HTTP_404_NOT_FOUND,
+    "invite_used": status.HTTP_410_GONE,
+    "invite_revoked": status.HTTP_410_GONE,
+    "invite_expired": status.HTTP_410_GONE,
+    "workspace_archived": status.HTTP_410_GONE,
+}
+
+
+@app.exception_handler(sharing.SharingError)
+async def sharing_error_handler(request: Request, exc: sharing.SharingError):
+    """
+    Every refusal carries its own reason to the phone.
+
+    sharing.py raises one exception type with a `code` and a Greek `message`
+    rather than five exception types or a bare False, because the person who
+    tapped a dead link needs to know WHICH kind of dead — used, revoked,
+    expired, or into a room that has been archived. `code` is also returned so
+    the frontend can branch without matching on Greek text.
+    """
+    return JSONResponse(
+        status_code=_SHARING_STATUS.get(exc.code, status.HTTP_400_BAD_REQUEST),
+        content={"detail": exc.message, "code": exc.code},
+    )
 
 
 @app.exception_handler(access.TaskAccessDenied)
@@ -1093,6 +1175,161 @@ def delete_workspace(workspace_id: str, user_id: str = Depends(get_current_user_
     repository.delete_workspace(user_id, workspace_id)
     return WorkspaceDeleteResponse(deleted=True, tasks_unfiled=affected)
 
+# --------------------------------------------------- members and invitations
+
+
+def _require_membership(user_id: str, workspace_id: str) -> None:
+    """
+    Reading who is in a room, and what has happened in it, is a member's right
+    and nobody else's.
+
+    404 rather than 403 for a non-member, matching what the category endpoints
+    already do: confirming that a workspace EXISTS is itself a leak.
+    """
+    if workspace_id not in repository.get_member_workspace_ids(user_id):
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+
+@app.get("/workspaces/{workspace_id}/members", response_model=MembersListResponse)
+def list_workspace_members(workspace_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Everyone in the room, owner included — the owner holds a membership row
+    like anyone else, written when the workspace was created.
+
+    Names come from `profiles`, in ONE batched read rather than one per member:
+    a fifteen-person Hostaway team would otherwise be fifteen round trips every
+    time the panel opens.
+    """
+    _require_membership(user_id, workspace_id)
+
+    members = repository.get_workspace_members(workspace_id)
+    profiles = repository.get_profiles([m.user_id for m in members])
+    return MembersListResponse(members=[
+        WorkspaceMemberView(
+            user_id=m.user_id,
+            role=m.role,
+            notify_all=m.notify_all,
+            joined_at=m.joined_at,
+            display_name=(profiles.get(m.user_id) or {}).get("display_name"),
+            email=(profiles.get(m.user_id) or {}).get("email"),
+        )
+        for m in members
+    ])
+
+
+@app.delete("/workspaces/{workspace_id}/members/{member_user_id}",
+            response_model=SharingActionResponse)
+def remove_workspace_member(
+    workspace_id: str, member_user_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """Their tasks stay in the workspace and become unclaimed. See
+    sharing.remove_member for why the unassign happens first."""
+    sharing.remove_member(user_id, workspace_id, member_user_id)
+    return SharingActionResponse(ok=True)
+
+
+@app.post("/workspaces/{workspace_id}/leave", response_model=SharingActionResponse)
+def leave_workspace(workspace_id: str, user_id: str = Depends(get_current_user_id)):
+    sharing.leave_workspace(user_id, workspace_id)
+    return SharingActionResponse(ok=True)
+
+
+@app.patch("/workspaces/{workspace_id}/members/me", response_model=SharingActionResponse)
+def update_my_membership(
+    workspace_id: str,
+    payload: NotifyAllRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """The switch for an owner who wants the team's reminders as well as their
+    own. No ownership check: it is the caller's own membership row, and anyone
+    may decide how loud their own phone is."""
+    sharing.set_notify_all(user_id, workspace_id, payload.notify_all)
+    return SharingActionResponse(ok=True)
+
+
+@app.post("/workspaces/{workspace_id}/invites", response_model=InviteCreateResponse,
+          status_code=status.HTTP_201_CREATED)
+def create_workspace_invite(
+    workspace_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Mints a link and returns its token ONCE. Only a hash is stored, so this
+    response is the only time the token exists anywhere readable.
+
+    The backend returns the token, not a URL: the frontend knows its own origin
+    and builds `/invite/<token>` from it, which keeps a second base-URL setting
+    out of the environment and out of the list of things that can be wrong in
+    production but right locally.
+    """
+    result = sharing.create_invite(user_id, workspace_id)
+    return InviteCreateResponse(
+        token=result["token"],
+        invite_id=result["invite"]["id"],
+        expires_at=result["invite"]["expires_at"],
+    )
+
+
+@app.get("/workspaces/{workspace_id}/invites", response_model=InvitesListResponse)
+def list_workspace_invites(workspace_id: str, user_id: str = Depends(get_current_user_id)):
+    """Never includes a token or its hash — see repository.get_workspace_invites."""
+    _require_membership(user_id, workspace_id)
+    return InvitesListResponse(invites=repository.get_workspace_invites(workspace_id))
+
+
+@app.delete("/workspaces/{workspace_id}/invites/{invite_id}",
+            response_model=SharingActionResponse)
+def revoke_workspace_invite(
+    workspace_id: str, invite_id: str, user_id: str = Depends(get_current_user_id)
+):
+    sharing.revoke_invite(user_id, workspace_id, invite_id)
+    return SharingActionResponse(ok=True)
+
+
+@app.post("/invites/{token}/accept", response_model=InviteAcceptResponse)
+def accept_workspace_invite(token: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Turns a link into a membership. Requires a signed-in user, which is what
+    makes the frontend route send an unauthenticated visitor through sign-up
+    first and come back here afterwards.
+
+    A `status` of "already_member" is a SUCCESS: somebody tapped the WhatsApp
+    link twice, and that must not look like a failure or burn a second
+    invitation.
+    """
+    result = sharing.accept_invite(user_id, token)
+    return InviteAcceptResponse(**result)
+
+
+# ------------------------------------------------- archiving and the diary
+
+
+@app.post("/workspaces/{workspace_id}/archive", response_model=SharingActionResponse)
+def archive_workspace(workspace_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Replaces deleting. Nothing is unlinked — tasks keep their workspace, their
+    category and their assignee — so restoring brings back the organisation and
+    not just the rows.
+    """
+    sharing.archive_workspace(user_id, workspace_id)
+    return SharingActionResponse(ok=True)
+
+
+@app.post("/workspaces/{workspace_id}/restore", response_model=SharingActionResponse)
+def restore_workspace(workspace_id: str, user_id: str = Depends(get_current_user_id)):
+    sharing.restore_workspace(user_id, workspace_id)
+    return SharingActionResponse(ok=True)
+
+
+@app.get("/workspaces/{workspace_id}/activity", response_model=ActivityListResponse)
+def list_workspace_activity(
+    workspace_id: str, limit: int = 100, user_id: str = Depends(get_current_user_id)
+):
+    """What has happened in this room, newest first. A member's right: this is
+    what makes "anyone may edit anything" honest rather than merely permissive."""
+    _require_membership(user_id, workspace_id)
+    return ActivityListResponse(
+        activity=repository.get_workspace_activity(workspace_id, limit=min(limit, 500))
+    )
 
 # ---------------------------------------------------------------- categories
 
