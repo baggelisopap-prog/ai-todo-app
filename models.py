@@ -153,6 +153,21 @@ class TaskRecord(SingleTask):
     workspace_id: Optional[str] = None
     category_id: Optional[str] = None
 
+    # Multi-user (2026-09-11). WHO IS RESPONSIBLE, as distinct from the
+    # database's user_id column, which keeps its meaning — "who created this
+    # row" — and every one of its existing uses. Sharing adds a second axis; it
+    # does not redefine the first. (user_id is deliberately absent from this
+    # model, the same ownership-is-a-data-layer-concern rule Workspace follows.)
+    #
+    # NULL means nobody has taken it, which is a REAL state and not an unset
+    # one: an unassigned task in a shared workspace is visible to every member
+    # and is in nobody's day view but its creator's, because until somebody
+    # takes it, it is not anybody's work.
+    #
+    # ON DELETE SET NULL in the database, like workspace_id and category_id:
+    # deleting a person must never delete work.
+    assigned_to: Optional[str] = None
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str
@@ -204,6 +219,42 @@ class Workspace(BaseModel):
     color: Optional[str] = None
     position: int = 0
     created_at: Optional[str] = None
+
+    # Archiving replaces deletion (2026-09-11), on the owner's rule that work
+    # is never lost. NULL means live.
+    #
+    # Deleting a workspace already preserved its TASKS — ON DELETE SET NULL,
+    # decided 2026-09-01. What it destroyed was everything that made them
+    # findable: which workspace, which category, and, once visibility comes
+    # from membership, WHO CAN SEE THEM. A colleague keeps what she wrote and
+    # loses what was assigned to her, while still being the person who has to
+    # do it.
+    archived_at: Optional[str] = None
+
+
+class WorkspaceMember(BaseModel):
+    """
+    One person's membership of one workspace — the answer to "who may SEE
+    this".
+
+    That is a DIFFERENT question from the one `workspaces.user_id` answers,
+    which is "who may ADMINISTER this" — rename, archive, invite, remove
+    people, delete tasks. The owner appears in both and nothing else is
+    derived twice, which is why repository.is_workspace_owner asks the
+    `workspaces` table and never the `role` field here. `role` exists so that
+    "who is in this room" has one answer in one table.
+
+    `notify_all` is per-workspace on purpose: an owner may want the cleaning
+    team's reminders and not the office's. It defaults to false because a
+    switch that is on by default makes every shared workspace noisy on the day
+    it is created.
+    """
+    record_id: Optional[str] = None
+    workspace_id: str
+    user_id: str
+    role: Literal["owner", "member"] = "member"
+    notify_all: bool = False
+    joined_at: Optional[str] = None
 
 
 class Category(BaseModel):

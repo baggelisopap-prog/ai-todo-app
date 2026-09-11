@@ -276,6 +276,12 @@ TASK_COLUMNS = {
     "recurrence_rule_id", "occurrence_date", "missed_at", "cancelled_at",
     "deleted_at",
     "workspace_id", "category_id",
+    # Multi-user (2026-09-11). A real column, added by
+    # docs/migrations/2026-09-11-multi-user-sharing.sql — so it belongs here
+    # rather than in the pop() list, and the migration MUST be applied before
+    # this code is deployed or every insert is rejected wholesale (PGRST204),
+    # which is the exact failure this guard exists to catch.
+    "assigned_to",
 }
 
 
