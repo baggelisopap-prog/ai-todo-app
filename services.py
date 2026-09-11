@@ -1059,7 +1059,14 @@ class TaskService:
                 # Fetched once per user per tick, then filtered multiple ways in
                 # Python — mirrors the original single-global-fetch pattern,
                 # just scoped per user now instead of across everyone at once.
-                user_tasks = self.repository.get_all_tasks(user_id)
+                # belongs_to, NOT visible_to — see the two docstrings in
+                # repository.py. This single fetch feeds advance reminders, the
+                # daily summary, Hostaway escalation and missed-occurrence
+                # closing, so reading the wide list here would widen all four
+                # at once: one reminder per member of every shared workspace,
+                # and tasks.notification_sent is a single boolean that cannot
+                # record five deliveries.
+                user_tasks = repository.get_owned_or_assigned_tasks(user_id)
 
                 # `recurrence_rules_loaded` tells apart "the fetch failed" from
                 # "the fetch found nothing": when the fetch above failed,

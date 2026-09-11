@@ -30,7 +30,10 @@ def _wire(monkeypatch, failing_user=None):
 
     svc = services.TaskService.__new__(services.TaskService)
     svc.repository = services.repository
-    monkeypatch.setattr(services.repository, "get_all_tasks", lambda u: [], raising=False)
+    # The tick reads belongs_to now, not visible_to. No raising=False: this
+    # function really exists on the module, so a rename must break this test
+    # loudly rather than quietly stubbing a name nothing calls.
+    monkeypatch.setattr(services.repository, "get_owned_or_assigned_tasks", lambda u: [])
     # The scheduler now materialises recurrences before it reads a user's
     # tasks, so an unstubbed get_recurrence_rules would reach the real
     # repository module here and hit the live Supabase client.

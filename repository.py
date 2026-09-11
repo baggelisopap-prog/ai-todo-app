@@ -396,6 +396,37 @@ def get_tasks_for_user(user_id: str) -> list[TaskRecord]:
     return _get_shared_tasks_repo().get_all_tasks(user_id=user_id)
 
 
+def get_owned_or_assigned_tasks(user_id: str) -> list[TaskRecord]:
+    """
+    Every task that is this person's WORK — `belongs_to`. Tasks assigned to
+    them, plus tasks they created that nobody has been made responsible for.
+
+    THIS IS THE READ FOR ANYTHING THAT RINGS A PHONE — advance reminders, the
+    daily summary, Hostaway escalation, missed-occurrence closing — and, from
+    slice 3, for the agent's day view. It must never be swapped for
+    get_all_tasks; see that method's docstring for the three ways that breaks,
+    two of them silently.
+
+    `assigned_to is null` on the second arm is load-bearing: a task I created
+    and then handed to somebody else is THEIR work, and my phone has to stop
+    ringing for it the moment I assign it.
+
+    A task in a shared workspace that nobody has taken is in its creator's list
+    and nobody else's. Every member sees it on screen; until somebody takes it,
+    it is not anybody's work.
+    """
+    repo = _get_shared_tasks_repo()
+    response = (
+        supabase.table("tasks")
+        .select("*")
+        .or_(f"assigned_to.eq.{user_id},and(user_id.eq.{user_id},assigned_to.is.null)")
+        .execute()
+    )
+    rows = response.data or []
+    logger.info(f"Retrieved {len(rows)} owned-or-assigned tasks for user {user_id}.")
+    return [repo._supabase_row_to_task(row) for row in rows]
+
+
 # --- Push subscriptions ---
 # Module-level functions since push subscriptions don't need the heavier
 # field-mapping logic tasks do.
@@ -659,8 +690,22 @@ def get_tasks_due_for_notification(
 
 
 def mark_notification_sent(user_id: str, record_id: str) -> None:
-    """Sets notification_sent = True for a task, scoped to user_id."""
-    supabase.table("tasks").update({"notification_sent": True}).eq("id", record_id).eq("user_id", user_id).execute()
+    """
+    Sets notification_sent = True. Scoped by task id ALONE, on purpose.
+
+    It used to carry .eq("user_id", user_id) as well. Once a task can be
+    processed by the tick of somebody who did not create it — its ASSIGNEE —
+    that filter matches zero rows and raises nothing, so the flag is never set
+    and the same reminder fires on every ~2-minute tick, forever. A silent
+    no-op is the worst shape that bug could have taken: nothing in the row, the
+    log or the response would have said anything was wrong.
+
+    `user_id` stays in the signature. Every caller passes it, it is what makes
+    the log line worth reading, and access.py is what decides whether the
+    caller was entitled to get this far.
+    """
+    supabase.table("tasks").update({"notification_sent": True}).eq("id", record_id).execute()
+    logger.info(f"[notify] marked task {record_id} notified (tick user {user_id})")
 
 
 def get_active_hostaway_tasks(

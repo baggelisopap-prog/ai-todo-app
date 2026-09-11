@@ -287,8 +287,8 @@ def test_the_tick_materialises_before_it_reads_the_users_tasks(monkeypatch):
                         lambda u: AppSettings(notifications_enabled=True, send_all_enabled=False))
     monkeypatch.setattr(services.repository, "get_recurrence_rules",
                         lambda u: order.append("rules") or [])
-    monkeypatch.setattr(services.repository, "get_all_tasks",
-                        lambda u: order.append("tasks") or [], raising=False)
+    monkeypatch.setattr(services.repository, "get_owned_or_assigned_tasks",
+                        lambda u: order.append("tasks") or [])
     monkeypatch.setattr(services.repository, "get_tasks_due_for_notification",
                         lambda u, s, e, tasks=None, require_bell_enabled=False: [])
     monkeypatch.setattr(services, "sync_google_calendar_for_user", lambda u: {"status": "ok"})
@@ -322,7 +322,7 @@ def test_a_broken_rule_does_not_cost_the_user_the_rest_of_the_tick(monkeypatch):
         raise RuntimeError("recurrence_rules table is missing")
 
     monkeypatch.setattr(services.repository, "get_recurrence_rules", _boom)
-    monkeypatch.setattr(services.repository, "get_all_tasks", lambda u: [], raising=False)
+    monkeypatch.setattr(services.repository, "get_owned_or_assigned_tasks", lambda u: [])
     monkeypatch.setattr(services.repository, "get_tasks_due_for_notification",
                         lambda u, s, e, tasks=None, require_bell_enabled=False: [])
     monkeypatch.setattr(services, "sync_google_calendar_for_user",
