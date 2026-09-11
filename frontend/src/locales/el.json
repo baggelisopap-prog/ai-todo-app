@@ -178,7 +178,9 @@
     "priority_aria": "Προτεραιότητα {{priority}}",
     "hostaway_open_conversation": "Άνοιγμα στη Hostaway",
     "hostaway_message_count": "{{count}} μηνύματα",
-    "hostaway_answered": "Απαντήθηκε — ακόμα ανοιχτό"
+    "hostaway_answered": "Απαντήθηκε — ακόμα ανοιχτό",
+    "assignee_label": "Υπεύθυνος",
+    "unassigned": "Κανένας"
   },
   "menu": {
     "open_menu": "Άνοιγμα μενού"

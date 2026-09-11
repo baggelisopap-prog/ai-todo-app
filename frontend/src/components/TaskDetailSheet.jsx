@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { agentEditTask } from '../api';
+import { agentEditTask, getWorkspaceMembers } from '../api';
 import { formatDate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import { categoryColor, categoryLabel, describeRecurrence, dueTone, DUE_TONE_CLASSES, priorityLabel } from '../utils/taskDisplay';
@@ -86,6 +86,9 @@ function draftFromTask(task) {
     // turns it back into a real null on the way out.
     workspace_id: task.workspace_id || '',
     category_id: task.category_id || '',
+    // Same '' convention as the two above: '' is how "nobody has taken it" is
+    // expressed in a <select>, and handleSave turns it back into a real null.
+    assigned_to: task.assigned_to || '',
   };
 }
 
@@ -135,6 +138,40 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const [draft, setDraft] = useState(() => draftFromTask(task));
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+
+  // Who this task could be handed to: the members of ITS workspace.
+  //
+  // Fetched only while editing and only for a filed task, because that is the
+  // only moment the answer is needed — opening a task to read it must not cost
+  // a members request. An unfiled task has no room and therefore nobody to
+  // hand it to, which the backend refuses with its own message
+  // (assignee_needs_a_workspace); not offering the field is the same rule the
+  // locked Hostaway category follows.
+  // The fetched list is stored WITH the workspace it belongs to, and read back
+  // only when the two still agree. Two reasons, and neither is cosmetic:
+  // clearing it synchronously on the way in is a setState inside an effect
+  // body (react-hooks/set-state-in-effect, and it really can cascade), and
+  // without the id a switch from one workspace to another would show the old
+  // room's people until the new fetch lands — offering a handover to somebody
+  // the backend is about to refuse.
+  const [memberState, setMemberState] = useState({ workspaceId: null, members: [] });
+  const members = memberState.workspaceId === draft.workspace_id ? memberState.members : [];
+
+  useEffect(() => {
+    if (!isEditing || !draft.workspace_id) return undefined;
+    let cancelled = false;
+    const workspaceId = draft.workspace_id;
+    getWorkspaceMembers(workspaceId)
+      .then((data) => {
+        if (!cancelled) setMemberState({ workspaceId, members: data.members });
+      })
+      // Silent: the picker simply does not appear. A toast about a members
+      // list nobody asked for, on a sheet opened to edit a name, is noise.
+      .catch(() => {
+        if (!cancelled) setMemberState({ workspaceId, members: [] });
+      });
+    return () => { cancelled = true; };
+  }, [isEditing, draft.workspace_id]);
 
   const [optimisticChecklist, setOptimisticChecklist] = useState(null);
   const [pendingToggleIdx, setPendingToggleIdx] = useState(null);
@@ -188,6 +225,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
         // is not a uuid. Null IS the value that means unfiled.
         workspace_id: draft.workspace_id || null,
         category_id: draft.category_id || null,
+        assigned_to: draft.assigned_to || null,
         // The button says so (actions.save_approve) — a silent approval would
         // be a side effect nobody asked for.
         ...(approvesOnEdit ? { approval_status: true } : {}),
@@ -570,6 +608,27 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                   </Field>
                 )}
               </div>
+
+              {/* Only when there is somebody to hand it to. A workspace with
+                  one member is every solo account, and a picker whose only
+                  option is yourself is a field that asks a question with one
+                  answer. */}
+              {members.length > 1 && (
+                <Field label={t('task.assignee_label')}>
+                  <CustomSelect
+                    value={draft.assigned_to}
+                    options={[
+                      { value: '', label: t('task.unassigned') },
+                      ...members.map((m) => ({
+                        value: m.user_id,
+                        label: m.display_name || m.email || m.user_id,
+                      })),
+                    ]}
+                    onChange={(value) => updateDraft('assigned_to', value)}
+                    ariaLabel={t('task.assignee_label')}
+                  />
+                </Field>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label={t('task.category_label')}>
