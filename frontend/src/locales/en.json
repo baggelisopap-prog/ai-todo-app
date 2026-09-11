@@ -475,7 +475,10 @@
     "saved": "Saved",
     "deleted": "Deleted",
     "name_taken": "That name is already taken",
-    "remove": "Delete"
+    "remove": "Delete",
+    "archive": "Archive",
+    "archive_workspace_confirm": "Archive “{{name}}”? It leaves the list for everyone who can see it. NOTHING is lost — tasks keep their workspace, category and assignee, and all of it comes back if you restore it.",
+    "archived": "Archived"
   },
   "members": {
     "title": "Members",

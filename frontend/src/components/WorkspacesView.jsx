@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  createWorkspace, updateWorkspace, deleteWorkspace,
+  createWorkspace, updateWorkspace, archiveWorkspace,
   createCategory, updateCategory, deleteCategory,
 } from '../api';
 import { useWorkspaces } from '../hooks/useWorkspaces';
@@ -56,12 +56,20 @@ function WorkspacesView({ onShowToast }) {
     }
   }
 
-  function handleDeleteWorkspace(workspace) {
-    // The affected count comes back FROM the delete, so the confirmation cannot
-    // quote it. It states what will happen instead — that the tasks survive —
-    // which is the part the user needs before clicking, not the number.
-    if (!window.confirm(t('workspace.delete_workspace_confirm', { name: workspace.name }))) return;
-    run(() => deleteWorkspace(workspace.record_id), 'workspace.deleted');
+  function handleArchiveWorkspace(workspace) {
+    // ARCHIVES, it does not delete — the owner's rule that work is never lost.
+    //
+    // Deleting already preserved the tasks (ON DELETE SET NULL), but destroyed
+    // everything that made them findable: which workspace, which category,
+    // and — now that visibility comes from membership — who could see them at
+    // all. A colleague would keep what she wrote and lose what was assigned to
+    // her, while still being the person who has to do it.
+    //
+    // The confirmation says what archiving MEANS rather than quoting a count,
+    // for the same reason the old one did: the number is not the part you need
+    // before clicking.
+    if (!window.confirm(t('workspace.archive_workspace_confirm', { name: workspace.name }))) return;
+    run(() => archiveWorkspace(workspace.record_id), 'workspace.archived');
   }
 
   function handleDeleteCategory(category) {
@@ -134,10 +142,10 @@ function WorkspacesView({ onShowToast }) {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => handleDeleteWorkspace(workspace)}
+                onClick={() => handleArchiveWorkspace(workspace)}
                 className="tap-44 px-2 text-sm text-[var(--danger-text)] hover:underline flex-shrink-0"
               >
-                {t('workspace.remove')}
+                {t('workspace.archive')}
               </button>
             </div>
 
