@@ -581,12 +581,44 @@ ui-check: OK — 80 files, 49 tokens, 476 translation keys
 ✓ built in 454ms
 ```
 
-Not seen in a browser. **What to watch is the suggestion chips**: they are the one part
-with a known failure mode (the blur/tap race above), and the fix for it is a rule about
-when they stop being shown rather than anything visible.
+**CONFIRMED on his phone against the deployed `dfa84ef`, 2026-09-11** — «δοκιμασα ολα
+καλα». This line previously read *"Not seen in a browser. What to watch is the suggestion
+chips."* The chips were the one part with a known failure mode (the blur/tap race above)
+and they survived it, which is what the `agentOpen`-never-closes rule was for.
 
 ### And the three things from 5a were confirmed working
 
 «δοκιμασα το δουλευει ολα καλα» — the in-row label, the returning checklist pill and the
 typography pass were all checked on his phone against the deployed `20e9da9`. That is the
 first part of this whole UX run that a person has actually seen.
+
+
+---
+
+## Where the whole UX run stands, 2026-09-12
+
+Five pushes are live: `15ba6d8` (workspaces), `12cce2e` (the task sheet), `20e9da9`
+(three fixes he found), `dfa84ef` (the agent on one line).
+
+### Seen by a person, on his own phone
+
+The task sheet in full — the icon rows, press-and-hold labels, the date-and-time row, the
+description pill, the typography — and the one-line agent including its suggestion chips.
+
+### NOT seen, and it cannot be seen alone
+
+**Everything that needs a second account in the same workspace.** The assignee initials on
+a task row and the «Δικά μου / Αδιάθετα» filter render NOTHING on a solo account by
+design, so opening the app alone proves only that they do not crash. Specifically open:
+
+- **The assignee round-trip.** Hand a task over, reload, confirm the name is still there.
+  This was a live bug fixed in `15ba6d8` and it is the single most valuable check left.
+- **The initials on the row**, and that they are the same colour as that person in the
+  members panel and in the activity log.
+- **«Δικά μου» against the agent.** Ask «τι έχω σήμερα» and count the list beside it —
+  they must agree. They share a definition on purpose; two answers would mean the screen
+  and the agent disagree about whose work it is.
+- **The invitation round trip** — mint, watch the pending row appear with its expiry,
+  revoke, and confirm the dead link is refused with its own Greek sentence.
+- **The activity screen against real rows**, which is the only place the eight Greek
+  sentences and the day grouping can be judged.
