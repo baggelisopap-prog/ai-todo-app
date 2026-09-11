@@ -476,5 +476,27 @@
     "deleted": "Deleted",
     "name_taken": "That name is already taken",
     "remove": "Delete"
+  },
+  "members": {
+    "title": "Members",
+    "title_count": "Members ({{count}})",
+    "loading": "Loading…",
+    "owner": "· owner",
+    "you": "· you",
+    "remove": "Remove",
+    "remove_confirm": "Remove {{name}} from this workspace? Tasks they had taken stay here and become unclaimed.",
+    "removed": "Removed",
+    "leave": "Leave",
+    "leave_confirm": "Leave “{{name}}”? You will no longer see it. Tasks you had taken stay there.",
+    "left": "You left",
+    "invite": "+ Invite",
+    "link_once": "Send this link to whoever should join. One use, 7 days. It will NOT be shown again.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copy_failed": "Copy failed — select the link and copy it by hand.",
+    "notify_all": "Notifications for the whole team",
+    "notify_all_hint": "Normally only the assignee's phone rings. Turn this on to get this workspace's notifications too.",
+    "joined": "You joined the workspace.",
+    "already_member": "You are already a member of this workspace."
   }
 }

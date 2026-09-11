@@ -7,6 +7,7 @@ import {
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAppSettings } from '../hooks/useAppSettings';
 import CustomSelect from './CustomSelect';
+import MembersPanel from './MembersPanel';
 import { nextPosition } from '../utils/workspaces';
 
 /**
@@ -226,6 +227,16 @@ function WorkspacesView({ onShowToast }) {
                 </button>
               )}
             </div>
+
+            {/* Collapsed by default and fetches only when opened: a list of
+                workspaces must not become one members request per workspace
+                every time Settings is visited, and a solo account has exactly
+                one member to show. */}
+            <MembersPanel
+              workspace={workspace}
+              onShowToast={onShowToast}
+              onChanged={reload}
+            />
           </div>
         );
       })}

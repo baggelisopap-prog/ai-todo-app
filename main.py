@@ -192,6 +192,10 @@ class WorkspaceMemberView(BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     joined_at: Optional[str] = None
+    # Which row is the caller. The server already knows, so it says — rather
+    # than the frontend fetching the session, threading a user id through two
+    # components, and getting a chance to be wrong about who it is.
+    is_me: bool = False
 
 
 class MembersListResponse(BaseModel):
@@ -1212,6 +1216,7 @@ def list_workspace_members(workspace_id: str, user_id: str = Depends(get_current
             joined_at=m.joined_at,
             display_name=(profiles.get(m.user_id) or {}).get("display_name"),
             email=(profiles.get(m.user_id) or {}).get("email"),
+            is_me=(m.user_id == user_id),
         )
         for m in members
     ])

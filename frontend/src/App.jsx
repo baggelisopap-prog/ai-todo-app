@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAllTasks, updateTask, connectGoogleCalendar, getProfile } from './api';
+import { getAllTasks, updateTask, connectGoogleCalendar, getProfile, acceptWorkspaceInvite } from './api';
 import { supabase } from './supabaseClient';
 import { LoginScreen } from './components/LoginScreen';
 import BottomNav from './components/BottomNav';
@@ -65,6 +65,44 @@ function TaskViews({ activeTab, viewProps, onTaskCreated }) {
       {activeTab === 'browse' && <BrowseView {...scoped} />}
     </>
   );
+}
+
+/**
+ * Redeems a parked invitation token, once, after sign-in.
+ *
+ * A component rather than a few lines inside App, for the same mechanical
+ * reason TaskViews is one: App RENDERS WorkspaceProvider, so App's own body
+ * sits above that context — and accepting an invitation has to reload the
+ * workspaces, or the room you just joined is missing from the switcher until
+ * the next app open.
+ */
+function InviteAcceptor({ onShowToast }) {
+  const { t } = useTranslation();
+  const { reload } = useWorkspaces();
+
+  useEffect(() => {
+    const token = sessionStorage.getItem('pending_invite');
+    if (!token) return;
+
+    // Cleared BEFORE the call, not after. The link is single use, so a retry
+    // on the next render could only ever produce "already used" on top of
+    // whatever the real reason was.
+    sessionStorage.removeItem('pending_invite');
+
+    acceptWorkspaceInvite(token)
+      .then((result) => {
+        onShowToast?.(
+          result.status === 'already_member'
+            ? t('members.already_member')
+            : t('members.joined'),
+          'success',
+        );
+        reload();
+      })
+      .catch((err) => onShowToast?.(err.detail || err.message, 'error'));
+  }, [t, reload, onShowToast]);
+
+  return null;
 }
 
 function App() {
@@ -176,6 +214,25 @@ function App() {
     }
     navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage);
     return () => navigator.serviceWorker?.removeEventListener('message', handleServiceWorkerMessage);
+  }, []);
+
+  // An invitation link was opened: ?invite=<token>. This half only PARKS it.
+  //
+  // Somebody following a WhatsApp link may have no account at all, in which
+  // case App renders LoginScreen and the workspace context — which the accept
+  // needs, to put the new workspace into the switcher — never mounts. So the
+  // token goes into sessionStorage here and InviteAcceptor, which lives inside
+  // the provider, consumes it once there is a session.
+  //
+  // sessionStorage rather than localStorage: a credential that outlives the
+  // browser tab is one left lying around.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('invite');
+    if (token) {
+      sessionStorage.setItem('pending_invite', token);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
   // Developer mode unlock: visiting once with ?dev=1 persists it in
@@ -371,6 +428,7 @@ function App() {
     {/* Below AppSettingsProvider because it reads and writes
         app_settings.active_workspace_id through useAppSettings. */}
     <WorkspaceProvider onShowToast={handleShowToast}>
+      <InviteAcceptor onShowToast={handleShowToast} />
     <RecurrenceProvider onShowToast={handleShowToast} onTasksChanged={refreshTasks}>
     <div className="flex min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       {isDesktop && (

@@ -45,13 +45,24 @@ async function request(path, options = {}) {
   if (!response.ok) {
     // HTTP error (4xx or 5xx). Try to parse the error body for detail.
     let detail;
+    let code;
     try {
       const errorBody = await response.json();
       detail = errorBody.detail || JSON.stringify(errorBody);
+      // Sharing refusals carry a machine-readable code alongside the Greek
+      // sentence, so a caller can branch without matching on Greek text.
+      code = errorBody.code;
     } catch {
       detail = response.statusText;
     }
-    throw new Error(`API error ${response.status}: ${detail}`);
+    // The message keeps its old shape so nothing that logs it changes, but the
+    // pieces are attached too: a screen that wants to SHOW the reason should
+    // not have to slice "API error 410: " off the front of a sentence.
+    const error = new Error(`API error ${response.status}: ${detail}`);
+    error.status = response.status;
+    error.detail = detail;
+    error.code = code;
+    throw error;
   }
 
   return response.json();
@@ -615,4 +626,113 @@ export async function updateCategory(categoryId, updates) {
  */
 export async function deleteCategory(categoryId) {
   return request(`/categories/${categoryId}`, { method: 'DELETE' });
+}
+
+
+// ---------------------------------------------------------------- sharing
+// Members, invitations, archiving and the activity log. See
+// docs/superpowers/specs/2026-09-11-multi-user-workspace-sharing-design.md
+
+/**
+ * GET /workspaces/{id}/members — everyone in the room, owner included.
+ * Returns { members: [{ user_id, role, notify_all, display_name, email,
+ * joined_at }] }. A member's right; an outsider gets 404.
+ */
+export async function getWorkspaceMembers(workspaceId) {
+  return request(`/workspaces/${workspaceId}/members`);
+}
+
+/**
+ * DELETE /workspaces/{id}/members/{userId} — owner only.
+ * Their tasks stay in the workspace and become unclaimed.
+ * 409 if the target is the owner.
+ */
+export async function removeWorkspaceMember(workspaceId, userId) {
+  return request(`/workspaces/${workspaceId}/members/${userId}`, { method: 'DELETE' });
+}
+
+/** POST /workspaces/{id}/leave — 409 for the owner, who archives instead. */
+export async function leaveWorkspace(workspaceId) {
+  return request(`/workspaces/${workspaceId}/leave`, { method: 'POST' });
+}
+
+/**
+ * PATCH /workspaces/{id}/members/me — { notify_all }. Your own row, so no
+ * ownership check: anyone may decide how loud their own phone is.
+ */
+export async function setWorkspaceNotifyAll(workspaceId, notifyAll) {
+  return request(`/workspaces/${workspaceId}/members/me`, {
+    method: 'PATCH',
+    body: JSON.stringify({ notify_all: notifyAll }),
+  });
+}
+
+/**
+ * POST /workspaces/{id}/invites — owner only. Returns
+ * { token, invite_id, expires_at }.
+ *
+ * THE TOKEN COMES BACK ONCE. Only a hash is stored, so this response is the
+ * only place it ever exists readable — show it, let the user copy it, and do
+ * not expect to fetch it again.
+ */
+export async function createWorkspaceInvite(workspaceId) {
+  return request(`/workspaces/${workspaceId}/invites`, { method: 'POST' });
+}
+
+/**
+ * Builds the link to send. The origin is ours, so no server setting decides it.
+ *
+ * A QUERY PARAMETER, not a path. This app has no router and a path like
+ * /invite/<token> would need a Vercel SPA rewrite to serve index.html — one
+ * more piece of configuration that is right locally and wrong in production.
+ * The app already reads ?view= and ?dev= from the URL and cleans them up with
+ * replaceState; this is the same shape.
+ */
+export function inviteLink(token) {
+  return `${window.location.origin}/?invite=${encodeURIComponent(token)}`;
+}
+
+/** GET /workspaces/{id}/invites — never includes a token or its hash. */
+export async function getWorkspaceInvites(workspaceId) {
+  return request(`/workspaces/${workspaceId}/invites`);
+}
+
+/** DELETE /workspaces/{id}/invites/{inviteId} — owner only. */
+export async function revokeWorkspaceInvite(workspaceId, inviteId) {
+  return request(`/workspaces/${workspaceId}/invites/${inviteId}`, { method: 'DELETE' });
+}
+
+/**
+ * POST /invites/{token}/accept — turns a link into a membership.
+ * Returns { status: 'joined' | 'already_member', workspace_id }.
+ *
+ * 'already_member' is a SUCCESS: somebody tapped the link twice.
+ * On failure the error carries .code — invite_used, invite_revoked,
+ * invite_expired, workspace_archived, invite_not_found — and .detail, the
+ * Greek sentence to show.
+ */
+export async function acceptWorkspaceInvite(token) {
+  return request(`/invites/${token}/accept`, { method: 'POST' });
+}
+
+/**
+ * POST /workspaces/{id}/archive — owner only. Replaces deleting.
+ * Nothing is unlinked: tasks keep their workspace, category and assignee, so
+ * restoring brings back the organisation and not just the rows.
+ */
+export async function archiveWorkspace(workspaceId) {
+  return request(`/workspaces/${workspaceId}/archive`, { method: 'POST' });
+}
+
+/** POST /workspaces/{id}/restore — owner only. */
+export async function restoreWorkspace(workspaceId) {
+  return request(`/workspaces/${workspaceId}/restore`, { method: 'POST' });
+}
+
+/**
+ * GET /workspaces/{id}/activity — who did what in this room, newest first.
+ * A member's right. The server caps limit at 500.
+ */
+export async function getWorkspaceActivity(workspaceId, limit = 100) {
+  return request(`/workspaces/${workspaceId}/activity?limit=${limit}`);
 }
