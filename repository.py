@@ -204,11 +204,50 @@ class AirtableTaskRepository:
 
     def get_all_tasks(self, user_id: str) -> list[TaskRecord]:
         """
-        Retrieves all task records belonging to user_id.
+        Every task this user may SEE — `visible_to`. Tasks they created, plus
+        every task in a workspace they are a member of.
+
+        THIS IS THE READ FOR SCREENS: the task list endpoint, search, the
+        agent's cached list. Anything that rings a phone must call
+        repository.get_owned_or_assigned_tasks instead.
+
+        That split is not a nicety. Until 2026-09-11 this one function fed both
+        the UI and the scheduler tick, and nobody had to notice because both
+        halves wanted the same rows. Widening it without splitting it breaks
+        reminders three ways, two of them silent:
+
+          1. every member's tick finds every shared task, so one reminder is
+             pushed per member;
+          2. tasks.notification_sent is a SINGLE BOOLEAN on the task row, so
+             whichever member the loop reached first flips it and the rest find
+             nothing — which phone rings would depend on the order
+             get_all_active_user_ids() happened to return profiles in;
+          3. mark_notification_sent used to filter on user_id, so a member who
+             is not the row's owner matched zero rows and raised nothing, and
+             the task re-notified on every tick forever.
         """
-        response = supabase.table("tasks").select("*").eq("user_id", user_id).execute()
+        workspace_ids = get_member_workspace_ids(user_id)
+
+        query = supabase.table("tasks").select("*")
+        if workspace_ids:
+            # PostgREST `or`: comma-separated filters, and `in` takes its
+            # values in parentheses. The empty list gets its own branch rather
+            # than an inline conditional because `workspace_id.in.()` is a
+            # SYNTAX ERROR, not an empty match — and a malformed filter on this
+            # table fails open, which means another user's tasks.
+            #
+            # The user_id arm is not redundant with the workspace arm: an
+            # unfiled task has no workspace at all, and without it such a task
+            # would vanish from its own author's list the moment they joined
+            # somebody else's workspace.
+            joined = ",".join(workspace_ids)
+            query = query.or_(f"user_id.eq.{user_id},workspace_id.in.({joined})")
+        else:
+            query = query.eq("user_id", user_id)
+
+        response = query.execute()
         rows = response.data
-        logger.info(f"Retrieved {len(rows)} tasks from Supabase for user {user_id}.")
+        logger.info(f"Retrieved {len(rows)} visible tasks from Supabase for user {user_id}.")
         return [self._supabase_row_to_task(row) for row in rows]
 
     def get_task(self, user_id: str, record_id: str) -> Optional[TaskRecord]:
