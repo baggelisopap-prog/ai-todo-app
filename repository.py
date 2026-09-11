@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
 from supabase import create_client
-from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings, RecurrenceRule, Workspace, Category
+from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings, RecurrenceRule, Workspace, WorkspaceMember, Category
 
 # Set up module-level logging
 logger = logging.getLogger(__name__)
@@ -1565,6 +1565,95 @@ def delete_workspace(user_id: str, workspace_id: str) -> None:
     tasks pointing at either are SET NULL and become unfiled. Deleting a
     container never deletes work."""
     supabase.table("workspaces").delete().eq("id", workspace_id).eq("user_id", user_id).execute()
+
+
+# -------------------------------------------------------- workspace members
+# Who may SEE a workspace — a different question from workspaces.user_id,
+# which is who may ADMINISTER it. See the 2026-09-11 design.
+
+
+def _supabase_row_to_member(row: dict) -> WorkspaceMember:
+    """A workspace_members row as the Pydantic model. Unlike the other
+    _supabase_row_to_* helpers this one DOES surface user_id, because here the
+    person is the data rather than the ownership stamp."""
+    return WorkspaceMember(
+        record_id=row.get("id"),
+        workspace_id=_get(row, "workspace_id", ""),
+        user_id=_get(row, "user_id", ""),
+        role=_get(row, "role", "member"),
+        notify_all=bool(row.get("notify_all", False)),
+        joined_at=row.get("joined_at"),
+    )
+
+
+def get_member_workspace_ids(user_id: str) -> list[str]:
+    """
+    Every workspace this user may SEE. Ids only — the caller turns them into a
+    single `or` filter, and reading whole rows to discard everything but the id
+    is a round trip's worth of data for nothing.
+
+    Returns [] and never None: AirtableTaskRepository.get_all_tasks branches on
+    emptiness, and a None reaching PostgREST as `workspace_id.in.()` is a
+    syntax error rather than an empty match. The None-skip below guards the
+    same edge from the other direction.
+    """
+    response = (
+        supabase.table("workspace_members")
+        .select("workspace_id")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return [r["workspace_id"] for r in (response.data or []) if r.get("workspace_id")]
+
+
+def add_workspace_member(workspace_id: str, user_id: str, role: str = "member") -> WorkspaceMember:
+    """
+    No scoping argument, deliberately: the CALLER has already established the
+    right to do this — by accepting a valid invite, or by creating the
+    workspace. This function does not re-decide it, the same way save_task does
+    not re-decide whether the caller may create a task.
+    """
+    fields = {"workspace_id": workspace_id, "user_id": user_id, "role": role}
+    response = supabase.table("workspace_members").insert(fields).execute()
+    row = (response.data or [{}])[0]
+    logger.info(f"[members] {user_id} joined workspace {workspace_id} as {role}")
+    return _supabase_row_to_member(row)
+
+
+def get_workspace_members(workspace_id: str) -> list[WorkspaceMember]:
+    """Everyone in one room, owner included — the owner has a membership row
+    like anyone else, created alongside the workspace."""
+    response = (
+        supabase.table("workspace_members")
+        .select("*")
+        .eq("workspace_id", workspace_id)
+        .execute()
+    )
+    return [_supabase_row_to_member(r) for r in (response.data or [])]
+
+
+def is_workspace_owner(user_id: str, workspace_id: str) -> bool:
+    """
+    Asks `workspaces`, NOT `workspace_members`.
+
+    workspaces.user_id is the authority on who may administer a workspace —
+    rename, archive, invite, remove people, delete tasks. The membership row
+    marked 'owner' exists so that "who is in this room" has one answer in one
+    table. Deciding ownership from that row instead would make one fact
+    answerable two ways, which is how a pair like this starts to drift.
+
+    A member, a stranger, and a workspace that does not exist are all the same
+    answer here: False, not an exception.
+    """
+    response = (
+        supabase.table("workspaces")
+        .select("id")
+        .eq("id", workspace_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    return bool(response.data)
 
 
 # --------------------------------------------------------------- categories
