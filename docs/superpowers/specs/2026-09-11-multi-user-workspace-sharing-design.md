@@ -33,6 +33,9 @@ Five decisions were the owner's, made in chat before any code:
 5. **Comments on a task are the next project, not this one** — he asked for "chat"; the
    distinction between Trello/Todoist-style per-task comments and a Discord-style room
    was put to him and he parked both.
+6. **Work is never lost** — *"να μην σβηνονται tasks"*, given as a principle rather than
+   an answer to one question, and applied to all three of the questions that had been
+   parked. It is what turns workspace deletion into archiving. See decisions 8 and 9.
 
 ## The finding that shaped the whole design
 
@@ -210,6 +213,56 @@ nothing here overturns it: the new tables get the same flat owner-scoped policie
 makes RLS **stricter** than the application. Stricter is safe for a defence-in-depth
 layer; app-code filtering remains primary, exactly as `docs/DATABASE_SCHEMA.md` states.
 
+### 8. A workspace is archived, never deleted
+
+The owner's rule, given as a principle: *"να μην σβηνονται tasks"*.
+
+It is already half-true, and the half that is missing is the dangerous one. Deleting a
+workspace today is `ON DELETE SET NULL` on `tasks.workspace_id`, so the work genuinely
+survives and becomes unfiled. What does not survive is everything that made it findable —
+which workspace, which category, and, once this project ships, **who can see it**. A
+member's visibility is derived from the workspace; remove the workspace and every task
+returns to whoever created it. Maria keeps what she wrote and loses what was assigned to
+her, while still being the person who has to do it. Nobody deleted anything and work was
+lost anyway.
+
+So `workspaces` gets `archived_at` (TIMESTAMPTZ, nullable) and deletion is replaced:
+
+- An archived workspace leaves the switcher, "Όλα", and every member's lists, taking its
+  tasks with it.
+- **Nothing is unlinked.** `workspace_id`, `category_id` and `assigned_to` are untouched.
+- Restoring is one write and brings back the organisation too, including who was
+  responsible for what.
+
+This is the same standing the project already gave `tasks.deleted_at` on 2026-09-04 —
+permanent archive, nothing purges it, no time limit on restore, on the stated grounds that
+"with no purge a cutoff would be code whose only job is to refuse something that works".
+
+**`ON DELETE SET NULL` stays on the foreign keys.** Archiving means nothing reaches it
+through the UI any more, but a constraint whose whole job is to guarantee work survives a
+hard delete is exactly the kind of safety net you keep after you stop relying on it.
+
+**Two settings must be repointed, per member.** `app_settings.active_workspace_id` and
+`default_workspace_id` are per-user and point at workspaces. Archiving one has to clear
+them for **every member who had it selected**, not just the owner — otherwise that person
+is looking at a workspace that is not there, and worse, the extractor is handed the
+category vocabulary of an archived workspace. `active_workspace_id` falls back to NULL
+("Όλα"); `default_workspace_id` falls back to Business, which `ensure_account_workspaces`
+guarantees every account has.
+
+### 9. Removing a member unassigns their work. Leaving is allowed, behind a confirmation.
+
+Removing a member sets `assigned_to = NULL` on that person's tasks **in that workspace
+only**. The tasks stay where they are, become unclaimed, and are visible to the owner the
+moment it happens. The alternative — leaving the name in place — keeps a departed person
+attached to work nobody is going to do and nobody is watching for.
+
+A member may also leave a workspace themselves, behind a confirmation. Same mechanic as
+removal, different button. It earns its place the first time a workspace is shared with
+somebody who is not an employee — an accountant, a partner, a spouse.
+
+Both write to `workspace_activity`.
+
 ## Schema
 
 ### New table: `workspace_members`
@@ -260,6 +313,12 @@ log whose rows stop being readable when the subject disappears is not a log.
 
 **No retention policy and no automatic cleanup** — permanent archive, same standing as
 `agent_runs`. Rows are removed only by hand-run SQL if it ever proves necessary.
+
+### `workspaces` — one new column
+
+`archived_at` (TIMESTAMPTZ, nullable). NULL means live. Every read of workspaces,
+categories and tasks excludes archived workspaces unless the caller explicitly asks for
+them, which only the "Αρχειοθετημένα" screen does. See decision 8.
 
 ### `tasks` — one new column
 
@@ -313,6 +372,11 @@ workspace members. The assignee's initials on the task card. A **Δικά μου
 An **Ιστορικό** screen per workspace. A `/invite/<token>` route that accepts the link,
 sends an unauthenticated visitor through sign-up first and then completes the join.
 
+**Αρχειοθέτηση** replaces the workspace Delete button, with a confirmation that says what
+will happen in numbers — how many people lose access and how many tasks go with it — and
+an **Αρχειοθετημένα** list with Restore. This is the only screen that reads archived
+workspaces. A member sees neither button; archiving is the owner's, like deleting was.
+
 ## What this deliberately does not do
 
 - **Google Calendar for shared tasks.** Owner's decision, given the four open calendar
@@ -333,7 +397,9 @@ Five slices. The app runs and its tests pass at the end of each.
 
 1. **Tables, the two reads, the write gate.** Nothing visible changes. The tests must
    prove existing behaviour is byte-for-byte unchanged for a single-user account.
-2. **Invites and members.** The first slice where a second person exists.
+2. **Invites and members.** The first slice where a second person exists. Archiving
+   lands here too, with removal and leaving — all three need membership to exist before
+   they can be tested against anything real.
 3. **Assignment** — `assigned_to`, the picker, and the agent's `belongs_to` rule.
 4. **Notifications** — assignee delivery plus the owner's `notify_all`.
 5. **Activity log** — writing it, and the screen that reads it.
@@ -362,18 +428,27 @@ New tests, with the negative ones treated as the important ones:
 - `mark_notification_sent` succeeds when the caller is not the row's owner.
 - An invite link dies on use, on expiry, and on revocation; accepting twice is a no-op.
 - The activity log stays readable after its task is deleted.
+- Archiving a workspace hides it and its tasks from every member, unlinks nothing, and
+  restores complete — same `assigned_to`, same `category_id`.
+- Archiving clears `active_workspace_id` and `default_workspace_id` **for a member who is
+  not the owner**, and `default_workspace_id` lands on Business.
+- Removing a member unassigns their tasks in that workspace and leaves their tasks in
+  other workspaces alone.
 
 **And a browser walkthrough the owner runs himself, with a second real account** — the one
 thing no test proves is whether the thing is usable by two people at once.
 
 ## Open questions, parked
 
-- **Removing a member who has tasks assigned to them.** Unassign them (the work becomes
-  unclaimed and visible to the owner) or leave the stale assignment in place? Unassigning
-  is proposed; it is one line and it is reversible. Confirm at slice 2.
-- **Leaving a workspace you were invited to**, as distinct from being removed. Same
-  mechanics, different button, nobody has asked yet.
-- **What an owner sees when they delete a workspace other people are working in.** Today
-  deleting a workspace leaves its tasks unfiled. With members, the tasks of four other
-  people would silently become invisible to them. Needs a warning at minimum, and possibly
-  a refusal; decide at slice 2 when membership actually exists to test against.
+The three that were parked here on 2026-09-11 were all put to the owner the same day and
+answered; they are decisions 8 and 9 now. What is left:
+
+- **Whether an empty workspace can still be hard-deleted.** Decision 8 replaces deletion
+  with archiving because archiving protects work — but a workspace with no tasks and no
+  other members has no work to protect, and refusing to remove one created by mistake is
+  the kind of rule that only ever annoys. Proposed: allow the hard delete in exactly that
+  case, archive in every other. Not yet confirmed by the owner.
+- **Whether an archived workspace's tasks should still reach the agent's `belongs_to`.**
+  A task assigned to me in an archived workspace is still, literally, assigned to me.
+  Proposed: no — archiving means "this is not live work", and the day view is about live
+  work. Decide at slice 3, when `belongs_to` is written.
