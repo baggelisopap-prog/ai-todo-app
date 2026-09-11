@@ -1,47 +1,140 @@
-ACTIVE TASK — An added task lands in the Inbox, and says which one it is
+ACTIVE TASK — Multi-user: two people, one workspace, one task
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 ## What was asked
-Two requests the same day (2026-09-05), the second raised after the first had shipped:
 
-1. «οταν περνάω ένα καινουργιο τασκ απο το + και ειμαι στο ημερολογιο η στα σημερινα, θέλω να με πετάει στα aprove πάντα»
-2. «θέλω τώρα επίσης το νέο τασκ κάπως να ξεχωρίζει για λίγο σαν να αναβοσβήνει… γιατι ερχεται και μεχρι να διαβασω ποιο ειναι χανω λίγο χρόνο»
+The owner, 2026-09-10:
 
-Both are the same complaint from two sides: a task you just created is somewhere you are not, and then it is one of several cards that all look alike.
+> «θέλω να κάνουμε multy users. τι θέλω ένας χρήστης να μπορεί να προσκαλέσει έναν άλλο
+> χρήστη και να δούν το ίδιο τασκ. και να στείλει ο ένας στον άλλο task σαν εργασία. η να
+> προσθέσει σε αυτ'ων κάτι το φαντάζομαι κάτι σαν work flow προιστάμενος στέλνειο δουλεια
+> (task) στον υφιστ'αμενο κτλ»
 
-Three decisions were the owner's:
-1. **All three add methods, not only typed text** — «ναι απο ολα οχι μονο απο το κειμενο». Typing, dictation and photo already share one handler, so this cost nothing extra.
-2. **The mark PERSISTS after the pulses** rather than pulsing and vanishing — chosen from two options offered, because the complaint was about how long it takes to find the task, and a mark on a short timer only races that problem instead of solving it.
-3. **The middle of three intensities.** He was shown a throwaway preview page (three strengths, light and dark, a replay button) and picked the middle one, which was what had already been written.
+Two things that stack: **shared visibility** (two people, one task) and **assignment**
+(this one is yours). This is the other half of the 2026-08-31 request — the half the
+workspaces spec deliberately refused to design before the container existed.
+
+## The decisions, and they were his
+
+1. **Whole workspace, not per task** — «Για αρχή το ένα αλλά να μην μπορεί να πειράξει όλα
+   τα task στο workspace απλά να μπορεί ο ένας να δίνει πρόσβασει στον άλλο. επίσης να
+   υπάρχει και Logs ποιος έκανε τι εκεί μέσα»
+2. He asked what the big apps do — «τι κάνουν μεγάλες εφαρμογές οπώς to do list trello
+   κτλ?» — and the research **contradicted half of what had been proposed to him**.
+   Neither Trello nor Todoist restricts editing inside a shared container. He then chose
+   their shape, on one condition: «αν αρχίσουμε με 1 μετά μπορούμε να βάλουμε το 2 πάνω
+   στο 1?»
+3. **Notifications: the assignee, plus an owner who opts in** — «By deafault λέω μόνο του
+   υπευθηνου αλλά να έχει ο ιδιοκτήτης (για έναν υπεελεγχτικο προιστάμενο) να το βάζει και
+   αυτός»
+4. **No Google Calendar in v1** — chosen after being shown the four open calendar defects
+   in BACKLOG.md.
+5. **Invitation by link, email later** — «το 1 για αρχη αλλα μετά 2 όμως»
+6. **Assigned to me counts as mine** — «άν ένα τις ομάδας έχει γίνει ανάθεση σε εμένα τότε
+   θα θεωρείτε ΕΓΩ?» Yes.
+7. **Comments/chat are the next project** — «δεν γίνεται να έχουμε ένα chat? οπως ειναι
+   discord viber to list trello?» He was shown that Trello and Todoist have per-task
+   comments rather than a chat room, and parked it as the immediate next step.
+8. **Work is never lost** — «να μην σβηνονται tasks». Given as a principle, not an answer
+   to one question, and it turned workspace deletion into archiving — a change to how the
+   app behaves TODAY, not only under sharing.
 
 ## Where this stands
-**Shipped to production on 2026-09-05.** Two commits on `main`, both pushed — `9ba92dd` (lands in the Inbox) and `11175fa` (the mark). Vercel and Render deploy themselves from `main`, so this is live in the business.
 
-**Changed:** `App.jsx` (the switch, the `newTaskIds` state and its timer), `InboxView.jsx`, `TaskList.jsx`, `TaskCard.jsx` (one prop each, passed on), `TaskRow.jsx` (one class on the wrapper), `index.css` (two tokens in both palettes, one keyframe, one class, one reduced-motion rule). No new file, no backend change, no locale key.
+**Slice 1 of 5 is built and committed to `main`. NOT pushed, and the migration has NOT
+been applied.** Nothing is live. Seven commits, `336fd6d` through `1de22b1`.
+
+Design: `docs/superpowers/specs/2026-09-11-multi-user-workspace-sharing-design.md`
+Plan: `docs/superpowers/plans/2026-09-11-multi-user-slice-1-reads-and-gate.md`
+
+### Two things must happen before this is deployed, in this order
+
+1. **Run `docs/migrations/2026-09-11-multi-user-sharing.sql` in the Supabase SQL Editor**,
+   then uncomment its verification block and read the three numbers back.
+2. Only then push.
+
+**The order is not a formality.** `tasks.assigned_to` is now written on every task insert,
+and Supabase rejects a write containing an unknown column **wholesale** (PGRST204). Deploy
+before the migration and every task-creation path fails at once — manual, all three AI
+paths, and the Hostaway webhook. That is exactly what `category_name` did on 2026-09-01.
 
 ## What it does
-An add through the + — typed, dictated or photographed — switches to the Inbox, and the new cards take an amber ring that pulses three times (2px → 5px → back, ~1,1 s a beat) with a halo thrown outward on each beat, then stops, leaving the steady ring behind.
 
-**Corrected the same day, and it is the reason the pulse looks the way it does.** The first version left the ring at a constant 2px and animated only a faint halo OUTSIDE it. It passed every check and it was visible on a preview page; on the owner's actual phone he reported it as not moving at all — «δεν αναβοσβηνει». It was not a bug, it was a design that produced no perceptible movement, so the ring itself now changes thickness. **Still unresolved when this was written:** whether his phone also has reduce-motion on (Android/iOS accessibility, or battery saver, which turns animations off system-wide) — that would suppress the pulse BY DESIGN and leave exactly the static ring he described, in which case the answer is a stronger static mark, not a stronger animation. The ring comes off a card when that card is opened (only that one — an extraction can return several), and off everything after 12 seconds if nothing is touched. A second add restarts the clock rather than letting the older timer cut the newer mark short.
+**The finding that shaped everything.** `get_all_tasks` fed two different machines — the
+screens and the scheduler tick — and nobody ever had to notice, because both halves wanted
+the same rows. Widening it for sharing would have broken reminders three ways, two of them
+silent: five members means five pushes; `notification_sent` is **one boolean on the task
+row**, so whichever member the loop reached first would flip it and the rest would find
+nothing (which phone rang would depend on the order the database returned profiles in);
+and `mark_notification_sent` filtered on `user_id`, so a member who is not the row's owner
+matched zero rows, raised nothing, and the task would have re-notified every two minutes
+forever.
 
-Why the Inbox and not "the screen you were on": everything the + produces is born with no `approval_status`, i.e. pending, and `InboxView` is the only screen that lists those. From Calendar or Today the task was genuinely invisible — a toast, a badge, nothing on screen.
+So the spine is **two reads, never one**:
+- `visible_to` — what you may SEE. Screens, search, the API.
+- `belongs_to` — what is YOURS. Anything that rings a phone.
 
-## Baselines as of 2026-09-05
-- `npm run check` → **exit 0**, `ui-check: OK — 71 files, 49 tokens, 416 translation keys`, 206 PASS. **Tokens were 47** before this pass; the two new ones are the highlight colours, and `ui-check` itself is what forces them to exist in the dark palette as well as the light one.
-- `npm run lint` → **12 problems, the unchanged long-standing baseline** (measured after the change).
-- `npx vite build` → clean, 316 modules.
-- Backend untouched, so its test suite was not re-run.
+**The write gate did not exist and had to be built.** It had been described to the owner as
+already present; checking proved otherwise and he was told before he approved. The check
+was copy-pasted into each query — 19 of the 29 statements touching `tasks` — and
+`services.update_task` never asked at all. It is now `access.py`, one place, and his
+eventual tightening («αλλάζει μόνο τα δικά του») is an `if` inside one function.
 
-## What a person has actually seen, and what nobody has
-**Seen:**
-- [x] **The animation itself**, in a browser, at three strengths and in both themes — a standalone preview page built for the purpose, carrying the real keyframes and the real token values. That is how the owner chose. The file was deleted afterwards at his request; it never lived inside the project.
-- [x] **The compiled CSS bundle carries the class, the keyframes, both palettes' tokens and the reduced-motion rule** — grepped out of `dist/assets/*.css` after the build, so the Tailwind pipeline is known not to have dropped any of it.
+**Only three tables become shared**: `workspaces`, `categories`, `tasks`. Settings, push
+subscriptions, Google, Hostaway, token usage, agent history **and recurrence rules** all
+stay strictly personal.
 
-**Still unseen — and the first one is deliberate:**
-- [ ] **The whole thing in the running app.** Every add through the + is a Gemini extraction call on the owner's own account, so testing it end to end spends his money; not done without him asking. What that leaves unproven: that the tab actually switches on a real add, and that a real new card wears the ring.
-- [ ] **Where the Inbox is scrolled when you land on it.** Switching tabs does not reset the page's scroll position, so arriving from a Calendar scrolled far down could put the marked card above the fold. Not observed either way; if it happens, the fix is a scroll-to-top on that switch and it is one line.
-- [ ] **The reduced-motion path.** The steady ring with no pulsing has been reasoned about and read in the built CSS, never rendered with the OS setting on.
-- [ ] **The desktop sidebar's add button.** It routes through the same handler, so it should behave identically — but dictation and photo from a desktop have never been exercised at all, a gap that predates this change.
+## Changed
 
-## One thing to know if this is picked up cold
-**The mark is drawn on the wrapper, not on the card.** `TaskRow` returns a wrapper with `overflow-hidden` — that is what hides the swipe tray until you drag — and overflow clips CHILDREN, so a halo drawn on the card inside would be cut off at exactly the edge it needs to cross. An element's own `box-shadow` is not clipped by its own overflow, which is why the class sits on the wrapper. The `z-index: 1` in it is not decoration either: without it the next card's opaque background paints over the halo and clips it on the bottom edge only, which reads as a rendering bug rather than as a design.
+`access.py` (new, 145 lines). `models.py` (+51: `assigned_to`, `archived_at`,
+`WorkspaceMember`). `repository.py` (+185: membership reads, `visible_to`, `belongs_to`,
+`mark_notification_sent` fix). `services.py` (+28: the gate on three write paths, the tick
+repointed). `main.py` (+22: the 403 handler). One migration, 228 lines.
+**Zero frontend files** — `git diff --name-only f860456..HEAD -- frontend/` returns 0.
+
+## Baselines, as the command printed them
+
+```
+392 passed in 4.44s
+```
+
+Baseline before this work was **348 passed in 4.70s**, run on 2026-09-11 before anything
+changed. `PROJECT_STATUS.md` said 312; that was the 2026-09-03 figure and had gone stale
+when the soft-delete and Inbox work added tests. Corrected there.
+
+Verified before running that no test reaches a real model — `test_task_agent_categories`
+monkeypatches `generate_content`, `test_webhook_fanout` monkeypatches `classify_message` —
+so the suite costs nothing to run.
+
+Frontend `npm run check` **was not run**: no frontend file changed.
+
+## What a person has actually SEEN
+
+**Nothing.** Not one line of this has run against the real database or in a browser. The
+migration has not been applied, the code has not been deployed, and no second account
+exists.
+
+## What nobody has watched, and what would settle it
+
+- **The migration applying.** Run it, uncomment the verification block: memberships and
+  owners must both equal the current workspace count, and `assigned` and `archived` must
+  both be 0.
+- **That the owner's own app is unchanged.** This is the claim slice 1 rests on and only a
+  browser settles it: after deploying, tasks list, create, edit, complete, delete and
+  restore exactly as before. `test_a_user_who_belongs_to_nothing_is_queried_EXACTLY_as_before`
+  is the test that pins it, but a passing test is not a person looking at the app.
+- **That reminders still fire.** The scheduler now reads a different function. Nothing has
+  watched a real reminder arrive since the change.
+- **The 403.** A refused write returning «Δεν έχετε δικαίωμα να αλλάξετε αυτό το task.»
+  has only been exercised by calling the handler directly, never through HTTP.
+- **The `or` filters against real PostgREST.** Both `visible_to` and `belongs_to` build
+  filter strings that have only ever been asserted against a fake. The nested
+  `and(user_id.eq.X,assigned_to.is.null)` in particular is syntax no test can validate.
+  **This is the sharpest open risk in slice 1** and it is settled the first time the app
+  lists tasks against the real database.
+
+## Next
+
+Slice 2: invites and members — the first slice where a second person exists. Archiving,
+removal and leaving land there too, because all three need membership to exist before they
+can be tested against anything real.
