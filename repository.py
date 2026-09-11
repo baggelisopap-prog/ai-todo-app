@@ -1598,16 +1598,77 @@ def create_workspace(user_id: str, workspace: Workspace) -> Workspace:
     response = supabase.table("workspaces").insert(fields).execute()
     row = (response.data or [{}])[0]
     logger.info(f"[workspaces] Created workspace {row.get('id')} for user {user_id}")
+
+    # The owner joins their own room. workspaces.user_id answers "who may
+    # administer this" and workspace_members answers "who may see it" — two
+    # different questions — so without this row the owner is absent from every
+    # read that asks membership rather than ownership.
+    if row.get("id"):
+        add_workspace_member(row["id"], user_id, role="owner")
+
     return _supabase_row_to_workspace(row)
 
 
-def get_workspaces(user_id: str) -> list[Workspace]:
-    """Ordered by position, then created_at — position is what the user drags,
-    created_at only breaks ties between two rows never reordered."""
+def get_owned_workspaces(user_id: str) -> list[Workspace]:
+    """
+    Workspaces this person CREATED. The narrow read, and the old query.
+
+    Kept separate from get_workspaces for the same reason belongs_to is kept
+    separate from visible_to on tasks, and the failure it prevents is concrete:
+    services.ensure_account_workspaces furnishes an account that has no
+    workspaces, and it must ask this rather than the wide read. A colleague
+    invited to somebody else's workspace BEFORE they first open the app would
+    otherwise look furnished, get no Business, no Personal and no
+    default_workspace_id, and have every task they create unfiled forever —
+    which is the exact failure that function was written to prevent.
+
+    Also what a duplicate-name check asks: the database unique is
+    (user_id, name), so a sibling in somebody else's workspace is not a clash.
+    """
     response = (
         supabase.table("workspaces")
         .select("*")
         .eq("user_id", user_id)
+        .is_("archived_at", "null")
+        .order("position", desc=False)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return [_supabase_row_to_workspace(row) for row in (response.data or [])]
+
+
+def get_visible_workspace_ids(user_id: str) -> list[str]:
+    """Ids of every live workspace this person may see — owned or joined. The
+    one place that definition lives, so categories and workspaces cannot drift
+    apart on what "visible" means."""
+    return [w.record_id for w in get_workspaces(user_id) if w.record_id]
+
+
+def get_workspaces(user_id: str) -> list[Workspace]:
+    """
+    Every LIVE workspace this person may see — theirs, plus any they have been
+    invited into. The wide read: this is what a screen asks.
+
+    Archived workspaces are excluded for everybody, not only their owner —
+    archiving takes the room out of the switcher for the whole team.
+
+    Ordered by position, then created_at: position is what the user drags,
+    created_at only breaks ties between two rows never reordered.
+    """
+    member_ids = get_member_workspace_ids(user_id)
+
+    query = supabase.table("workspaces").select("*")
+    if member_ids:
+        # Same shape, and the same trap, as get_all_tasks: an empty list would
+        # reach PostgREST as `id.in.()`, which is a syntax error rather than an
+        # empty match.
+        query = query.or_(f"user_id.eq.{user_id},id.in.({','.join(member_ids)})")
+    else:
+        query = query.eq("user_id", user_id)
+
+    response = (
+        query
+        .is_("archived_at", "null")
         .order("position", desc=False)
         .order("created_at", desc=False)
         .execute()
@@ -2045,15 +2106,25 @@ def get_categories(user_id: str) -> list[Category]:
     """
     Every category this user owns, across all their workspaces.
 
-    Scoped by user rather than by workspace on purpose: the frontend needs the
-    whole set on every app open (to colour task chips that may belong to any
-    workspace) and grouping them by workspace_id in the provider is one request
-    instead of one per workspace.
+    Keyed on the workspaces the person can SEE rather than on categories.user_id
+    (2026-09-11). A member needs the category names of the room they were
+    invited into, and those rows carry the OWNER's user_id — filtering on it
+    would show a colleague every task in that workspace as unfiled.
+
+    Still one call for the whole set, because the frontend needs all of it on
+    every app open to colour task chips that may belong to any workspace.
     """
+    workspace_ids = get_visible_workspace_ids(user_id)
+    if not workspace_ids:
+        # Returned without asking the database: an empty list reaching
+        # PostgREST as `workspace_id.in.()` is a syntax error, not an empty
+        # match.
+        return []
+
     response = (
         supabase.table("categories")
         .select("*")
-        .eq("user_id", user_id)
+        .in_("workspace_id", workspace_ids)
         .order("position", desc=False)
         .order("created_at", desc=False)
         .execute()

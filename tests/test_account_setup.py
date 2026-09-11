@@ -34,6 +34,11 @@ class _Store:
 
     def install(self, monkeypatch):
         monkeypatch.setattr(repository, "get_workspaces", lambda u: self.workspaces)
+        # get_owned_workspaces is what ensure_account_workspaces asks since
+        # 2026-09-11 — the wide read would call a colleague furnished because
+        # somebody ELSE invited them somewhere. Left unstubbed it reached the
+        # real Supabase project, which is how its absence was noticed.
+        monkeypatch.setattr(repository, "get_owned_workspaces", lambda u: self.workspaces)
         monkeypatch.setattr(repository, "get_categories", lambda u: self.categories)
         monkeypatch.setattr(repository, "get_categories_for_workspace",
                             lambda u, w: [c for c in self.categories if c.workspace_id == w])

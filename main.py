@@ -1023,8 +1023,14 @@ def list_workspaces(user_id: str = Depends(get_current_user_id)):
         # furnished the accounts that existed the day it ran, so without this
         # the next person to sign up would get none, never see the chip row
         # (it needs two) and have every task unfiled forever.
+        # Furnish first, then READ WIDE. ensure_account_workspaces returns the
+        # workspaces this person OWNS — which is the right question for "does
+        # this account need furnishing" and the wrong one for "what should be
+        # on their screen". Returning its value directly would have hidden
+        # every workspace a colleague was invited into.
+        service.ensure_account_workspaces(user_id)
         return WorkspacesListResponse(
-            workspaces=service.ensure_account_workspaces(user_id),
+            workspaces=repository.get_workspaces(user_id),
             categories=repository.get_categories(user_id),
         )
     except Exception as e:

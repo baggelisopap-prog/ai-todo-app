@@ -406,7 +406,12 @@ class TaskService:
         No categories are created. The workspaces are structure; the categories
         would be a guess about someone's life.
         """
-        existing = repository.get_workspaces(user_id)
+        # get_OWNED_workspaces, not get_workspaces. A colleague invited to
+        # somebody else's workspace before they first open the app would look
+        # furnished to the wide read — and be left with no Business, no
+        # Personal, no default_workspace_id, and every task they create unfiled
+        # forever. Which is the exact failure this function exists to prevent.
+        existing = repository.get_owned_workspaces(user_id)
         if existing:
             return existing
 

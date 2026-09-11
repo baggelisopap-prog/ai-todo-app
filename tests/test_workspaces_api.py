@@ -33,6 +33,7 @@ def _cat(**overrides):
 
 def test_listing_returns_workspaces_and_categories_together(client, monkeypatch):
     monkeypatch.setattr(main.repository, "get_workspaces", lambda u: [_ws()])
+    monkeypatch.setattr(main.repository, "get_owned_workspaces", lambda u: [_ws()])
     monkeypatch.setattr(main.repository, "get_categories", lambda u: [_cat()])
 
     r = client.get("/workspaces")
@@ -44,6 +45,7 @@ def test_listing_returns_workspaces_and_categories_together(client, monkeypatch)
 
 def test_creating_a_workspace_returns_201(client, monkeypatch):
     monkeypatch.setattr(main.repository, "get_workspaces", lambda u: [])
+    monkeypatch.setattr(main.repository, "get_owned_workspaces", lambda u: [])
     monkeypatch.setattr(main.repository, "create_workspace", lambda u, w: _ws(name=w.name))
 
     r = client.post("/workspaces", json={"name": "Επενδύσεις"})
@@ -57,6 +59,7 @@ def test_a_duplicate_workspace_name_is_409_not_500(client, monkeypatch):
     surface as a 500. The user typed a name that is already taken — that is a
     409 with a message they can act on."""
     monkeypatch.setattr(main.repository, "get_workspaces", lambda u: [_ws(name="Business")])
+    monkeypatch.setattr(main.repository, "get_owned_workspaces", lambda u: [_ws(name="Business")])
 
     r = client.post("/workspaces", json={"name": "Business"})
 
@@ -78,6 +81,7 @@ def test_renaming_a_workspace_to_its_own_name_is_not_a_conflict(client, monkeypa
     every sibling INCLUDING itself would reject that as a duplicate."""
     monkeypatch.setattr(main.repository, "get_workspace", lambda u, i: _ws())
     monkeypatch.setattr(main.repository, "get_workspaces", lambda u: [_ws()])
+    monkeypatch.setattr(main.repository, "get_owned_workspaces", lambda u: [_ws()])
     monkeypatch.setattr(main.repository, "update_workspace",
                         lambda u, i, up: _ws(**{**{"record_id": "ws-1"}, **up}))
 

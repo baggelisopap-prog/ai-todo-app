@@ -63,6 +63,19 @@ class _FakeQuery:
         self.sink.setdefault("eq", []).append((col, val))
         return self
 
+    def is_(self, col, val):
+        # get_workspaces excludes archived rows since 2026-09-11.
+        self.sink.setdefault("is", []).append((col, val))
+        return self
+
+    def in_(self, col, vals):
+        self.sink.setdefault("in", []).append((col, list(vals)))
+        return self
+
+    def or_(self, expr):
+        self.sink["or"] = expr
+        return self
+
     def order(self, col, **kw):
         # A list, not a single slot: get_workspaces orders by position THEN by
         # created_at, and a single slot would silently keep only the last one.
@@ -94,8 +107,12 @@ def _ws_row(**overrides):
 
 
 def test_listing_workspaces_is_scoped_to_the_user_and_ordered(monkeypatch):
+    """Still the plain owner filter for somebody who belongs to nothing —
+    widening the read for members must not change what a solo account sees.
+    The member case lives in test_workspace_visibility.py."""
     fake = _FakeSupabase([_ws_row()])
     monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: [])
 
     result = repository.get_workspaces("user-1")
 
@@ -121,6 +138,11 @@ def test_reading_one_workspace_filters_on_BOTH_id_and_user(monkeypatch):
 def test_creating_a_workspace_stamps_the_owner(monkeypatch):
     fake = _FakeSupabase([_ws_row()])
     monkeypatch.setattr(repository, "supabase", fake)
+
+    # Creating a workspace now also inserts the owner's membership row, so the
+    # owner is present in the table that answers "who may SEE this".
+    monkeypatch.setattr(repository, "add_workspace_member",
+                        lambda w, u, role="member": None)
 
     repository.create_workspace("user-1", Workspace(name="Business", color="#2563eb"))
 
@@ -148,17 +170,23 @@ def _cat_row(**overrides):
     return base
 
 
-def test_listing_categories_is_scoped_to_the_user(monkeypatch):
-    """Scoped by user, NOT by workspace: the frontend loads every category once
-    and groups them by workspace_id in the provider, rather than making one
-    request per workspace on every app open."""
+def test_listing_categories_follows_the_workspaces_you_can_see(monkeypatch):
+    """CORRECTED 2026-09-11. This test used to assert the opposite — that
+    categories are scoped by `user_id`, "NOT by workspace" — and that was right
+    while a workspace had exactly one person in it.
+
+    It stopped being right when a member could be invited into somebody else's
+    workspace: those category rows carry the OWNER's user_id, so filtering on
+    it would show a colleague every task in that workspace as unfiled. Still
+    one call for the whole set, which was the real point of the old note."""
     fake = _FakeSupabase([_cat_row()])
     monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_visible_workspace_ids", lambda u: ["ws-1"])
 
     result = repository.get_categories("user-1")
 
     assert fake.sink["table"] == "categories"
-    assert ("user_id", "user-1") in fake.sink["eq"]
+    assert ("workspace_id", ["ws-1"]) in fake.sink["in"]
     assert result[0].name == "γραφείο"
     assert result[0].workspace_id == "ws-1"
 
