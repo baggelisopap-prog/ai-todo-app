@@ -408,13 +408,13 @@ Five slices. The app runs and its tests pass at the end of each.
 
 Evidence, not claims — the standing rule in `CLAUDE.md`.
 
-- Backend: `./venv/Scripts/python.exe -m pytest tests/ -q`. **348 tests collected** on
-  2026-09-11 (`pytest --collect-only`); the count goes up, never down. Note this is the
-  COLLECTED count, not a passing count — the suite has not been run in this session, and
-  the passing baseline is established as the first act of slice 1, before any change.
-  (`docs/superpowers/specs/2026-08-31-...` and `PROJECT_STATUS.md` both say 312; that was
-  the 2026-09-03 figure and is merely stale, not wrong — the soft-delete and Inbox work
-  added tests after it.)
+- Backend: `./venv/Scripts/python.exe -m pytest tests/ -q`. Baseline **348 passed**, run
+  on 2026-09-11 before any change (`348 passed in 4.70s`); the number goes up, never down.
+  Verified beforehand that no test reaches a real model — `test_task_agent_categories`
+  monkeypatches `generate_content` and `test_webhook_fanout` monkeypatches
+  `classify_message` — so the suite costs nothing to run.
+  (`PROJECT_STATUS.md` says 312; that was the 2026-09-03 figure and is stale, not wrong —
+  the soft-delete and Inbox work added tests after it.)
 - Frontend: `cd frontend && npm run check`. ESLint baseline **12**.
 
 New tests, with the negative ones treated as the important ones:
