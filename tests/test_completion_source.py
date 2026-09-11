@@ -7,6 +7,31 @@ the row, not in a log, not in agent_runs. Ruling out the Hostaway poller took
 half an hour of forensics and ended at "a write shaped like the UI's", which
 is a guess. One column ends that.
 """
+
+import pytest as _pytest
+import access as _access
+
+
+@_pytest.fixture(autouse=True)
+def _permission_granted(monkeypatch):
+    """
+    These tests are about what happens AFTER the write gate has said yes.
+
+    Since 2026-09-11 services.update_task / delete_task / restore_task route
+    through access.require_write / require_delete, and that performs a REAL
+    lookup against the tasks table — which in here is whichever fake the test
+    installed, or worse, the live client. Granting permission outright keeps
+    these tests about the thing they were written for.
+
+    Nothing is weakened by this. The gate's own behaviour, including every
+    refusal, is tested in test_task_access.py, and
+    test_the_service_write_paths_all_call_the_gate over there is what breaks if
+    somebody removes the calls these stubs are standing in for.
+    """
+    monkeypatch.setattr(_access, "require_write", lambda user_id, task_id: {"id": task_id})
+    monkeypatch.setattr(_access, "require_delete", lambda user_id, task_id: {"id": task_id})
+
+
 from datetime import datetime
 from zoneinfo import ZoneInfo
 

@@ -15,6 +15,7 @@ import hostaway_integration
 import hostaway_threading
 import recurrence
 import repository
+import access
 
 logger = logging.getLogger(__name__)
 
@@ -570,7 +571,15 @@ class TaskService:
         from an earlier behavior); the event survives on the calendar
         either way. Never blocks the actual completion/un-completion if
         the calendar update fails.
+
+        THE GATE. Every write to a task passes through access.require_write —
+        see access.py for why that place did not exist before 2026-09-11. It is
+        the first statement on purpose: below it sit a calendar call and a
+        completion stamp, and neither should run for somebody who may not touch
+        this task.
         """
+        access.require_write(user_id, record_id)
+
         if "is_completed" in updates:
             # A new dict, never the caller's: this method is handed request
             # bodies and agent payloads that the caller may still be using.
@@ -648,6 +657,12 @@ class TaskService:
           "delete_failed"      — app-origin, but Google refused the delete
         The task itself is deleted in every one of these cases.
         """
+        # THE GATE, and the strict half of it: deleting is the workspace
+        # owner's alone. A member may change and complete anything in the room;
+        # removing it is not theirs. Before the calendar lookup, because a
+        # refused delete must not reach Google at all.
+        access.require_delete(user_id, record_id)
+
         calendar_fields = None
         try:
             calendar_fields = repository.get_task_calendar_fields(user_id, record_id)
@@ -712,6 +727,10 @@ class TaskService:
         loud. A task with a dangling google_event_id is worse than an honest
         one with none — the sync would keep trying to update a ghost.
         """
+        # THE GATE. Restoring is require_write rather than require_delete:
+        # bringing work back is not the irreversible act, removing it was.
+        access.require_write(user_id, record_id)
+
         calendar_fields = None
         try:
             calendar_fields = repository.get_task_calendar_fields(user_id, record_id)

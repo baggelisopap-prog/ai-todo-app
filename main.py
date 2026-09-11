@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings, RecurrenceRule, Workspace, Category
@@ -36,6 +37,7 @@ import google_calendar
 import hostaway_integration
 import hostaway_threading
 import repository
+import access
 import token_tracker
 import os
 from dotenv import load_dotenv
@@ -381,6 +383,26 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(access.TaskAccessDenied)
+async def task_access_denied_handler(request: Request, exc: access.TaskAccessDenied):
+    """
+    A refused write is a 403, not a 500.
+
+    access.py raises a plain exception rather than an HTTPException on purpose:
+    it is imported by services and by the scheduler, and neither of those is
+    serving a request. This handler is where it becomes HTTP, once, instead of
+    every endpoint growing its own try/except.
+
+    403 rather than 404: the person is authenticated and the task exists — they
+    are simply not allowed to change it. Pretending it is missing would send a
+    colleague hunting for a task they can see on their own screen.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={"detail": "Δεν έχετε δικαίωμα να αλλάξετε αυτό το task."},
+    )
 
 # Shared secret required by the external cron trigger for /notifications/run-scheduler
 SCHEDULER_SECRET = os.getenv("SCHEDULER_SECRET")
