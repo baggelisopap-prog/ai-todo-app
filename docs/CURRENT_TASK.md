@@ -622,3 +622,125 @@ design, so opening the app alone proves only that they do not crash. Specificall
   revoke, and confirm the dead link is refused with its own Greek sentence.
 - **The activity screen against real rows**, which is the only place the eight Greek
   sentences and the day grouping can be judged.
+
+
+---
+
+## Slice 6 — the first real colleague, and what she found (2026-09-12)
+
+Evi joined workspace a14a9dd1 at 11:47. **The invitation flow worked end to end** —
+mint, send, open, sign in, join — which is the first time two people have been in one
+room in this app. Then: «εγω εκανα αναθεση στην ευη τις πηγε αλλα η ευη δεν μπορουσε να
+το κλειση».
+
+### The bug she found, and it made sharing useless
+
+`access.py` was written on 2026-09-11 to answer "may this person write to this task", and
+it answers correctly: yes, she is a member. **The queries underneath were never changed.**
+They went on answering the older question, `.eq("id", X).eq("user_id", me)` — "is this
+mine" — so for a member acting on a row a colleague created they matched ZERO rows.
+PostgREST answers 200 for that. `update_task` then read `data[0]` off an empty list and
+crashed.
+
+It was never only about completing. The same filter sat on **seven** statements: reading
+one task, updating it, soft-deleting, restoring, the calendar lookup and the recurrence
+lookup. **A member could see everything in a shared room and change nothing in it.**
+
+The `completed=True` on that task at 11:49 is the OWNER closing it himself. She never
+could.
+
+**The fix**: one helper, `repository.scope_to_visible`, expressing the same definition of
+visibility `get_all_tasks` already uses — mine, OR anything in a room I am in. The rule
+changes from "what I created" to "what I may see", in one place rather than seven. It does
+not decide whether the write is ALLOWED; `access.require_write` and `require_delete` do
+that above and are stricter (deleting stays the workspace owner's). This is the
+defence-in-depth layer the old filter was there for, asking the right question.
+
+**One more thing that fix cures, pointing the other way:** a workspace OWNER could not
+delete a task a MEMBER created. `require_delete` said yes, the query matched nothing, and
+`soft_delete_task` returned False into a RuntimeError.
+
+### The audit he asked for — «βρες και σφαλματα που δεν εσκασαν ακομα»
+
+Six more, none of which had been hit yet. Five were the same bug wearing different clothes:
+
+1. **A member rescheduling a task never re-armed its reminder.** `update_task` reads the
+   current row to decide whether to clear `notification_sent`; scoped to the creator it
+   read None, so the flag stayed set and the reminder never fired again. Silent.
+2. **A member could not hand work on.** The assignment branch read the task to find its
+   workspace, got None, and `validate_assignment` refused with *"this task has no
+   workspace"* — about a task that plainly has one.
+3. **A member could not change a category.** Same cause, and the refusal named the wrong
+   reason again.
+4. **The agent answered "Task not found"** for a colleague's task it could see perfectly
+   well in the list.
+5. **Completing or deleting a colleague's task skipped Google Calendar entirely.** The
+   calendar lookup returned None and every caller reads None as "no event linked", so
+   nothing was updated and nothing was logged.
+6. **THE WORST ONE, and it had not fired yet only because no Hostaway task had been
+   assigned.** The scheduler runs per person over `get_owned_or_assigned_tasks`, so a
+   guest message assigned to a colleague is processed by THEIR tick — and
+   `update_hostaway_last_notified` and `update_hostaway_thread_fields` still filtered on
+   the creator. Zero rows, no error, the stamp never written, **so the escalation would
+   re-send every two minutes forever, on the assignee's phone.** Exactly the failure
+   `mark_notification_sent` was fixed for on 2026-09-11; these two were missed in that
+   pass. One test in the suite was *enforcing* the old behaviour and has been rewritten
+   with the reason in it.
+
+### The activity log was recording events that did not happen
+
+Found in the LIVE log: three «X ανέθεσε το Y» rows for one task, 24 seconds apart, written
+by one person saving three times and never touching the assignee. The task sheet sends
+every field it holds on every save, so "mentioned in the update" and "changed" are
+different facts. Now compared before and after, with '' and null treated as the same
+nobody. Clearing an assignee still logs — somebody ceasing to be responsible is exactly
+what a log is read for.
+
+### The 503 she saw on her first morning
+
+«2 3 φορες μετα μπηκε», on her account. Not the invitation: the backend sleeps when nobody
+is using it and its first answers after that fail. Measured while investigating — the
+database is healthy (354 rows, 0.73s, 643 KB, no unparseable rows) and the server answers
+in 0.25s when awake.
+
+She was retrying by hand. The app does it now: **reads retry themselves** (1.5s, 4s, 8s —
+about fourteen seconds in total), **writes never do**. That asymmetry is a safety rule, not
+a convenience, and it lives in `utils/retry.js` with its own test: a retried POST whose
+first attempt actually succeeded creates the task twice, and a duplicate task is worse than
+an error message because the error is visible and the duplicate is not. A toast says «Ο
+διακομιστής ξυπνάει…» once per session rather than leaving a blank screen.
+
+### Known and NOT fixed
+
+`_supabase_row_to_task` raises on a row with a null `ai_suggested_category`. That was
+survivable while everyone only ever met their own rows; in a shared workspace one bad row
+now takes down the whole list **for every member**. Checked against the live database
+today: **0 such rows**, on both accounts. Recorded because the blast radius changed, not
+because anything is broken.
+
+### Changed
+
+`repository.py` (scope_to_visible + seven call sites), `services.py` (assignment
+comparison), `api.js`, `utils/retry.js` (new), `App.jsx`, `scripts/retry.test.mjs` (new),
+both locale files, and four test files.
+
+```
+503 passed in 4.79s                                    (backend, was 493)
+ui-check: OK — 81 files, 49 tokens, 477 translation keys
+235 PASS lines across the node suites
+✖ 12 problems (12 errors, 0 warnings)                  (lint baseline, unchanged)
+✓ built in 523ms
+```
+
+Each fix was confirmed by stashing it and watching its tests fail: 4 of the scoping tests
+and 2 of the activity-log tests go red without the change.
+
+### What a person still has to watch
+
+- **Evi completing a task the owner created.** The reported bug, and the only proof that
+  matters.
+- **Evi renaming, rescheduling and re-assigning one**, because those were four separate
+  refusals with four different wrong messages.
+- **A Hostaway task assigned to her**, which is the escalation loop above — and the way to
+  see it is that her phone does NOT buzz every two minutes.
+- **The activity screen**, which should stop growing a row per save.

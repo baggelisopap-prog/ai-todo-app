@@ -82,7 +82,21 @@ def test_lookup_never_raises(monkeypatch):
     assert repository.get_open_tasks_for_conversation("user-1", "47342748") == []
 
 
-def test_update_scopes_to_user_and_record(monkeypatch):
+def test_update_scopes_to_the_record_and_NOT_to_the_user(monkeypatch):
+    """
+    THIS ASSERTION WAS THE OTHER WAY ROUND until 2026-09-12, and it was
+    enforcing a bug.
+
+    The scheduler runs per person over get_owned_or_assigned_tasks, so a guest
+    message CREATED by one person and ASSIGNED to another is processed by the
+    ASSIGNEE'S tick. Scoped to the creator, this write matched zero rows —
+    PostgREST answers 200 for that, nothing raised — so "answered" was never
+    recorded and the escalation fired again on the next tick, and the one after,
+    on a colleague's phone.
+
+    The same change mark_notification_sent already needed on 2026-09-11. Whether
+    the write is ALLOWED is access.py's question, decided before this is called.
+    """
     fake = _FakeSupabase()
     monkeypatch.setattr(repository, "supabase", fake)
 
@@ -92,7 +106,20 @@ def test_update_scopes_to_user_and_record(monkeypatch):
 
     assert fake.calls["update"] == {"hostaway_message_count": 2, "priority": "P1"}
     assert ("id", "task-1") in fake.calls["eq"]
-    assert ("user_id", "user-1") in fake.calls["eq"]
+    assert ("user_id", "user-1") not in fake.calls["eq"]
+
+
+def test_the_escalation_stamp_is_scoped_the_same_way(monkeypatch):
+    """Its twin, and it was missed in the same pass. Without the stamp the
+    escalation repeats every tick forever."""
+    fake = _FakeSupabase()
+    monkeypatch.setattr(repository, "supabase", fake)
+
+    repository.update_hostaway_last_notified("user-1", "task-1", "2026-09-12T12:00:00Z")
+
+    assert fake.calls["update"] == {"hostaway_last_notified_at": "2026-09-12T12:00:00Z"}
+    assert ("id", "task-1") in fake.calls["eq"]
+    assert ("user_id", "user-1") not in fake.calls["eq"]
 
 
 def test_update_with_no_changes_does_not_hit_the_database(monkeypatch):

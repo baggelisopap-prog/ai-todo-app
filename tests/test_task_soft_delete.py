@@ -14,9 +14,24 @@ A deliberately small fake rather than a shared one: these five tests need
 table/update/eq/execute and nothing else, and a local fake that cannot silently
 grow new behaviour is the point of a tripwire test.
 """
+import pytest
+
 import repository
 
 _task_repo = repository._get_shared_tasks_repo()
+
+
+@pytest.fixture(autouse=True)
+def solo_account(monkeypatch):
+    """
+    Every test in this file predates sharing, so each one means "somebody who
+    belongs to no workspace" — and that is now a real question the queries ask.
+
+    Stubbed rather than left to the fake: an unstubbed membership lookup in this
+    suite is a LIVE query against the real Supabase project, not an error. That
+    is how a missing get_owned_workspaces stub announced itself on 2026-09-11.
+    """
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: [])
 
 
 class _FakeQuery:
@@ -33,6 +48,19 @@ class _FakeQuery:
 
     def eq(self, col, val):
         self.sink.setdefault("eq", []).append((col, val))
+        return self
+
+    def or_(self, expr):
+        # scope_to_visible uses this for anybody who belongs to a workspace.
+        self.sink["or"] = expr
+        return self
+
+    def limit(self, n):
+        self.sink["limit"] = n
+        return self
+
+    def select(self, *a):
+        self.sink["select"] = a
         return self
 
     def execute(self):
@@ -212,3 +240,76 @@ def test_created_at_never_reaches_the_write_path():
 
     assert "created_at" not in fields
     assert "created_time" not in fields
+
+
+# --- sharing: the scoping bug a colleague found on 2026-09-12 --------------
+#
+# access.py decides whether a write is ALLOWED. These queries decide which rows
+# a statement can reach. They disagreed for four weeks' worth of a feature: the
+# gate said "yes, she is a member", and the query then asked for a row that also
+# belonged to her, matched nothing, and the caller crashed on data[0].
+
+
+def test_a_member_reaches_a_colleagues_row(monkeypatch):
+    """The whole bug, in one assertion. The filter must be an `or` — mine OR
+    anything in a room I am in — not an equality on the creator."""
+    fake = _FakeSupabase([{"id": "t-1"}])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: ["ws-1"])
+
+    _task_repo.soft_delete_task("evi", "t-1", "2026-09-12T11:49:02Z")
+
+    assert fake.calls["or"] == "user_id.eq.evi,workspace_id.in.(ws-1)"
+    assert ("user_id", "evi") not in fake.calls.get("eq", [])
+    assert ("id", "t-1") in fake.calls["eq"]
+
+
+def test_somebody_who_belongs_to_nothing_is_queried_exactly_as_before(monkeypatch):
+    """The regression guard. A solo account must produce the plain owner filter
+    and no `or` at all — widening for members must not change what the only
+    kind of account that existed until yesterday sees."""
+    fake = _FakeSupabase([{"id": "t-1"}])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: [])
+
+    _task_repo.soft_delete_task("solo", "t-1", "2026-09-12T11:49:02Z")
+
+    assert "or" not in fake.calls
+    assert ("user_id", "solo") in fake.calls["eq"]
+
+
+def test_a_stranger_still_matches_nothing(monkeypatch):
+    """Belonging to a DIFFERENT room must not reach this row. The filter still
+    names the stranger's own workspaces, so the row simply is not in it — and
+    the empty result is what the caller reports."""
+    fake = _FakeSupabase([])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: ["ws-elsewhere"])
+
+    assert _task_repo.soft_delete_task("stranger", "t-1", "2026-09-12T11:49:02Z") is False
+    assert fake.calls["or"] == "user_id.eq.stranger,workspace_id.in.(ws-elsewhere)"
+
+
+def test_an_update_that_matches_nothing_says_so_instead_of_crashing(monkeypatch):
+    """It used to read data[0] off an empty list. An IndexError naming neither
+    the task nor the reason is how the member-cannot-complete bug actually
+    reached a person's screen."""
+    fake = _FakeSupabase([])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: [])
+
+    with pytest.raises(ValueError) as excinfo:
+        _task_repo.update_task("solo", "t-1", {"is_completed": True})
+
+    assert "t-1" in str(excinfo.value)
+
+
+def test_restoring_is_scoped_the_same_way(monkeypatch):
+    fake = _FakeSupabase([{"id": "t-1"}])
+    monkeypatch.setattr(repository, "supabase", fake)
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: ["ws-1"])
+
+    _task_repo.restore_task("evi", "t-1")
+
+    assert fake.calls["or"] == "user_id.eq.evi,workspace_id.in.(ws-1)"
+    assert fake.calls["update"] == {"deleted_at": None, "cancelled_at": None}

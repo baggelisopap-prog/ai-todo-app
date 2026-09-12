@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAllTasks, updateTask, connectGoogleCalendar, getProfile, acceptWorkspaceInvite } from './api';
+import { getAllTasks, updateTask, connectGoogleCalendar, getProfile, acceptWorkspaceInvite, onBackendWaking } from './api';
 import { supabase } from './supabaseClient';
 import { LoginScreen } from './components/LoginScreen';
 import BottomNav from './components/BottomNav';
@@ -306,6 +306,22 @@ function App() {
   // Legacy signature: handleShowToast(translationKey, variant) — used throughout
   // TaskCard/views. New signature: handleShowToast({ message, variant, action, duration })
   // — message is already-translated, used by CalendarView for the reschedule/undo toast.
+  // Says "waking up" the first time a read has to be retried.
+  //
+  // The backend sleeps when nobody is using it, and its first answers after
+  // that fail. api.js now retries reads by itself, which turns a red error
+  // into a wait — but an unexplained wait on a blank screen is its own kind of
+  // bad, and this is somebody's first morning with the app.
+  //
+  // A ref, not state: it must fire once per session and must not re-render
+  // anything when it flips.
+  const wakingAnnouncedRef = useRef(false);
+  useEffect(() => onBackendWaking(() => {
+    if (wakingAnnouncedRef.current) return;
+    wakingAnnouncedRef.current = true;
+    setToast({ message: t('errors.backend_waking'), variant: 'neutral', duration: 6000 });
+  }), [t]);
+
   function handleShowToast(messageOrConfig, variant = 'success') {
     if (typeof messageOrConfig === 'object' && messageOrConfig !== null) {
       setToast({

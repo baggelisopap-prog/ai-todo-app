@@ -38,6 +38,48 @@ def _get(row: dict, key: str, default=None):
     return value if value is not None else default
 
 
+def scope_to_visible(query, user_id: str):
+    """
+    Narrows a single-task query to what this person MAY SEE, rather than to
+    what they created.
+
+    THIS IS THE BUG THAT SHIPPED ON 2026-09-11 AND WAS FOUND BY A REAL
+    COLLEAGUE ON 2026-09-12. Sharing split one question into two — "may I write
+    to this" and "did I make this" — and access.py was written to answer the
+    first. The queries underneath were never changed, so they went on answering
+    the second: `.eq("id", X).eq("user_id", me)`. For a member acting on a row
+    a colleague created that matches ZERO rows, and PostgREST returns 200 with
+    an empty list rather than raising. What followed depended on the caller:
+    update_task read data[0] off an empty list and crashed; the calendar lookup
+    and the reminder-reset silently did nothing at all.
+
+    The same definition of visibility get_all_tasks uses, deliberately — there
+    must not be two answers to "what may this person see". The `user_id` arm is
+    not redundant with the workspace arm: an unfiled task has no workspace, and
+    without it such a task would stop being reachable by its own author the
+    moment they joined somebody else's room.
+
+    This does NOT decide whether the write is allowed. access.require_write and
+    access.require_delete do that, above, and they are stricter — deleting is
+    the workspace owner's alone. This is the layer that makes sure a statement
+    cannot reach a row the caller could not have seen in the first place, which
+    is the defence-in-depth the old `.eq("user_id")` was there for.
+
+    Costs one extra read of workspace_members per call. That table is small and
+    indexed on user_id, and the alternative — threading the gate's answer down
+    through every signature — is the scattered rule access.py exists to remove.
+    """
+    workspace_ids = get_member_workspace_ids(user_id)
+    if workspace_ids:
+        # `workspace_id.in.()` on an empty list is a SYNTAX ERROR rather than an
+        # empty match, and a malformed filter fails OPEN — which here would mean
+        # writing to somebody else's task. Hence the branch, not an inline
+        # conditional. Same trap, same guard, as get_all_tasks.
+        joined = ",".join(workspace_ids)
+        return query.or_(f"user_id.eq.{user_id},workspace_id.in.({joined})")
+    return query.eq("user_id", user_id)
+
+
 class AirtableTaskRepository:
     """
     Repository layer for managing TaskRecord persistence in Supabase.
@@ -287,10 +329,10 @@ class AirtableTaskRepository:
         """
         try:
             response = (
-                supabase.table("tasks")
-                .select("*")
-                .eq("id", record_id)
-                .eq("user_id", user_id)
+                scope_to_visible(
+                    supabase.table("tasks").select("*").eq("id", record_id),
+                    user_id,
+                )
                 .execute()
             )
             if not response.data:
@@ -335,12 +377,22 @@ class AirtableTaskRepository:
         # record_id were somehow passed, this guarantees the update can
         # only ever affect a row that ALSO belongs to user_id.
         response = (
-            supabase.table("tasks")
-            .update(mapped_updates)
-            .eq("id", record_id)
-            .eq("user_id", user_id)
+            scope_to_visible(
+                supabase.table("tasks").update(mapped_updates).eq("id", record_id),
+                user_id,
+            )
             .execute()
         )
+
+        # An UPDATE matching nothing returns 200 with an empty list, so data[0]
+        # was an IndexError with no useful message — which is exactly how the
+        # member-cannot-complete bug reached a real person: a crash whose text
+        # named neither the task nor the reason.
+        if not response.data:
+            raise ValueError(
+                f"Task {record_id} was not updated: no row matching it is visible "
+                f"to user {user_id}. It may have been deleted in the meantime."
+            )
 
         logger.info(f"Successfully updated task in Supabase. ID: {record_id}")
         return self._supabase_row_to_task(response.data[0])
@@ -364,11 +416,15 @@ class AirtableTaskRepository:
         than raising, so without this signal a race or an RLS edge case would
         leave the row untouched while the caller reported success.
         """
+        # Visible, not owned. The strict half of the rule lives ABOVE this, in
+        # access.require_delete, which allows only the workspace owner — and an
+        # owner who did not create the row would otherwise fail here, the same
+        # bug as the member's, pointing the other way.
         response = (
-            supabase.table("tasks")
-            .update({"deleted_at": deleted_at})
-            .eq("id", record_id)
-            .eq("user_id", user_id)
+            scope_to_visible(
+                supabase.table("tasks").update({"deleted_at": deleted_at}).eq("id", record_id),
+                user_id,
+            )
             .execute()
         )
         logger.info(f"Marked task deleted in Supabase. ID: {record_id}")
@@ -392,10 +448,12 @@ class AirtableTaskRepository:
         that no longer exists.
         """
         response = (
-            supabase.table("tasks")
-            .update({"deleted_at": None, "cancelled_at": None})
-            .eq("id", record_id)
-            .eq("user_id", user_id)
+            scope_to_visible(
+                supabase.table("tasks")
+                .update({"deleted_at": None, "cancelled_at": None})
+                .eq("id", record_id),
+                user_id,
+            )
             .execute()
         )
         logger.info(f"Restored task in Supabase. ID: {record_id}")
@@ -793,8 +851,25 @@ def get_active_hostaway_tasks(
 
 
 def update_hostaway_last_notified(user_id: str, record_id: str, last_notified_at: str) -> None:
-    """Updates hostaway_last_notified_at on a task record, scoped to user_id."""
-    supabase.table("tasks").update({"hostaway_last_notified_at": last_notified_at}).eq("id", record_id).eq("user_id", user_id).execute()
+    """Stamps when this guest message was last escalated.
+
+    Scoped by task id ALONE, on purpose — the same change mark_notification_sent
+    needed on 2026-09-11, and missed here.
+
+    The scheduler runs per person over get_owned_or_assigned_tasks, so a task
+    CREATED by one person and ASSIGNED to another is processed under the
+    ASSIGNEE'S user_id. With .eq("user_id", user_id) that matched zero rows,
+    PostgREST returned 200, and nothing raised — so the stamp was never written
+    and the loop did the very same thing on the next tick. Forever, silently,
+    on somebody else's phone.
+
+    user_id stays in the signature: every caller passes it, it is what makes the
+    log line worth reading, and access.py is what decides whether the write was
+    allowed in the first place.
+    """
+    supabase.table("tasks").update(
+        {"hostaway_last_notified_at": last_notified_at}
+    ).eq("id", record_id).execute()
 
 
 def get_open_tasks_for_conversation(user_id: str, conversation_id: str) -> list[TaskRecord]:
@@ -841,7 +916,10 @@ def update_hostaway_thread_fields(user_id: str, record_id: str, updates: dict) -
     """
     if not updates:
         return
-    supabase.table("tasks").update(updates).eq("id", record_id).eq("user_id", user_id).execute()
+    # Scoped by task id ALONE — see update_hostaway_last_notified for why. A
+    # reply to a task assigned to a colleague is seen by THEIR tick, and the
+    # creator filter silently discarded the write that marks it answered.
+    supabase.table("tasks").update(updates).eq("id", record_id).execute()
 
 
 # --- Hostaway connections (per-user credentials and switches) ---
@@ -1301,11 +1379,15 @@ def get_task_calendar_fields(user_id: str, record_id: str) -> Optional[dict]:
     delete the Google event: only for calendar_origin='app') and the
     complete/un-complete flow (to know whether there's an event to mark).
     """
+    # Visible, not owned. Scoped to the creator, this returned None for a
+    # member — and every caller treats None as "no calendar link", so
+    # completing or deleting a colleague's task quietly skipped Google
+    # altogether and left the event untouched. Nothing raised.
     result = (
-        supabase.table("tasks")
-        .select("google_event_id, calendar_origin")
-        .eq("id", record_id)
-        .eq("user_id", user_id)
+        scope_to_visible(
+            supabase.table("tasks").select("google_event_id, calendar_origin").eq("id", record_id),
+            user_id,
+        )
         .execute()
     )
     if not result.data:
@@ -1324,10 +1406,10 @@ def get_task_recurrence_fields(user_id: str, record_id: str) -> Optional[dict]:
     the next tick — the exact resurrection cancellation exists to prevent.
     """
     response = (
-        supabase.table("tasks")
-        .select("recurrence_rule_id")
-        .eq("id", record_id)
-        .eq("user_id", user_id)
+        scope_to_visible(
+            supabase.table("tasks").select("recurrence_rule_id").eq("id", record_id),
+            user_id,
+        )
         .limit(1)
         .execute()
     )

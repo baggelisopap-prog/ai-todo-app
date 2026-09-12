@@ -2,6 +2,7 @@
 // If the backend URL or auth requirements change, update here only.
 
 import { supabase } from './supabaseClient';
+import { RETRY_DELAYS_MS, shouldRetryRequest } from './utils/retry';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -23,9 +24,41 @@ async function authenticatedFetch(url, options = {}) {
   return fetch(url, { ...options, headers });
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Told when a request has failed once and is about to be retried, so a screen
+ * can say "waking up" instead of leaving a spinner with no explanation.
+ *
+ * A plain list rather than an event emitter: there is one subscriber (App) and
+ * the alternative is a dependency for four lines of code.
+ */
+const wakingListeners = [];
+
+export function onBackendWaking(listener) {
+  wakingListeners.push(listener);
+  return () => {
+    const i = wakingListeners.indexOf(listener);
+    if (i >= 0) wakingListeners.splice(i, 1);
+  };
+}
+
+function announceWaking() {
+  wakingListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      // A broken listener must not take down the request it was told about.
+    }
+  });
+}
+
 /**
  * Generic helper for HTTP requests. Handles JSON encoding, error responses,
  * and network failures. All other functions in this file delegate to this.
+ *
+ * Reads retry themselves, writes do not — see utils/retry.js for why that
+ * asymmetry is a safety rule rather than a convenience.
  */
 async function request(path, options = {}) {
   const url = `${API_BASE_URL}${path}`;
@@ -33,13 +66,28 @@ async function request(path, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   };
+  const isRead = !options.method || options.method === 'GET';
 
   let response;
-  try {
-    response = await authenticatedFetch(url, config);
-  } catch (error) {
-    // Network failure (server down, no internet, CORS misconfigured)
-    throw new Error(`Network error: ${error.message}`);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      response = await authenticatedFetch(url, config);
+    } catch (error) {
+      // Network failure (server down, no internet, CORS misconfigured)
+      if (shouldRetryRequest({ attempt, isRead, status: null })) {
+        announceWaking();
+        await sleep(RETRY_DELAYS_MS[attempt]);
+        continue;
+      }
+      throw new Error(`Network error: ${error.message}`);
+    }
+
+    if (shouldRetryRequest({ attempt, isRead, status: response.status })) {
+      announceWaking();
+      await sleep(RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+    break;
   }
 
   if (!response.ok) {

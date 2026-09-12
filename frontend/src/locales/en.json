@@ -194,7 +194,8 @@
     "failed_update": "Failed to update",
     "failed_save": "Failed to save",
     "failed_delete": "Failed to delete",
-    "failed_add": "Failed to add task"
+    "failed_add": "Failed to add task",
+    "backend_waking": "The server is waking up… retrying on its own."
   },
   "browse": {
     "search_placeholder": "Search tasks",

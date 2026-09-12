@@ -591,10 +591,35 @@ class TaskService:
         # not be confused with "not mentioned", which is every rename and every
         # completion and must not pay for a membership lookup.
         assignment_target = None
+        assignment_changed = False
         if "assigned_to" in updates:
             existing = self.repository.get_task(user_id, record_id)
             assignment_target = existing.workspace_id if existing else None
-            sharing.validate_assignment(assignment_target, updates["assigned_to"])
+
+            # DID IT ACTUALLY CHANGE. The task sheet sends every field it holds
+            # on every save, assigned_to included, so "mentioned" and "changed"
+            # are not the same thing here — and the whole difference lands in
+            # the activity log, which a member reads to find out what happened
+            # in a room they share.
+            #
+            # Found in the live log on 2026-09-12: three «X ανέθεσε το Y» rows
+            # for one task, 24 seconds apart, from one person saving three
+            # times and never touching the assignee. A log that records events
+            # that did not happen is worse than no log — it is the one place
+            # somebody goes to settle a disagreement.
+            #
+            # Both sides normalised: the sheet sends null for "nobody", the
+            # column holds NULL, and an empty string would otherwise read as a
+            # third state.
+            before = (existing.assigned_to or None) if existing else None
+            after = updates["assigned_to"] or None
+            assignment_changed = before != after
+
+            # Only a real change is checked. A rename must not pay for a
+            # membership lookup, which is the same reason `in updates` is used
+            # above rather than a truth test.
+            if assignment_changed:
+                sharing.validate_assignment(assignment_target, updates["assigned_to"])
 
         if "is_completed" in updates:
             # A new dict, never the caller's: this method is handed request
@@ -617,7 +642,7 @@ class TaskService:
         # not happen. log_workspace_activity never raises — the handover has
         # already occurred and must not be reported as a failure because the
         # diary could not be written.
-        if "assigned_to" in updates and assignment_target:
+        if assignment_changed and assignment_target:
             repository.log_workspace_activity(
                 workspace_id=assignment_target,
                 actor_user_id=user_id,

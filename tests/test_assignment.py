@@ -168,3 +168,95 @@ def test_the_update_endpoint_accepts_an_assignee():
     import main
 
     assert "assigned_to" in main.UpdateTaskRequest.model_fields
+
+
+# --- the activity log only records what actually happened -------------------
+#
+# Found in the LIVE log on 2026-09-12: three «X ανέθεσε το Y» rows for one task
+# 24 seconds apart, written by one person saving three times and never touching
+# the assignee. The task sheet sends every field it holds on every save, so
+# "mentioned in the update" and "changed" are different facts — and the whole
+# difference lands in the one place a member goes to find out what happened in a
+# room they share.
+
+
+class _Recorder:
+    """Stands in for the two collaborators update_task reaches for: the
+    repository it writes through, and the log it writes to."""
+
+    def __init__(self, existing_assignee=None):
+        self.existing_assignee = existing_assignee
+        self.logged = []
+        self.validated = []
+
+    # -- repository
+    def get_task(self, user_id, record_id):
+        return type("T", (), {
+            "workspace_id": "ws-1",
+            "assigned_to": self.existing_assignee,
+            "task_name": "Καθαριότητα",
+            "record_id": record_id,
+        })()
+
+    def update_task(self, user_id, record_id, updates):
+        return self.get_task(user_id, record_id)
+
+
+def _service_with(monkeypatch, recorder):
+    svc = services.TaskService.__new__(services.TaskService)
+    svc.repository = recorder
+    monkeypatch.setattr(services.access, "require_write", lambda u, r: {"id": r})
+    monkeypatch.setattr(services.repository, "log_workspace_activity",
+                        lambda **kw: recorder.logged.append(kw))
+    monkeypatch.setattr(services.sharing, "validate_assignment",
+                        lambda ws, who: recorder.validated.append((ws, who)))
+    return svc
+
+
+def test_saving_without_touching_the_assignee_logs_nothing(monkeypatch):
+    """A rename, a reschedule, a tick on the checklist — the sheet sends
+    assigned_to along with all of them, and none of them is a handover."""
+    rec = _Recorder(existing_assignee="user-2")
+    svc = _service_with(monkeypatch, rec)
+
+    svc.update_task("user-1", "t-1", {"task_name": "Καθαριότητα Α1", "assigned_to": "user-2"})
+
+    assert rec.logged == []
+    # And it must not pay for a membership lookup either.
+    assert rec.validated == []
+
+
+def test_a_real_handover_is_logged(monkeypatch):
+    rec = _Recorder(existing_assignee=None)
+    svc = _service_with(monkeypatch, rec)
+
+    svc.update_task("user-1", "t-1", {"assigned_to": "user-2"})
+
+    assert len(rec.logged) == 1
+    assert rec.logged[0]["action"] == "task_assigned"
+    assert rec.logged[0]["details"] == {"assigned_to": "user-2"}
+    assert rec.validated == [("ws-1", "user-2")]
+
+
+def test_putting_work_back_on_the_pile_is_logged_too(monkeypatch):
+    """Clearing an assignee is a real event in a shared room — somebody is no
+    longer responsible, and that is exactly the kind of thing a log is read
+    for."""
+    rec = _Recorder(existing_assignee="user-2")
+    svc = _service_with(monkeypatch, rec)
+
+    svc.update_task("user-1", "t-1", {"assigned_to": None})
+
+    assert len(rec.logged) == 1
+    assert rec.logged[0]["details"] == {"assigned_to": None}
+
+
+def test_empty_string_and_null_are_the_same_nobody(monkeypatch):
+    """The sheet sends null, a <select> would send ''. Treating them as two
+    different values would log a handover from nobody to nobody."""
+    rec = _Recorder(existing_assignee=None)
+    svc = _service_with(monkeypatch, rec)
+
+    svc.update_task("user-1", "t-1", {"assigned_to": ""})
+
+    assert rec.logged == []
