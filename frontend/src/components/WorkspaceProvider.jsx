@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspaces } from '../api';
 import { WorkspaceContext } from '../hooks/useWorkspaces';
-import { useAppSettings } from '../hooks/useAppSettings';
 import { categoriesForWorkspace, UNFILED } from '../utils/workspaces';
 
 /**
@@ -11,25 +10,31 @@ import { categoriesForWorkspace, UNFILED } from '../utils/workspaces';
  * different depths need the same list, and threading it through App → view →
  * TaskList → TaskCard → TaskRow means editing every component in between.
  *
- * The active selection is persisted through app_settings rather than
- * localStorage, so switching to Business on the phone is still Business on the
- * laptop. It is applied optimistically — the chip must not wait for a round
- * trip before it looks pressed.
+ * THE ACTIVE WORKSPACE IS NO LONGER REMEMBERED, and that is a decision the
+ * owner made on 2026-09-12, reversing his own earlier one. It used to be
+ * persisted through `app_settings.active_workspace_id`, so switching to
+ * Business on the phone was still Business on the laptop — the workspace was
+ * "where you live". His words: «να ειναι by default παντα στο ολα και να
+ * κανεις επιλογη αν και μονο θελεις να δεις μονο ενα χωρο αλλα μετα να μην
+ * μενει ετσι — μονο φιλτρο ουσιαστικα ο χωρος».
+ *
+ * So it is a filter now, and it obeys the same rule as the other three: it
+ * lives while the app is open and every launch starts on «Όλα». One rule for
+ * all four, which is the end of "which of these controls remembers?" — the
+ * question that started this whole piece of work.
+ *
+ * `app_settings.active_workspace_id` is left in the database, written by
+ * nobody and read by nobody, exactly like `tasks.category`. Dropping a column
+ * cannot be undone and it costs nothing where it sits.
+ * `default_workspace_id` is a DIFFERENT setting and stays live: it is where a
+ * task goes when you add one from «Όλα», which is now almost every add.
  */
 export function WorkspaceProvider({ children, onShowToast }) {
   const [workspaces, setWorkspaces] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  const { settings, updateSettings } = useAppSettings();
-
-  // THREE states, not two, and they are genuinely different facts:
-  //   undefined — the user has not touched the switcher this session, so the
-  //               stored choice wins.
-  //   null      — they deliberately chose "Όλα".
-  //   an id     — that workspace.
-  // Collapsing the first two would let a stored "Business" override an explicit
-  // tap on "Όλα" the moment any other setting changed.
-  const [chosenId, setChosenId] = useState(undefined);
+  // null is «Όλα», and it is where every launch begins.
+  const [activeId, setActiveId] = useState(null);
 
   // Held in a ref rather than read from the closure: onShowToast arrives as a
   // fresh function identity on every render of App, and `reload` is the mount
@@ -53,34 +58,17 @@ export function WorkspaceProvider({ children, onShowToast }) {
 
   useEffect(() => { reload(); }, [reload]);
 
-  // DERIVED, not copied into state by an effect. Copying it would mean a
-  // setState inside useEffect — the cascading-render pattern this project's
-  // lint rule already flags twelve times elsewhere — plus a ref to remember
-  // whether the copy had happened yet. Deriving needs neither.
-  const activeId = chosenId !== undefined ? chosenId : (settings?.active_workspace_id ?? null);
-
-  const setActiveId = useCallback((id) => {
-    setChosenId(id); // optimistic: the chip presses immediately
-    // updateSettings merges into the whole settings object before sending, so
-    // this cannot blank the other fields. It is a no-op while settings are
-    // still loading, which costs the memory of a very early tap and nothing else.
-    updateSettings({ active_workspace_id: id })?.catch?.(() => {
-      // A failed write costs the memory of the choice, not the choice itself.
-      // Reverting the chip the user just pressed would be the worse outcome.
-    });
-  }, [updateSettings]);
-
   const categoriesFor = useCallback(
     (workspaceId) => categoriesForWorkspace(categories, workspaceId),
     [categories]
   );
 
-  // If the active workspace no longer exists — deleted here or on another
-  // device — fall back to "Όλα" rather than filtering against an id nothing
-  // matches, which would render every screen empty with no way to tell why.
-  // UNFILED is accepted alongside the real ids: it is a legitimate position,
-  // not a stale one, and without it here the chip would deselect itself on
-  // every render.
+  // If the active workspace stops existing — archived on another device while
+  // you are looking at it — fall back to «Όλα» rather than filtering against an
+  // id nothing matches, which would render every screen empty with no way to
+  // tell why. UNFILED is accepted alongside the real ids: it is a legitimate
+  // position, not a stale one, and without it here the picker would deselect
+  // itself on every render.
   const resolvedActiveId = useMemo(
     () => (activeId === UNFILED || workspaces.some((w) => w.record_id === activeId)
       ? activeId : null),
@@ -96,7 +84,7 @@ export function WorkspaceProvider({ children, onShowToast }) {
       reload,
       categoriesFor,
     }),
-    [workspaces, categories, resolvedActiveId, setActiveId, reload, categoriesFor]
+    [workspaces, categories, resolvedActiveId, reload, categoriesFor]
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

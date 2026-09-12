@@ -460,6 +460,7 @@
     "error_no_name": "Give it a name."
   },
   "workspace": {
+    "pick": "Workspace: {{name}} — change",
     "all": "All",
     "default_label": "Default workspace",
     "default_hint": "When you add a task while viewing All, the AI uses this workspace’s categories.",
@@ -528,6 +529,8 @@
     "unassigned": "Unclaimed"
   },
   "filters": {
+    "any": "Any",
+    "title": "Filters",
     "active_label": "Active filters",
     "clear_all": "Clear filters",
     "remove_one": "Remove filter: {{name}}",

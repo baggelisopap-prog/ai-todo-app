@@ -227,62 +227,12 @@ export function countByCategory(tasks, categories) {
   return counts;
 }
 
-/**
- * The category menu's options.
- *
- * Two decisions worth naming. The resting option is labelled with the AXIS
- * ("Κατηγορία") rather than "Όλα": a closed control showing "Όλα" beside
- * another closed control showing "Όλα" tells you neither what it filters nor
- * that it is idle. And an empty category is DIMMED, not hidden and not moved:
- * it is still where things get filed, and a list that rearranges itself by how
- * full each row is makes the user's own order unreliable.
- */
-export function categoryOptions(categories, counts, t, { withCounts = true } = {}) {
-  const withCount = (label, n) => (withCounts ? `${label} (${n ?? 0})` : label);
-
-  return [
-    { value: ALL, label: t('task.category_label') },
-    ...(categories || []).map((category) => ({
-      value: category.record_id,
-      label: withCount(category.name, counts?.[category.record_id]),
-      muted: (counts?.[category.record_id] ?? 0) === 0,
-    })),
-    {
-      value: UNFILED,
-      label: withCount(t('workspace.unfiled'), counts?.[UNFILED]),
-      muted: (counts?.[UNFILED] ?? 0) === 0,
-    },
-  ];
-}
-
-/** The priority menu's options. Same shape, no counts — P1 means P1 everywhere. */
-export function priorityOptions(t) {
-  return [
-    { value: ALL, label: t('task.priority_label') },
-    { value: 'P1', label: 'P1' },
-    { value: 'P2', label: 'P2' },
-    { value: 'P3', label: 'P3' },
-  ];
-}
-
-/**
- * Which shape the workspace switcher should take, from how many there are.
- *
- * The owner's instruction, in his words: «ανάλογα με τον αριθμό να γίνεται, γτ
- * δεν ξέρω ο κάθε χρήστης πόσα θα έχει». So the thresholds are a rule, not a
- * guess about his own account:
- *
- *   'none'  — under two, the control cannot do anything, and it would still
- *             cost 40px on every screen of every user who never organises.
- *   'chips' — two to five fit across a 320px phone at ~60px a chip.
- *   'menu'  — six and up do not. A row that must be scrolled sideways can hide
- *             the selected chip off screen, which turns the one control whose
- *             whole job is showing where you are into one that hides it.
- */
-export function switcherShape(workspaceCount) {
-  if (!workspaceCount || workspaceCount < 2) return 'none';
-  return workspaceCount <= 5 ? 'chips' : 'menu';
-}
+// categoryOptions() and priorityOptions() lived here until 2026-09-12. They
+// built the labels for two DROPDOWNS — "Κήπος (7)" as one string, an axis name
+// as the resting row — and both dropdowns are gone: the filters moved into a
+// sheet where every option is a visible pill and the count is a separate
+// column beside the name, not text glued onto it. countByCategory below still
+// feeds those numbers.
 
 /** Whether a menu is long enough to need a find box rather than a scroll. */
 export function needsFind(optionCount) {

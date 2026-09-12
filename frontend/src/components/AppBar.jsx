@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { GearIcon, ChatIcon } from './icons';
+import RoomTitle from './RoomTitle';
+import { useWorkspaces } from '../hooks/useWorkspaces';
 import { getInitials } from '../utils/profile';
 
 /**
@@ -27,19 +29,50 @@ import { getInitials } from '../utils/profile';
  * screen that spreads across the whole window on a desktop, and a title
  * floating in the middle of a wide grid looks like a mistake, so the bar
  * follows whatever the screen below it does.
+ *
+ * `roomPicker` — on a phone the title slot becomes the workspace picker (see
+ * RoomTitle), which is what let the chip row under this bar be deleted
+ * entirely. False on a desktop, where the rooms live in SideNav and the slot
+ * keeps the screen's name.
+ *
+ * THE HAIRLINE UNDER THE BAR is the second half of the colour treatment, and
+ * it is here rather than in RoomTitle because it applies on BOTH layouts: the
+ * fact it reports — "you are looking at one room" — is just as true with the
+ * rooms in the sidebar. It costs no height at all: the border already existed
+ * as a 1px grey line, it becomes 2px in the room's colour. Because the bar is
+ * sticky, that line stays on screen while a long list scrolls under it, so the
+ * signal survives without a single pixel of chrome.
  */
-function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = true, wide = false }) {
+function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = true, wide = false, roomPicker = false, tasks }) {
   const { t } = useTranslation();
+  const { workspaces, activeId } = useWorkspaces();
+
+  const activeRoom = workspaces.find((w) => w.record_id === activeId);
+  // UNFILED is a legitimate position with no colour of its own, so it gets the
+  // coloured rule too — in the token's neutral, which is what «no room» looks
+  // like everywhere else in the app.
+  const isFiltered = activeId !== null;
 
   return (
     // sticky rather than fixed: it scrolls with the document's flow, so no
     // sibling needs a padding-top to compensate for it — which is exactly the
     // hack the floating buttons required.
-    <header className="sticky top-0 z-30 bg-[var(--bg-card)] border-b border-[var(--border-subtle)]">
+    <header
+      style={activeRoom?.color ? { '--ws-color': activeRoom.color } : undefined}
+      // border-b-2 in both states, so switching room does not move the page by
+      // a pixel. Only the colour changes.
+      className={`sticky top-0 z-30 bg-[var(--bg-card)] border-b-2 ${
+        isFiltered ? 'ws-frame' : 'border-[var(--border-subtle)]'
+      }`}
+    >
       <div className={`${wide ? 'max-w-none md:px-6' : 'max-w-3xl'} mx-auto flex items-center gap-2 px-4 h-14`}>
-        <h1 className="flex-1 min-w-0 truncate text-lg font-semibold text-[var(--text-primary)]">
-          {title}
-        </h1>
+        {roomPicker ? (
+          <RoomTitle title={title} tasks={tasks} />
+        ) : (
+          <h1 className="flex-1 min-w-0 truncate text-lg font-semibold text-[var(--text-primary)]">
+            {title}
+          </h1>
+        )}
 
         <button
           type="button"

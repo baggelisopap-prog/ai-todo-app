@@ -14,8 +14,6 @@ import {
   activeFilterCount,
   describeFilters,
   countByCategory,
-  categoryOptions as buildCategoryOptions,
-  priorityOptions as buildPriorityOptions,
 } from '../utils/taskFilters';
 
 /**
@@ -23,10 +21,13 @@ import {
  *
  * WHY IT IS ONE COPY. Each screen used to keep its own, so choosing κήπος in
  * Today and walking to the Calendar started over — while the workspace chip
- * came along, because that one is stored. Two rules for two controls sitting
- * 30px apart. Now the workspace remains the only thing that survives a
- * RESTART (it is in app_settings, so the phone and the laptop agree) and the
- * three filters survive a SCREEN CHANGE, which is what was actually missing.
+ * came along, because that one was stored. Two rules for two controls sitting
+ * 30px apart, and no way to tell which was which without trying.
+ *
+ * There is ONE RULE now, and it covers the workspace too: every filter lives as
+ * long as the app is open and every launch starts clean, on «Όλα» with nothing
+ * narrowed. The workspace stopped being persisted on 2026-09-12, by the owner's
+ * decision, which is what made one rule possible — see WorkspaceProvider.
  *
  * Deliberately NOT persisted to storage. A P1 filter left on from Tuesday is
  * work hidden on Thursday, and a screen that lies about being empty is the
@@ -40,7 +41,7 @@ import {
  */
 export function TaskFilterProvider({ tasks, children }) {
   const { t } = useTranslation();
-  const { activeId, categoriesFor } = useWorkspaces();
+  const { activeId, setActiveId, categoriesFor } = useWorkspaces();
   const { myId, isShared, hasAnyShared } = useMembers();
 
   const [stored, setStored] = useState(EMPTY_STORED);
@@ -90,7 +91,14 @@ export function TaskFilterProvider({ tasks, children }) {
     [activeId]
   );
 
-  const clearAll = useCallback(() => setStored((current) => clearStoredFilters(current)), []);
+  // Returns to «Όλα» as well as clearing the three. The workspace became a
+  // filter on 2026-09-12 — the owner's words: «μονο φιλτρο ουσιαστικα ο χωρος»
+  // — and a control that says «Καθάρισε τα φίλτρα» while leaving one running
+  // would be the same kind of lie this whole change set out to remove.
+  const clearAll = useCallback(() => {
+    setStored((current) => clearStoredFilters(current));
+    setActiveId(null);
+  }, [setActiveId]);
 
   // Counted over live work only, and over the whole workspace rather than over
   // what the filters already narrowed to — so "Κήπος (7)" answers "how much is
@@ -104,22 +112,24 @@ export function TaskFilterProvider({ tasks, children }) {
 
   const value = useMemo(() => ({
     filters,
-    stored,
     setFilter,
     clearOne,
     clearAll,
     activeCount: activeFilterCount(filters),
+    // Whether a room is narrowing the list. Not counted in activeCount: that
+    // number is what the «Φίλτρα» badge shows, and the room has its own,
+    // always-visible indicator in the app bar's title. Two records of one fact
+    // would be one too many.
+    roomActive: activeId !== null,
     chips: describeFilters(filters, categories, t),
     categories,
     counts,
     showCategory,
     showAssignment,
-    categoryOptions: (options) => buildCategoryOptions(categories, counts, t, options),
-    priorityOptions: () => buildPriorityOptions(t),
     apply: (list) => applyFilters(list, filters, myId),
   }), [
-    filters, stored, setFilter, clearOne, clearAll, categories, counts,
-    showCategory, showAssignment, myId, t,
+    filters, setFilter, clearOne, clearAll, categories, counts,
+    showCategory, showAssignment, myId, t, activeId,
   ]);
 
   return <TaskFilterContext.Provider value={value}>{children}</TaskFilterContext.Provider>;

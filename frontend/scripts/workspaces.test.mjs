@@ -17,6 +17,7 @@ import {
   filterTasksByWorkspace,
   filterTasksByCategory,
   categoriesForWorkspace,
+  countByWorkspace,
   describePlacement,
   nextPosition,
   UNFILED,
@@ -147,6 +148,21 @@ check('an uncategorised task is findable, not lost',
     [task({ record_id: 'filed', category_id: 'c1' }),
      task({ record_id: 'bare' })], UNFILED).map((t) => t.record_id),
   ['bare']);
+
+// ------------------------------------------------- the room picker's counts
+check('every room is counted, including one with nothing in it',
+  countByWorkspace(
+    [task({ record_id: '1', workspace_id: 'ws-b' }),
+     task({ record_id: '2', workspace_id: 'ws-b' }),
+     task({ record_id: '3' })],
+    WS),
+  { all: 3, [UNFILED]: 1, 'ws-b': 2, 'ws-p': 0 });
+
+check('an empty library counts as zero everywhere rather than undefined',
+  countByWorkspace([], WS), { all: 0, [UNFILED]: 0, 'ws-b': 0, 'ws-p': 0 });
+
+check('a missing list does not throw the picker off',
+  countByWorkspace(undefined, []), { all: 0, [UNFILED]: 0 });
 
 console.log(failures === 0 ? '\nAll workspace checks passed.' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

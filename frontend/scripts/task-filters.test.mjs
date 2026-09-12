@@ -26,8 +26,6 @@ import {
   activeFilterCount,
   clearFilter,
   countByCategory,
-  categoryOptions,
-  switcherShape,
   needsFind,
 } from '../src/utils/taskFilters.js';
 import { UNFILED } from '../src/utils/workspaces.js';
@@ -216,44 +214,18 @@ check('every bucket is counted, including the one with nothing in it',
   ]),
   { All: 3, [UNFILED]: 1, 'c-office': 2, 'c-empty': 0 });
 
-for (const [lang, dict] of Object.entries(locales)) {
-  const t = translator(dict);
-  const counts = countByCategory(LIVE, [
-    { record_id: 'c-office', name: 'γραφείο' },
-    { record_id: 'c-empty', name: 'άδεια' },
-  ]);
-  const options = categoryOptions([
-    { record_id: 'c-office', name: 'γραφείο' },
-    { record_id: 'c-empty', name: 'άδεια' },
-  ], counts, t, { withCounts: true });
-
-  check(`${lang}: the resting option names the AXIS, so a closed control still says what it is`,
-    options[0].label, t('task.category_label'));
-
-  check(`${lang}: a category carries how much is in it`,
-    options.find((o) => o.value === 'c-office').label, 'γραφείο (2)');
-
-  check(`${lang}: an empty category is dimmed rather than hidden — it is still where you file things`,
-    options.find((o) => o.value === 'c-empty').muted, true);
-
-  check(`${lang}: the user's own order is NOT rearranged by how full each one is`,
-    options.map((o) => o.value), [ALL, 'c-office', 'c-empty', UNFILED]);
-
-  check(`${lang}: on a screen about the past the counts are left off — they describe live work`,
-    categoryOptions([{ record_id: 'c-office', name: 'γραφείο' }], counts, t, { withCounts: false })
-      .find((o) => o.value === 'c-office').label,
-    'γραφείο');
-}
+// The five checks on the category MENU's labels were deleted with the menu on
+// 2026-09-12 — they asserted the shape of a dropdown ("γραφείο (2)", the axis
+// name on the resting row, an empty category dimmed) that the filter sheet
+// replaced with pills, a tick and a separate count column. countByCategory is
+// still checked above, which is the part that was ever about the data.
 
 // ------------------------------------------------------ adapting to the count
-check('one workspace is not a switcher, it is a label', switcherShape(1), 'none');
-check('zero workspaces draws nothing', switcherShape(0), 'none');
-check('two fit in a row of chips', switcherShape(2), 'chips');
-check('five still fit', switcherShape(5), 'chips');
-check('six do not — a row you must scroll hides the answer it exists to show',
-  switcherShape(6), 'menu');
-check('twenty is a menu', switcherShape(20), 'menu');
-
+// switcherShape() and its six checks were deleted on 2026-09-12, the same day
+// they shipped. They answered "chips or a menu?" for a row of workspace chips
+// that no longer exists: the room moved into the app bar's title as a picker,
+// so there is no shape to choose. Only the find-box threshold survived, which
+// is the part that was really about the number.
 check('a short list needs no find box', needsFind(7), false);
 check('a long one does', needsFind(8), true);
 

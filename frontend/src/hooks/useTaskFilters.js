@@ -11,8 +11,8 @@ import { createContext, useContext } from 'react';
 export const TaskFilterContext = createContext(null);
 
 /**
- * Returns { filters, setFilter, clearOne, clearAll, activeCount, chips,
- *           categoryOptions, showCategory, showAssignment, apply }.
+ * Returns { filters, setFilter, clearOne, clearAll, activeCount, roomActive,
+ *           chips, categories, counts, showCategory, showAssignment, apply }.
  *
  * - `filters` — what is IN FORCE here, already resolved against the active
  *   workspace. Not the same thing as what is stored: a category belongs to one

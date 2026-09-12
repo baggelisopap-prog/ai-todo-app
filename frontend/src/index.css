@@ -29,6 +29,12 @@
   --border-medium: #d1d5db;    /* Input borders, form controls */
   --border-focus: #3b82f6;     /* Focus ring */
 
+  /* The colour of the workspace you are currently looking at, set inline by
+     the room picker in the app bar. It is USER DATA — any hex they picked, or
+     none at all — so it defaults to a neutral border here rather than to a
+     colour, and .ws-frame / .ws-rule below never use it raw. */
+  --ws-color: #d1d5db;
+
   /* Text */
   --text-primary: #111827;     /* Titles, headings */
   --text-secondary: #6b7280;   /* Metadata, secondary */
@@ -135,6 +141,7 @@
   --border-subtle: #262b35;
   --border-medium: #363c49;
   --border-focus: #60a5fa;
+  --ws-color: #363c49;
 
   --text-primary: #e8eaed;
   --text-secondary: #9aa3b2;
@@ -233,6 +240,33 @@ body {
              its neighbour's; 40px lands exactly on the gap. Getting all of
              them to 44 means redesigning that row, which is more than polish.
    Both are a large improvement on the 20px and 24px they replace. */
+/* --- The workspace you are looking at ----------------------------------
+   Two devices, one fact: "I am filtered to one room right now."
+
+   The SHAPE carries the meaning and the colour only identifies which room —
+   on "Ola" the frame is not drawn at all, so someone who cannot tell two
+   shades apart still sees the difference. Same rule as the tick in
+   OptionSheet: colour is never the only channel.
+
+   An OUTLINE rather than a fill, deliberately. A filled colour bar reads as
+   identity ("this is the Business app"); a frame around something reads as a
+   state you are in and can leave, which is what a workspace now is.
+
+   THE GUARD is the color-mix: --ws-color is whatever hex the user picked, and
+   pale yellow on white is invisible, as is navy on the dark theme. Mixing 28%
+   of the TEXT colour into it pulls any hue far enough from the surface to be
+   seen, and because --text-primary flips with the theme, one declaration
+   covers both. A browser without color-mix drops the declaration and keeps
+   the neutral border underneath, which is a legible fallback rather than a
+   broken one. */
+.ws-frame {
+  border-color: color-mix(in srgb, var(--ws-color) 72%, var(--text-primary));
+}
+.ws-dot,
+.ws-rule {
+  background-color: color-mix(in srgb, var(--ws-color) 72%, var(--text-primary));
+}
+
 .tap-44,
 .tap-40 {
   position: relative;

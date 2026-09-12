@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { useTaskFilters } from '../hooks/useTaskFilters';
-import { FunnelIcon } from './icons';
 
 /**
  * The one row that says out loud what is being hidden.
@@ -23,13 +22,26 @@ import { FunnelIcon } from './icons';
  *
  * Quiet grey rather than the brand red: red in this app means destructive or
  * primary, and a filter is neither. What makes the row noticeable is that it
- * exists at all, plus the funnel in front of it.
+ * exists at all, and that the «Φίλτρα» button it sits beside carries the funnel
+ * and the count.
+ *
+ * The spacing is 8px between pills and 32px of pill height, and those two
+ * numbers are the owner's correction of the first version of this row: «τα
+ * μάζεψες πάρα πολύ κολλητά χωρίς αποστάσεις». 4px apart and 26px tall was too
+ * small to aim a thumb at and read as one grey smear rather than as separate
+ * things you can remove one at a time.
  */
 function ActiveFilters() {
   const { t } = useTranslation();
-  const { chips, clearOne, clearAll } = useTaskFilters();
+  const { chips, clearOne, clearAll, roomActive } = useTaskFilters();
 
   if (chips.length === 0) return null;
+
+  // The room counts as one of the things "clear everything" would clear, so it
+  // counts toward deciding whether that button is worth showing. Two records
+  // is the threshold: with one, the chip's own × already is the clear button
+  // and a second control saying the same thing beside it is noise.
+  const records = chips.length + (roomActive ? 1 : 0);
 
   return (
     <div
@@ -38,15 +50,8 @@ function ActiveFilters() {
       // No margin of its own: it is placed inside whatever spacing its caller
       // already uses, and a row that only sometimes exists must not also
       // sometimes add a gap.
-      className="flex flex-wrap items-center gap-1.5"
+      className="flex flex-wrap items-center gap-2"
     >
-      {/* aria-hidden on a wrapper, not on the icon: FunnelIcon takes only a
-          className, and an icon that repeated the group's name would have the
-          row announced twice. */}
-      <span aria-hidden="true" className="flex-shrink-0 text-[var(--text-muted)]">
-        <FunnelIcon />
-      </span>
-
       {chips.map((chip) => (
         <button
           key={chip.key}
@@ -56,11 +61,11 @@ function ActiveFilters() {
           // read to a screen reader as a label, and this is a button that
           // removes it.
           aria-label={t('filters.remove_one', { name: chip.label })}
-          className="tap-40 group flex items-center gap-1.5 max-w-full rounded-full border border-[var(--border-medium)] bg-[var(--bg-hover)] pl-2.5 pr-2 py-1 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--text-secondary)] transition-colors"
+          className="tap-44 group flex items-center gap-1.5 min-h-[32px] max-w-full rounded-full border border-[var(--border-medium)] bg-[var(--bg-hover)] pl-3 pr-2.5 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--text-secondary)] transition-colors"
         >
           <span className="truncate">{chip.label}</span>
           <svg
-            className="w-3 h-3 flex-shrink-0 text-[var(--text-muted)] group-hover:text-[var(--text-primary)]"
+            className="w-3.5 h-3.5 flex-shrink-0 text-[var(--text-muted)] group-hover:text-[var(--text-primary)]"
             viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             aria-hidden="true"
           >
@@ -70,13 +75,14 @@ function ActiveFilters() {
         </button>
       ))}
 
-      {/* From two filters up. With one, the chip's own × already is the clear
-          button, and a second control beside it saying the same thing is noise. */}
-      {chips.length >= 2 && (
+      {/* Clears the ROOM as well — the owner's decision, and the honest
+          reading of it: if the workspace is a filter, a button promising to
+          clear the filters cannot leave one running. */}
+      {records >= 2 && (
         <button
           type="button"
           onClick={clearAll}
-          className="tap-40 px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline decoration-[var(--border-medium)] underline-offset-2 transition-colors"
+          className="tap-44 px-2 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline decoration-[var(--border-medium)] underline-offset-2 transition-colors"
         >
           {t('filters.clear_all')}
         </button>

@@ -19,7 +19,6 @@ import { AppSettingsProvider } from './components/AppSettingsProvider';
 import AppBar from './components/AppBar';
 import WorkspaceProvider from './components/WorkspaceProvider';
 import MembersProvider from './components/MembersProvider';
-import WorkspaceBar from './components/WorkspaceBar';
 import TaskFilterProvider from './components/TaskFilterProvider';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useAutoRefresh } from './hooks/useAutoRefresh';
@@ -449,8 +448,10 @@ function App() {
   // fire a guaranteed 401 on every visit by a logged-out user.
   return (
     <AppSettingsProvider>
-    {/* Below AppSettingsProvider because it reads and writes
-        app_settings.active_workspace_id through useAppSettings. */}
+    {/* Below AppSettingsProvider by convention rather than by need now: the
+        active workspace stopped being persisted on 2026-09-12 (it is a filter,
+        not a home — see WorkspaceProvider), so nothing here touches settings
+        any more. Left in this order because everything below reads settings. */}
     <WorkspaceProvider onShowToast={handleShowToast}>
       <InviteAcceptor onShowToast={handleShowToast} />
     {/* Below WorkspaceProvider because it reads workspaces[].member_count to
@@ -491,11 +492,14 @@ function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         showProfile={!isDesktop}
         wide={isDesktop && activeTab === 'calendar'}
+        // On a phone the title slot IS the room picker, which is what removed
+        // the chip row that used to sit under this bar and cost ~40px on every
+        // screen. On a desktop the rooms stay in SideNav and the slot keeps the
+        // screen's name. `tasks` is for the count beside each room in the
+        // picker — the whole library, so the number says how much is in there.
+        roomPicker={!isDesktop}
+        tasks={tasks}
       />
-
-      {/* The chips move into SideNav on a desktop. One switcher either way —
-          both call the same setActiveId. */}
-      {!isDesktop && <WorkspaceBar />}
 
       {/* No pt-* here any more. The old one existed only to push content out
           from under two fixed circular buttons; AppBar is sticky and in flow,

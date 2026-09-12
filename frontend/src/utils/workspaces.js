@@ -40,6 +40,32 @@ export function filterTasksByCategory(tasks, categoryId) {
   return list.filter((task) => task.category_id === categoryId);
 }
 
+/**
+ * How much live work sits in each workspace, plus the two synthetic rows.
+ *
+ * For the room picker in the app bar: "Business 212" answers the question that
+ * makes someone choose a room in the first place. Counted over whatever list
+ * the caller hands in — App scopes it to live, uncompleted tasks — rather than
+ * over everything, because a picker promising 212 things to do and delivering
+ * a pile of finished ones would be worse than no number.
+ *
+ * Keyed the same way the picker's values are: 'all' for «Όλα», UNFILED for the
+ * unfiled pile, and the workspace id for a real room.
+ */
+export function countByWorkspace(tasks, workspaces) {
+  const list = tasks || [];
+  const counts = {
+    all: list.length,
+    [UNFILED]: list.filter((task) => !task.workspace_id).length,
+  };
+  for (const workspace of workspaces || []) {
+    counts[workspace.record_id] = list.filter(
+      (task) => task.workspace_id === workspace.record_id
+    ).length;
+  }
+  return counts;
+}
+
 /** One workspace's categories, in the order the user arranged them. */
 export function categoriesForWorkspace(categories, workspaceId) {
   if (!workspaceId) return [];

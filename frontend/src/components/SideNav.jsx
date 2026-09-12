@@ -39,8 +39,8 @@ function SideNav({ activeTab, onTabChange, inboxCount = 0, profile, onOpenSettin
     selectedRef.current?.scrollIntoView({ block: 'nearest' });
   }, [activeId]);
 
-  // Same rule as WorkspaceBar: below two workspaces the switcher is a control
-  // that cannot do anything, so it is not drawn at all.
+  // Same rule as the phone's room picker: below two workspaces the switcher is
+  // a control that cannot do anything, so it is not drawn at all.
   const showWorkspaces = workspaces.length >= 2;
   const workspaceRows = showWorkspaces
     ? [

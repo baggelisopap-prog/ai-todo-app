@@ -4,11 +4,10 @@ import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import HistoryList from './HistoryList';
 import CustomSelect from './CustomSelect';
-import ActiveFilters from './ActiveFilters';
+import FilterBar from './FilterBar';
 import { searchTasks } from '../utils/searchTasks';
 import { isVisibleTask } from '../utils/taskDisplay';
 import { useTaskFilters } from '../hooks/useTaskFilters';
-import { needsFind } from '../utils/taskFilters';
 import {
   selectHistory,
   countByKind,
@@ -32,16 +31,15 @@ import {
  * urgency. One screen carrying both sets of controls would show five rows of
  * filters above two tasks, which is what this screen used to do.
  *
- * The controls are plain CustomSelects rather than the shared FilterBar: that
- * component has no sort control, and threading one through it would have made
- * every other screen's filter row negotiate an option it does not use. Same
- * component, same `compact` styling, so the two still read as one habit.
+ * Category and priority are NOT this screen's controls any more. They live in
+ * the shared filter sheet, behind the same «Φίλτρα» button Today and the
+ * Calendar use, reading the same shared values — so narrowing to κήπος here is
+ * still κήπος in Today. This screen used to render its own dropdowns for them,
+ * which is how it came to disagree with Today about what a task with no
+ * priority counts as.
  *
- * The VALUES behind category and priority are no longer this screen's own,
- * though — they come from the one shared copy every task screen reads, so
- * narrowing to κήπος here is still κήπος in Today. Only the sort order, the
- * search box and the two history controls stay local: they are questions the
- * other screens do not ask.
+ * What stays local is what only this screen asks: the search box, the sort
+ * order, and on the History tab what kind of event and how far back.
  */
 function BrowseView({
   tasks,
@@ -65,10 +63,7 @@ function BrowseView({
   const [historyKind, setHistoryKind] = useState('all');
   const [historyRange, setHistoryRange] = useState(RANGE_MONTH);
 
-  const {
-    filters, setFilter, apply, activeCount, clearAll,
-    categories, categoryOptions, priorityOptions,
-  } = useTaskFilters();
+  const { apply, activeCount, clearAll } = useTaskFilters();
 
   // Everything still live: what the Ενεργά tab is about. Completed tasks left
   // this list on 2026-09-04 — they are history now, and the "Εμφάνιση
@@ -111,18 +106,6 @@ function BrowseView({
     return { rows: scoped.filter((row) => matching.has(row.task)), total: rows.length };
   }, [tasks, historyKind, historyRange, apply, activeCount, query]);
   const historyRows = history.rows;
-
-  // Hidden entirely when the active workspace has no categories: the chips
-  // above are already doing the coarse filtering, and there is no single
-  // coherent category list across two workspaces.
-  //
-  // The counts appear on the Ενεργά tab only. They describe live work, and
-  // printing "Ακίνητα (18)" over a list of things that already happened would
-  // be a number answering the other tab's question — worse than no number,
-  // because it looks like it belongs.
-  const categoryChoices = categories.length
-    ? categoryOptions({ withCounts: tab === 'active' })
-    : null;
 
   // Each option names WHICH date and WHICH direction. "Νεότερα" did neither:
   // the row shows the due date while that sort ordered by the creation date,
@@ -208,44 +191,24 @@ function BrowseView({
         </svg>
       </div>
 
-      {/* One row of controls, not three. Which controls depends on the question
-          the tab answers. */}
-      <div className={`flex gap-2 ${activeCount > 0 ? 'mb-2' : 'mb-5'}`}>
-        {categoryChoices && (
-          <div className="flex-1 min-w-0">
+      {/* The shared filters, in the same place and shape as every other
+          screen: one button, plus a pill per active filter. */}
+      <FilterBar />
+
+      {/* This screen's own two controls. Which two depends on the question the
+          tab answers — in Ενεργά you are looking for something to DO, in
+          Ιστορικό for what HAPPENED. */}
+      <div className="mb-5 flex gap-2">
+        {tab === 'active' ? (
+          <div className="flex-1 min-w-0 max-w-xs">
             <CustomSelect
               compact
-              value={filters.category}
-              options={categoryChoices}
-              onChange={(value) => setFilter('category', value)}
-              ariaLabel={t('workspace.category_label')}
-              // A find box once the list is longer than a list is good at.
-              searchable={needsFind(categories.length)}
+              value={sortBy}
+              options={sortOptions}
+              onChange={setSortBy}
+              ariaLabel={t('browse.sort_label')}
             />
           </div>
-        )}
-
-        {tab === 'active' ? (
-          <>
-            <div className="flex-1 min-w-0">
-              <CustomSelect
-                compact
-                value={filters.priority}
-                options={priorityOptions()}
-                onChange={(value) => setFilter('priority', value)}
-                ariaLabel={t('task.priority_label')}
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <CustomSelect
-                compact
-                value={sortBy}
-                options={sortOptions}
-                onChange={setSortBy}
-                ariaLabel={t('browse.sort_label')}
-              />
-            </div>
-          </>
         ) : (
           <>
             <div className="flex-1 min-w-0">
@@ -269,16 +232,6 @@ function BrowseView({
           </>
         )}
       </div>
-
-      {/* Same row, same place, same gesture as Today and the Calendar. It
-          renders nothing at all when nothing is filtered, which is why the
-          controls above lost their bottom margin to it rather than gaining
-          height. */}
-      {activeCount > 0 && (
-        <div className="mb-5">
-          <ActiveFilters />
-        </div>
-      )}
 
       {tab === 'active' ? (
         filteredTasks.length === 0 ? (

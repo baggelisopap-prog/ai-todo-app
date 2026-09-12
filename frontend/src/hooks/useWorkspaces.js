@@ -14,8 +14,11 @@ export const WorkspaceContext = createContext(null);
  * Returns { workspaces, categories, activeId, setActiveId, reload, categoriesFor }.
  *
  * - `activeId` — null means "Όλα", which is the default and INCLUDES unfiled
- *   tasks. Persisted through app_settings.active_workspace_id, so the phone
- *   and the laptop agree on where you were.
+ *   tasks. It is a FILTER, not a home: it lives only while the app is open and
+ *   every launch starts on «Όλα». It used to be persisted through
+ *   app_settings.active_workspace_id so the phone and the laptop agreed on
+ *   where you were; the owner reversed that on 2026-09-12 — see
+ *   WorkspaceProvider for his words and the reason.
  * - `categoriesFor(workspaceId)` — that workspace's categories, in order.
  * - `reload()` — refetch the shared copy after any write.
  *
