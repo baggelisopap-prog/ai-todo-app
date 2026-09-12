@@ -3,9 +3,7 @@ import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import FilterBar from './FilterBar';
-import { filterTasksByCategory } from '../utils/workspaces';
-import { filterTasksByAssignment, ASSIGNMENT_ALL } from '../utils/assignment';
-import { useMembers } from '../hooks/useMembers';
+import { useTaskFilters } from '../hooks/useTaskFilters';
 import { toLocalISODate } from '../utils/formatDate';
 import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEvent } from '../api';
 import { openEventInGoogle } from '../utils/openEventInGoogle';
@@ -13,15 +11,35 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { isVisibleTask } from '../utils/taskDisplay';
 
+/**
+ * The three piles this screen shows, from one list of tasks.
+ *
+ * Pulled out of the component so it can be run TWICE: once over the filtered
+ * list for what to draw, and once over the unfiltered one to answer "how much
+ * is the filter hiding". Without the second number an empty day says "Τίποτα
+ * για σήμερα 🎉" while the work sits behind a forgotten P1.
+ */
+function splitByDay(list, today) {
+  const open = list.filter(
+    (task) => task.approval_status && !task.is_completed && isVisibleTask(task)
+  );
+  return {
+    today: open.filter((task) => task.due_date === today),
+    overdue: open.filter((task) => task.due_date && task.due_date < today),
+    pending: list.filter(
+      (task) => task.due_date === today && !task.approval_status && isVisibleTask(task)
+    ),
+  };
+}
+
+const countAll = (piles) => piles.today.length + piles.overdue.length + piles.pending.length;
+
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedPriority, setSelectedPriority] = useState('All');
-  // Per view, like the two filters above it. Today and Upcoming already keep
-  // their own category and priority, and a fourth filter that alone followed
-  // you between screens would be the odd one out.
-  const [selectedAssignment, setSelectedAssignment] = useState(ASSIGNMENT_ALL);
-  const { myId } = useMembers();
+  // One shared copy for every screen, so choosing κήπος here is still κήπος in
+  // the Calendar. It used to be three useStates per screen, which is why it
+  // was not.
+  const { apply, activeCount, clearAll } = useTaskFilters();
   const [overdueExpanded, setOverdueExpanded] = useState(true);
   const [todayEvents, setTodayEvents] = useState([]);
   const { settings } = useAppSettings();
@@ -69,52 +87,24 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
     }
   }
 
-  // Category is now the user's OWN category (tasks.category_id), not the old
-  // four-word column. 'All' means no filter; UNFILED means the ones with none.
-  const filteredTasks = filterTasksByAssignment(
-    filterTasksByCategory(
-      tasks, selectedCategory === 'All' ? null : selectedCategory
-    ).filter((task) => selectedPriority === 'All' || task.priority === selectedPriority),
-    selectedAssignment,
-    myId
-  );
+  // The category, priority and assignment filters in one call — the chain used
+  // to be spelled out here, and it had already drifted from Browse's copy of
+  // it over what a task with no priority counts as. See utils/taskFilters.js.
+  const piles = splitByDay(apply(tasks), today);
+  const todayTasks = piles.today;
+  const overdueTasks = piles.overdue;
+  const pendingTodayTasks = piles.pending;
 
-  const todayTasks = filteredTasks.filter((task) =>
-    task.approval_status &&
-    !task.is_completed &&
-    isVisibleTask(task) &&
-    task.due_date === today
-  );
-
-  const overdueTasks = filteredTasks.filter((task) =>
-    task.approval_status &&
-    !task.is_completed &&
-    isVisibleTask(task) &&
-    task.due_date &&
-    task.due_date < today
-  );
-
-  const pendingTodayTasks = filteredTasks.filter((task) =>
-    task.due_date === today &&
-    !task.approval_status &&
-    isVisibleTask(task)
-  );
-
-  const isEmpty = todayTasks.length === 0 && overdueTasks.length === 0 && pendingTodayTasks.length === 0;
+  const isEmpty = countAll(piles) === 0;
+  // Only asked when the screen is empty AND something is filtered, so the cost
+  // is a second pass over the list in the one case that needs an explanation.
+  const hiddenByFilters = isEmpty && activeCount > 0 ? countAll(splitByDay(tasks, today)) : 0;
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6">
       {/* No heading here — AppBar carries it, so it stays put when you scroll
           instead of leaving with the first swipe. */}
-      <FilterBar
-        category={selectedCategory}
-        onCategoryChange={setSelectedCategory}
-        priority={selectedPriority}
-        onPriorityChange={setSelectedPriority}
-        assignment={selectedAssignment}
-        onAssignmentChange={setSelectedAssignment}
-        t={t}
-      />
+      <FilterBar />
 
       {todayEvents.length > 0 && (
         <div className="mb-4">
@@ -159,7 +149,17 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
       )}
 
       {isEmpty ? (
-        <EmptyState message={t('empty.today')} />
+        // An empty day and a day emptied BY A FILTER are different facts, and
+        // "Τίποτα για σήμερα 🎉" is the wrong one to report while the work is
+        // sitting behind a P1 nobody remembers switching on.
+        hiddenByFilters > 0 ? (
+          <EmptyState
+            message={t('filters.hidden', { count: hiddenByFilters })}
+            action={{ label: t('filters.clear_all'), onClick: clearAll }}
+          />
+        ) : (
+          <EmptyState message={t('empty.today')} />
+        )
       ) : (
         <>
           <div className="mb-6">

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TABS } from './navTabs';
 import { GearIcon } from './icons';
@@ -27,6 +28,16 @@ import { getInitials } from '../utils/profile';
 function SideNav({ activeTab, onTabChange, inboxCount = 0, profile, onOpenSettings, children }) {
   const { t } = useTranslation();
   const { workspaces, activeId, setActiveId } = useWorkspaces();
+  const selectedRef = useRef(null);
+
+  // The same problem the chip row has on a phone, in the other direction: this
+  // column scrolls, so with a dozen workspaces the selected one can sit below
+  // the fold — and the app opens already filtered by a room the user cannot
+  // see. block:'nearest' means it does nothing at all while the row is
+  // already visible, which is the common case.
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [activeId]);
 
   // Same rule as WorkspaceBar: below two workspaces the switcher is a control
   // that cannot do anything, so it is not drawn at all.
@@ -104,6 +115,7 @@ function SideNav({ activeTab, onTabChange, inboxCount = 0, profile, onOpenSettin
                 return (
                   <button
                     key={workspace.record_id || 'all'}
+                    ref={selected ? selectedRef : null}
                     type="button"
                     role="tab"
                     aria-selected={selected}

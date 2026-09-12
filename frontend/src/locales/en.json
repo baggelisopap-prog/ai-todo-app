@@ -527,6 +527,14 @@
     "mine": "Mine",
     "unassigned": "Unclaimed"
   },
+  "filters": {
+    "active_label": "Active filters",
+    "clear_all": "Clear filters",
+    "remove_one": "Remove filter: {{name}}",
+    "hidden": "Hidden by filters: {{count}}",
+    "find": "Find…",
+    "no_matches": "No matches"
+  },
   "activity": {
     "title": "History",
     "empty": "Nothing has happened here yet.",

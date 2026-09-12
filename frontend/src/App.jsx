@@ -20,6 +20,7 @@ import AppBar from './components/AppBar';
 import WorkspaceProvider from './components/WorkspaceProvider';
 import MembersProvider from './components/MembersProvider';
 import WorkspaceBar from './components/WorkspaceBar';
+import TaskFilterProvider from './components/TaskFilterProvider';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useAutoRefresh } from './hooks/useAutoRefresh';
 import { useMediaQuery, DESKTOP_QUERY } from './hooks/useMediaQuery';
@@ -53,18 +54,24 @@ const TAB_TITLE_KEYS = {
  * without any of them being edited. It is a client-side filter over the list
  * already in memory — the switcher changes what you LOOK AT, never what the
  * system does, so reminders, calendar sync and Hostaway are untouched by it.
+ *
+ * TaskFilterProvider wraps the four screens from HERE, one level below the
+ * workspace scoping, and that order is the point: the three filters it holds
+ * are only meaningful against a workspace (a category id belongs to one room)
+ * and against a task list (the counts beside each category). Both are known at
+ * this line and at no line above it.
  */
 function TaskViews({ activeTab, viewProps, onTaskCreated }) {
   const { activeId } = useWorkspaces();
   const scoped = { ...viewProps, tasks: filterTasksByWorkspace(viewProps.tasks, activeId) };
 
   return (
-    <>
+    <TaskFilterProvider tasks={scoped.tasks}>
       {activeTab === 'inbox' && <InboxView {...scoped} />}
       {activeTab === 'today' && <TodayView {...scoped} />}
       {activeTab === 'calendar' && <CalendarView {...scoped} onTaskCreated={onTaskCreated} />}
       {activeTab === 'browse' && <BrowseView {...scoped} />}
-    </>
+    </TaskFilterProvider>
   );
 }
 

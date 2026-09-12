@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
+import { useTaskFilters } from '../hooks/useTaskFilters';
 import { toLocalISODate, weekdayShortUpper } from '../utils/formatDate';
 import { isVisibleTask } from '../utils/taskDisplay';
 
@@ -14,6 +15,12 @@ import { isVisibleTask } from '../utils/taskDisplay';
  * filter bar, since the Calendar above it already provides both.
  *
  * Takes tasks ALREADY filtered by the caller's FilterBar, for the same reason.
+ * `unfilteredTasks` is the same list BEFORE those filters, and it is here for
+ * one job: a week where every section is empty looks identical whether there
+ * is genuinely nothing coming or a forgotten filter is hiding all of it. Eight
+ * headings reading "(0)" is the app lying quietly, so when something IS
+ * filtered the sections give way to one line that says how much is hidden and
+ * a button that shows it again.
  */
 function getSectionLabel(t, daysFromNow, date) {
   if (daysFromNow === 1) {
@@ -61,10 +68,21 @@ function computeSections(tasks, t) {
   return { daySections, noDateSection };
 }
 
-function UpcomingList({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
+function UpcomingList({ tasks, unfilteredTasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
   const { t } = useTranslation();
+  const { activeCount, clearAll } = useTaskFilters();
 
   const { daySections, noDateSection } = computeSections(tasks, t);
+
+  const shown = [...daySections, noDateSection].reduce((n, section) => n + section.tasks.length, 0);
+  // Only counted in the one case that needs explaining: nothing on screen and
+  // something switched on.
+  const hiddenByFilters = shown === 0 && activeCount > 0 && unfilteredTasks
+    ? (() => {
+        const all = computeSections(unfilteredTasks, t);
+        return [...all.daySections, all.noDateSection].reduce((n, section) => n + section.tasks.length, 0);
+      })()
+    : 0;
 
   // Trailing empty days are dropped, but empty days BETWEEN populated ones are
   // kept — a gap in the week is information ("nothing on Thursday"), whereas
@@ -81,6 +99,15 @@ function UpcomingList({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onT
   );
 
   const sections = [...visibleDaySections, noDateSection];
+
+  if (hiddenByFilters > 0) {
+    return (
+      <EmptyState
+        message={t('filters.hidden', { count: hiddenByFilters })}
+        action={{ label: t('filters.clear_all'), onClick: clearAll }}
+      />
+    );
+  }
 
   return (
     <div>

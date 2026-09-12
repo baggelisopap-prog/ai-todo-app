@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
+import { matchesOption } from '../utils/taskFilters';
 
 const GAP = 4;
 const MAX_MENU_HEIGHT = 240; // max-h-60
@@ -17,10 +19,23 @@ const MAX_MENU_HEIGHT = 240; // max-h-60
  * The trade-off of a portal is that the list no longer follows its trigger for
  * free: it is measured on open and closed on scroll, rather than drifting away
  * from the control it belongs to.
+ *
+ * Two optional additions, both for the case where the list has grown past what
+ * a list is good at — a user with twenty categories, which this app has no say
+ * over:
+ *
+ *   `searchable`  — a find box at the top of the menu. Accent- and
+ *                   case-insensitive through the same folding the task search
+ *                   uses, because "κηπος" must find "Κήπος".
+ *   `opt.muted`   — draw that option dimmed. Used for a category with nothing
+ *                   in it: still selectable, still in the user's own order,
+ *                   just visibly not where the work is.
  */
-export function CustomSelect({ value, options, onChange, placeholder, ariaLabel, compact = false }) {
+export function CustomSelect({ value, options, onChange, placeholder, ariaLabel, compact = false, searchable = false }) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState(null);
+  const [query, setQuery] = useState('');
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -54,26 +69,47 @@ export function CustomSelect({ value, options, onChange, placeholder, ariaLabel,
       if (menuRef.current?.contains(e.target)) return;
       setIsOpen(false);
     }
-    const close = () => setIsOpen(false);
+
+    // Scrolling the PAGE slides the trigger out from under the menu, so the
+    // menu has to go. Scrolling the menu's OWN list must not — and a capturing
+    // listener on window receives those events too, even though scroll does not
+    // bubble. Without the target check, reaching the bottom of a long list
+    // closed the thing you were reading.
+    function handleScroll(e) {
+      if (e.target instanceof Node && menuRef.current?.contains(e.target)) return;
+      setIsOpen(false);
+    }
+
+    // A phone fires resize the instant the on-screen keyboard opens. For a
+    // searchable menu that means tapping the find box would close the menu
+    // before a single character arrived, so it re-measures instead.
+    function handleResize() {
+      if (searchable) place();
+      else setIsOpen(false);
+    }
 
     document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
     };
-  }, [isOpen]);
+  }, [isOpen, searchable, place]);
 
   const selectedLabel = options.find((o) => o.value === value)?.label || placeholder;
+  const visible = searchable ? options.filter((o) => matchesOption(o.label, query)) : options;
 
   return (
     <div className="relative" data-no-toggle>
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen((v) => !v)}
+        // The query is dropped on every open rather than kept: a menu that
+        // reopens still filtered by what you typed last week hides options
+        // with no visible reason — the same class of bug as a forgotten filter.
+        onClick={() => { setQuery(''); setIsOpen((v) => !v); }}
         aria-label={ariaLabel}
         aria-expanded={isOpen}
         className={`
@@ -118,7 +154,25 @@ export function CustomSelect({ value, options, onChange, placeholder, ariaLabel,
             ${position ? '' : 'invisible'}
           `}
         >
-          {options.map((opt) => (
+          {searchable && (
+            // sticky: the list scrolls under it, so the box is still there
+            // after you have scrolled — which is the whole point of having it.
+            <div className="sticky top-0 z-10 bg-[var(--bg-card)] px-2 pt-1 pb-2 border-b border-[var(--border-subtle)]">
+              {/* No autoFocus on purpose. On a phone it would throw the
+                  keyboard up over the list every single time the menu opens,
+                  for a list most users can just read. */}
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('filters.find')}
+                aria-label={t('filters.find')}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-input)] border border-[var(--border-medium)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)]"
+              />
+            </div>
+          )}
+
+          {visible.map((opt) => (
             <button
               key={opt.value}
               type="button"
@@ -131,12 +185,20 @@ export function CustomSelect({ value, options, onChange, placeholder, ariaLabel,
               className={`
                 w-full text-left px-3 py-2 text-sm
                 hover:bg-[var(--bg-hover)]
-                ${opt.value === value ? 'bg-[var(--bg-hover)] font-medium text-[var(--text-primary)]' : 'text-[var(--text-primary)]'}
+                ${opt.value === value ? 'bg-[var(--bg-hover)] font-medium text-[var(--text-primary)]' : ''}
+                ${opt.value !== value && opt.muted ? 'text-[var(--text-muted)]' : ''}
+                ${opt.value !== value && !opt.muted ? 'text-[var(--text-primary)]' : ''}
               `}
             >
               {opt.label}
             </button>
           ))}
+
+          {/* A search that matched nothing has to say so. An empty menu looks
+              like a broken control, and the fix (clear the box) is invisible. */}
+          {visible.length === 0 && (
+            <p className="px-3 py-3 text-sm text-[var(--text-muted)]">{t('filters.no_matches')}</p>
+          )}
         </div>,
         document.body
       )}

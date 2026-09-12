@@ -4,10 +4,11 @@ import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import HistoryList from './HistoryList';
 import CustomSelect from './CustomSelect';
+import ActiveFilters from './ActiveFilters';
 import { searchTasks } from '../utils/searchTasks';
 import { isVisibleTask } from '../utils/taskDisplay';
-import { useWorkspaces } from '../hooks/useWorkspaces';
-import { filterTasksByCategory, UNFILED } from '../utils/workspaces';
+import { useTaskFilters } from '../hooks/useTaskFilters';
+import { needsFind } from '../utils/taskFilters';
 import {
   selectHistory,
   countByKind,
@@ -32,10 +33,15 @@ import {
  * filters above two tasks, which is what this screen used to do.
  *
  * The controls are plain CustomSelects rather than the shared FilterBar: that
- * component has no sort control and its category list carries no counts, and
- * threading both through it would have made every other screen's filter row
- * negotiate options it does not use. Same component, same `compact` styling,
- * so the two still read as one habit.
+ * component has no sort control, and threading one through it would have made
+ * every other screen's filter row negotiate an option it does not use. Same
+ * component, same `compact` styling, so the two still read as one habit.
+ *
+ * The VALUES behind category and priority are no longer this screen's own,
+ * though — they come from the one shared copy every task screen reads, so
+ * narrowing to κήπος here is still κήπος in Today. Only the sort order, the
+ * search box and the two history controls stay local: they are questions the
+ * other screens do not ask.
  */
 function BrowseView({
   tasks,
@@ -50,9 +56,7 @@ function BrowseView({
   const [tab, setTab] = useState('active');
   const [query, setQuery] = useState('');
 
-  // Active-tab filters
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [priority, setPriority] = useState('All');
+  // Sort order is this screen's alone — nothing else offers it.
   const [sortBy, setSortBy] = useState('created_desc');
 
   // History-tab filters. 30 days rather than everything, because the question
@@ -61,17 +65,10 @@ function BrowseView({
   const [historyKind, setHistoryKind] = useState('all');
   const [historyRange, setHistoryRange] = useState(RANGE_MONTH);
 
-  const { activeId, categoriesFor } = useWorkspaces();
-  // Memoised, not a bare expression: categoriesFor returns a NEW array every
-  // call, so an unwrapped value would change identity on every render and the
-  // counts below — which depend on it — would recompute every time, which is
-  // the one thing their useMemo exists to prevent.
-  //
-  // UNFILED is a view, not a workspace: it has no categories of its own.
-  const activeCategories = useMemo(
-    () => (activeId && activeId !== UNFILED ? categoriesFor(activeId) : []),
-    [activeId, categoriesFor]
-  );
+  const {
+    filters, setFilter, apply, activeCount, clearAll,
+    categories, categoryOptions, priorityOptions,
+  } = useTaskFilters();
 
   // Everything still live: what the Ενεργά tab is about. Completed tasks left
   // this list on 2026-09-04 — they are history now, and the "Εμφάνιση
@@ -81,75 +78,51 @@ function BrowseView({
     [tasks]
   );
 
-  // Counted over the whole live library rather than over the current search or
-  // priority, so the number beside a category answers "how much is in there"
-  // instead of "how much of what I already narrowed to".
-  const categoryCounts = useMemo(
-    () => ({
-      All: liveTasks.length,
-      [UNFILED]: liveTasks.filter((task) => !task.category_id).length,
-      ...Object.fromEntries(
-        activeCategories.map((c) => [
-          c.record_id,
-          liveTasks.filter((task) => task.category_id === c.record_id).length,
-        ])
-      ),
-    }),
-    [liveTasks, activeCategories]
+  // The counts beside each category are the provider's now, computed the way
+  // this screen used to compute them — over the whole live library, not over
+  // what is already narrowed — so Today and the Calendar print the same number
+  // instead of a different one.
+  const filteredTasks = useMemo(
+    // Search last, so it runs over the smallest set.
+    () => searchTasks(apply(liveTasks), query),
+    [liveTasks, apply, query]
   );
-
-  const filteredTasks = useMemo(() => {
-    let result = liveTasks;
-    if (selectedCategory !== 'All') result = filterTasksByCategory(result, selectedCategory);
-    if (priority !== 'All') result = result.filter((task) => (task.priority || 'P3') === priority);
-    // Last, so the search runs over the smallest set.
-    return searchTasks(result, query);
-  }, [liveTasks, selectedCategory, priority, query]);
 
   const historyCounts = useMemo(
     () => countByKind(tasks, { range: historyRange }),
     [tasks, historyRange]
   );
 
-  const historyRows = useMemo(() => {
+  // Both numbers come out of one pass: the rows to draw, and how many the
+  // kind/range picked before the filters had their say. The second is what the
+  // "hidden by filters" line reports, and it has to be counted HERE — asking
+  // historyCounts.all instead would count every kind of event in the range,
+  // so a filter hiding three completions would claim to be hiding forty.
+  const history = useMemo(() => {
     const rows = selectHistory(tasks, { kind: historyKind, range: historyRange });
-    const scoped =
-      selectedCategory === 'All'
-        ? rows
-        : rows.filter((row) => filterTasksByCategory([row.task], selectedCategory).length === 1);
-    if (!query.trim()) return scoped;
+    // The same three filters as the Ενεργά tab, through the same function: a
+    // chip reading «Δικά μου» has to mean the same thing on both tabs, or the
+    // row that explains what is hidden explains the wrong thing.
+    const scoped = activeCount === 0
+      ? rows
+      : rows.filter((row) => apply([row.task]).length === 1);
+    if (!query.trim()) return { rows: scoped, total: rows.length };
     const matching = new Set(searchTasks(scoped.map((row) => row.task), query));
-    return scoped.filter((row) => matching.has(row.task));
-  }, [tasks, historyKind, historyRange, selectedCategory, query]);
+    return { rows: scoped.filter((row) => matching.has(row.task)), total: rows.length };
+  }, [tasks, historyKind, historyRange, apply, activeCount, query]);
+  const historyRows = history.rows;
 
-  // Built from the user's own categories, not from four hardcoded words. Hidden
-  // entirely when no workspace is chosen: the chips above are already doing the
-  // coarse filtering, and there is no single coherent category list across two
-  // workspaces. `label` is a plain string — these names are the user's, so
-  // there is nothing to translate.
+  // Hidden entirely when the active workspace has no categories: the chips
+  // above are already doing the coarse filtering, and there is no single
+  // coherent category list across two workspaces.
   //
   // The counts appear on the Ενεργά tab only. They describe live work, and
   // printing "Ακίνητα (18)" over a list of things that already happened would
   // be a number answering the other tab's question — worse than no number,
   // because it looks like it belongs.
-  const withCount = (label, n) => (tab === 'active' ? `${label} (${n})` : label);
-  const categoryOptions = activeCategories.length
-    ? [
-        { value: 'All', label: withCount(t('browse.filter_all'), categoryCounts.All) },
-        ...activeCategories.map((c) => ({
-          value: c.record_id,
-          label: withCount(c.name, categoryCounts[c.record_id] ?? 0),
-        })),
-        { value: UNFILED, label: withCount(t('workspace.unfiled'), categoryCounts[UNFILED]) },
-      ]
+  const categoryChoices = categories.length
+    ? categoryOptions({ withCounts: tab === 'active' })
     : null;
-
-  const priorityOptions = [
-    { value: 'All', label: t('task.priority_label') },
-    { value: 'P1', label: 'P1' },
-    { value: 'P2', label: 'P2' },
-    { value: 'P3', label: 'P3' },
-  ];
 
   // Each option names WHICH date and WHICH direction. "Νεότερα" did neither:
   // the row shows the due date while that sort ordered by the creation date,
@@ -237,15 +210,17 @@ function BrowseView({
 
       {/* One row of controls, not three. Which controls depends on the question
           the tab answers. */}
-      <div className="mb-5 flex gap-2">
-        {categoryOptions && (
+      <div className={`flex gap-2 ${activeCount > 0 ? 'mb-2' : 'mb-5'}`}>
+        {categoryChoices && (
           <div className="flex-1 min-w-0">
             <CustomSelect
               compact
-              value={selectedCategory}
-              options={categoryOptions}
-              onChange={setSelectedCategory}
+              value={filters.category}
+              options={categoryChoices}
+              onChange={(value) => setFilter('category', value)}
               ariaLabel={t('workspace.category_label')}
+              // A find box once the list is longer than a list is good at.
+              searchable={needsFind(categories.length)}
             />
           </div>
         )}
@@ -255,9 +230,9 @@ function BrowseView({
             <div className="flex-1 min-w-0">
               <CustomSelect
                 compact
-                value={priority}
-                options={priorityOptions}
-                onChange={setPriority}
+                value={filters.priority}
+                options={priorityOptions()}
+                onChange={(value) => setFilter('priority', value)}
                 ariaLabel={t('task.priority_label')}
               />
             </div>
@@ -295,12 +270,32 @@ function BrowseView({
         )}
       </div>
 
+      {/* Same row, same place, same gesture as Today and the Calendar. It
+          renders nothing at all when nothing is filtered, which is why the
+          controls above lost their bottom margin to it rather than gaining
+          height. */}
+      {activeCount > 0 && (
+        <div className="mb-5">
+          <ActiveFilters />
+        </div>
+      )}
+
       {tab === 'active' ? (
         filteredTasks.length === 0 ? (
-          // A search that found nothing is a different situation from an empty
-          // library, and telling someone "no tasks yet" while they are holding a
-          // typo is the wrong answer.
-          <EmptyState message={query.trim() ? t('empty.no_search_results', { query }) : t('empty.browse')} />
+          // Three different silences, told apart. A search that found nothing
+          // is not an empty library, and neither is a filter that excluded
+          // everything — that last one used to read "Δεν βρέθηκαν εργασίες"
+          // over a library with 340 of them.
+          query.trim() ? (
+            <EmptyState message={t('empty.no_search_results', { query })} />
+          ) : activeCount > 0 && liveTasks.length > 0 ? (
+            <EmptyState
+              message={t('filters.hidden', { count: liveTasks.length })}
+              action={{ label: t('filters.clear_all'), onClick: clearAll }}
+            />
+          ) : (
+            <EmptyState message={t('empty.browse')} />
+          )
         ) : (
           <TaskList
             tasks={filteredTasks}
@@ -320,9 +315,16 @@ function BrowseView({
           message={
             query.trim()
               ? t('empty.no_search_results', { query })
-              : historyCounts.all === 0 && historyRange === RANGE_ALL
-                ? t('browse.empty_history')
-                : t('browse.empty_history_filtered')
+              : activeCount > 0 && history.total > 0
+                ? t('filters.hidden', { count: history.total })
+                : historyCounts.all === 0 && historyRange === RANGE_ALL
+                  ? t('browse.empty_history')
+                  : t('browse.empty_history_filtered')
+          }
+          action={
+            !query.trim() && activeCount > 0 && history.total > 0
+              ? { label: t('filters.clear_all'), onClick: clearAll }
+              : undefined
           }
           hint={
             historyCounts.all === 0 && historyRange === RANGE_ALL && !query.trim()

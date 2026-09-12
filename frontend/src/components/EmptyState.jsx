@@ -12,8 +12,14 @@
  * `size="inline"` is for the empty *sections* inside an otherwise full screen
  * (Today's "no tasks today" while overdue ones are listed below it), where the
  * full treatment would shout louder than the content around it.
+ *
+ * `action` is the one exception to the "no call to action" rule above, and it
+ * exists for exactly one situation: the screen is empty BECAUSE OF A FILTER.
+ * Then the quiet message is a lie — the work is there — and the fix has to be
+ * within reach of the sentence that reports the problem. Anywhere else the
+ * emptiness is honest and gets no button.
  */
-function EmptyState({ message, hint, size = 'page' }) {
+function EmptyState({ message, hint, size = 'page', action }) {
   const isInline = size === 'inline';
 
   return (
@@ -42,6 +48,15 @@ function EmptyState({ message, hint, size = 'page' }) {
       </p>
       {hint && (
         <p className="text-xs text-[var(--text-muted)] mt-1">{hint}</p>
+      )}
+      {action && (
+        <button
+          type="button"
+          onClick={action.onClick}
+          className="tap-44 mt-3 px-3 py-1.5 rounded-md border border-[var(--border-medium)] bg-[var(--bg-card)] text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+        >
+          {action.label}
+        </button>
       )}
     </div>
   );

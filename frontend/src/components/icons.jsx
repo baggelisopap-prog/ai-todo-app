@@ -154,3 +154,19 @@ export function BrowseIcon({ className = 'w-[22px] h-[22px]' }) {
     </svg>
   );
 }
+
+/**
+ * The filter funnel, for the row that says which filters are on.
+ *
+ * It is a SIGNPOST, not a control: a row of pills with an × on each is only
+ * obviously about filtering once you already know it is, and the owner's
+ * complaint was exactly that an active filter was unrecognisable. Rendered
+ * aria-hidden by its caller, which carries the real name.
+ */
+export function FunnelIcon({ className = 'w-3.5 h-3.5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 5h18l-7 8v6l-4-2v-4z" />
+    </svg>
+  );
+}

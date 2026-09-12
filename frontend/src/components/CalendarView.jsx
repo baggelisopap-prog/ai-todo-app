@@ -14,12 +14,6 @@ import { CSS } from '@dnd-kit/utilities';
 import TaskCard from './TaskCard';
 import CustomSelect from './CustomSelect';
 import FilterBar from './FilterBar';
-import { UNFILED } from '../utils/workspaces';
-
-// The single-task form of filterTasksByCategory: this view filters inside a
-// larger predicate rather than over a list, so it cannot use the list helper.
-const matchesCategory = (task, categoryId) =>
-  categoryId === UNFILED ? !task.category_id : task.category_id === categoryId;
 import UpcomingList from './UpcomingList';
 import {
   createTaskManual,
@@ -35,8 +29,7 @@ import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { isVisibleTask } from '../utils/taskDisplay';
-import { filterTasksByAssignment, ASSIGNMENT_ALL } from '../utils/assignment';
-import { useMembers } from '../hooks/useMembers';
+import { useTaskFilters } from '../hooks/useTaskFilters';
 
 // Column headers for the Monthly grid, Monday-first, named in whatever
 // language the UI is in. Derived from a week that is known to start on a
@@ -175,10 +168,8 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [activeDragTask, setActiveDragTask] = useState(null);
   const [manualCreateSlot, setManualCreateSlot] = useState(null); // { date, time }
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedPriority, setSelectedPriority] = useState('All');
-  const [selectedAssignment, setSelectedAssignment] = useState(ASSIGNMENT_ALL);
-  const { myId } = useMembers();
+  // One shared copy of the filters for every screen — see TaskFilterProvider.
+  const { apply } = useTaskFilters();
   const [calendarEvents, setCalendarEvents] = useState([]);
   const taskDetailRef = useRef(null);
 
@@ -405,14 +396,10 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
     handleReschedule(task, over.id);
   }
 
-  const filteredTasks = filterTasksByAssignment(
-    tasks.filter((task) =>
-      (selectedCategory === 'All' || matchesCategory(task, selectedCategory)) &&
-      (selectedPriority === 'All' || task.priority === selectedPriority)
-    ),
-    selectedAssignment,
-    myId
-  );
+  // Category, priority and assignment in one call. The chain used to be
+  // written out here, and it had drifted from Browse's copy over what a task
+  // with no priority counts as. See utils/taskFilters.js.
+  const filteredTasks = apply(tasks);
 
   const tasksByDate = filteredTasks.reduce((acc, task) => {
     if (!task.due_date) return acc;
@@ -482,19 +469,12 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
           </div>
         </div>
 
-        <FilterBar
-          category={selectedCategory}
-          onCategoryChange={setSelectedCategory}
-          priority={selectedPriority}
-          onPriorityChange={setSelectedPriority}
-          assignment={selectedAssignment}
-          onAssignmentChange={setSelectedAssignment}
-          t={t}
-        />
+        <FilterBar />
 
         {viewMode === 'list' && (
           <UpcomingList
             tasks={filteredTasks}
+            unfilteredTasks={tasks}
             expandedTaskId={expandedTaskId}
             onToggleExpand={onToggleExpand}
             onTaskUpdate={onTaskUpdate}
