@@ -1,6 +1,17 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: the two AI-snapshot columns become NOT NULL, and a tripwire test guards the reason
+`ai_suggested_category` / `ai_suggested_priority` are a frozen record of what the AI actually said at creation. `_supabase_row_to_task` has refused to build a TaskRecord without them since 2026-08; the TABLE always allowed NULL, because a Postgres CHECK passes on NULL — it tests values, and NULL is not one. So the only guard was the discipline of the code.
+
+**Sharing changed the consequence, not the code.** Before 2026-09-11 one bad row broke ONE list, its author's. Now every member of the workspace reads that row, so one bad row breaks the list for the whole team — and it is a delayed failure: the write succeeds quietly and the breakage surfaces later, on somebody else's phone, in a screen unrelated to whatever wrote it.
+
+`docs/migrations/2026-09-12-lock-ai-snapshot-columns.sql` makes the database refuse it instead. **The cost is stated rather than hidden**: a future path that forgets these columns has its INSERT rejected and its feature simply does not work — the same shape as the `category_name` incident of 2026-09-01, which took down all four task-creation paths at once.
+
+The owner accepted the trade and immediately named its weakness: «ναι αλλα να ξερουμε οτι εχουμε κανει αυτο το πραγμα γτ μετα αν γραψουμε κωδικα που γραφει και δεν το ξερει κανενας...». A comment in a migration nobody opens is not an answer. `tests/test_task_insert_paths.py` is: it fails on a developer's machine the moment a THIRD way to create a task appears, names the file and the function, and says what the new path must write. It was proven to trip — by adding a careless insert and watching it go red — before it shipped. Its limit is honest too: it reads the source for one exact spelling, so a write through a variable, an ORM, or the Supabase console is not caught.
+
+Preconditions verified read-only against live data on 2026-09-12: **398 tasks, 0 null in either column.** The ALTER refuses rather than damages if that ever stops being true, which is why the migration counts first.
+
 ### Decision: Supabase over Airtable — for real multi-user + RLS
 Migrated fully to Supabase (PostgreSQL) to get per-user rows, RLS, indexes, foreign keys, and real auth. Supersedes the original Airtable backend (that decision is archived). Airtable kept read-only as a legacy backup.
 
