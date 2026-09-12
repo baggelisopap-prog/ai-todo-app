@@ -1,6 +1,24 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: the filters are shared across screens, visible while on, and NOT remembered after a restart
+The owner named two complaints and they turned out to be one problem: «χάνομαι — δεν βλέπω τι φίλτρο τρέχει και δεν έχω κουμπί να τα σβήσω όλα» and «δεν θυμούνται — αλλάζω οθόνη και ξαναρχίζουν». Three filters in three `useState`s per screen is what produced the second; a filter whose only record lives inside the menu that set it is what produced the first.
+
+**Two options were real.** Remember them FOREVER (localStorage, or `app_settings` like the workspace) or remember them only while the app is open. Forever is what he literally asked for, and it was rejected with the reason stated to him: a P1 left on from Tuesday is work hidden on Thursday — which is complaint #1 coming back through the side door, on a screen that says «Τίποτα για σήμερα 🎉» while the work is there. So: shared across screens (the failure he actually hit), dropped on restart, and **always visible while on** — persistence is only safe because the chip row makes it visible, and the chip row is what makes the short memory sufficient. He was told it is a one-line change if he wants it longer.
+
+**The workspace keeps its own rule** and that asymmetry is deliberate: it is in `app_settings`, so the phone and the laptop agree about which room you are in. A room is where you work; a filter is a question you asked once.
+
+**The load-bearing rule is that a filter must never apply while the control that set it is off screen**, and it is why `resolveFilters` exists rather than being plumbing. Two live consequences: a category id belongs to ONE workspace, so filtering by κήπος and switching to Γραφείο gave an empty list and a blank control with no cause on screen; and «Δικά μου» hides its control on a solo workspace while the value it set kept filtering. The answer is that the STORED value and the value IN FORCE are different things — the category is stored **per workspace**, which makes the stale id unrepresentable instead of cleaned up afterwards, and gives back the filter when you return to that room. Derived with `useMemo`; copying it into state inside an effect is the cascading-render pattern this project's lint rule already flags twelve times.
+
+**Rejected: clearing the category on every workspace switch.** Simpler, and it throws away a choice the user made for a reason, every time they glance at another room.
+
+### Decision: the workspace switcher's shape is a function of how many workspaces there are
+A row of chips was the owner's own choice — one tap, current position always visible, ~40px on every screen. It stays the default. But "always visible" is only true while they FIT: past five the row scrolls sideways and the selected chip can sit off the right edge, so the one control whose whole job is showing where you are starts hiding it.
+
+He refused to have this tuned to his own account: «αναλογα με τον αριθμο να γινεται γτ δεν ξερω ο καθε χρηστης ποσα θα εχει». So it is `switcherShape()` in `utils/taskFilters.js`, a tested rule with the thresholds written down and the arithmetic behind them in the comment: under two → nothing at all (a control that cannot do anything, still costing height on every screen of every user who never organises); two to five → chips, plus `scrollIntoView` on the selected one, because the active workspace is restored from `app_settings` and the app can open already filtered by a chip nobody can see; six and up → one menu; past eight options → a find box, folding Greek accents through the same `foldForSearch` the task search uses.
+
+**Rejected: one hierarchical «Ακίνητα › Κήπος» picker replacing both the chips and the category menu.** It is the better answer to «φίλτρο μέσα στο φίλτρο» and it reverses a decision he made deliberately, so it was not smuggled in as part of an approved slice — it is the open question of slice 3, to be discussed rather than proposed finished.
+
 ### Decision: the two AI-snapshot columns become NOT NULL, and a tripwire test guards the reason
 `ai_suggested_category` / `ai_suggested_priority` are a frozen record of what the AI actually said at creation. `_supabase_row_to_task` has refused to build a TaskRecord without them since 2026-08; the TABLE always allowed NULL, because a Postgres CHECK passes on NULL — it tests values, and NULL is not one. So the only guard was the discipline of the code.
 

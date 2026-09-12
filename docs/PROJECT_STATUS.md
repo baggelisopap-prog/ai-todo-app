@@ -10,6 +10,30 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **The filters remember, and the screen says what they hide (2026-09-12).** Category,
+  priority and «Δικά μου» used to live in three `useState`s per screen, so walking from
+  Today to the Calendar started over while the workspace chip came along — and the only
+  record of an active filter was inside the menu that set it, so a forgotten P1 produced
+  «Τίποτα για σήμερα 🎉» over a day that had work in it. One shared copy now, a row of
+  removable chips that exists only while something is filtered, and «Κρυμμένες από τα
+  φίλτρα: 12» with a clear button wherever a list is empty because of a filter. A live bug
+  went with it: a category id belongs to ONE workspace, so filtering by κήπος and switching
+  room left the id in place — empty list, blank control, no cause on screen. The stored
+  value and the value in force are now different things, the category stored per workspace,
+  so that state is unrepresentable rather than patched.
+
+  The switcher's shape follows the number of workspaces (a tested rule, not a layout tuned
+  to the owner's two): chips up to five with the selected one scrolled into view, one menu
+  from six, a find box past eight options. Three behaviour changes ride along — a task with
+  no priority counts as P3 the way its own row already printed it, «Δικά μου» finally
+  applies in Browse, and the category menu at rest names the axis instead of saying «Όλα».
+
+  **NOT SEEN BY ANYONE IN A BROWSER.** 65 pure-function checks, `npm run check` exit 0
+  (`85 files, 49 tokens, 483 translation keys`), lint at its 12-problem baseline, `vite
+  build` clean — none of which is a person looking at the chip row. The find box is the
+  least proven part: it needs 8+ categories or 6+ workspaces and no account is that big.
+  `CURRENT_TASK.md` carries the table of what would settle each one. Reasoning in
+  DECISIONS.md.
 - **Two people really share a workspace (2026-09-11 → 12).** Invite by link, a members
   panel with faces, the assignee on task rows, an «Όλα / Δικά μου / Αδιάθετα» filter,
   archiving with a way back, and an activity screen for the log that was already being
