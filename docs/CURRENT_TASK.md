@@ -39,6 +39,10 @@ workspaces spec deliberately refused to design before the container existed.
    to one question, and it turned workspace deletion into archiving — a change to how the
    app behaves TODAY, not only under sharing.
 
+> **READ THE LAST SECTION FIRST — "HANDOVER, 2026-09-12".** Everything between
+> here and there is history in the order it happened. What is live, what is
+> untested and the one thing waiting on the owner's hands are all at the bottom.
+
 ## Where this stands
 
 **MIGRATION APPLIED AND PUSHED, 2026-09-11.** `f860456..a60d9bd`, 21 commits. Vercel and
@@ -744,3 +748,92 @@ and 2 of the activity-log tests go red without the change.
 - **A Hostaway task assigned to her**, which is the escalation loop above — and the way to
   see it is that her phone does NOT buzz every two minutes.
 - **The activity screen**, which should stop growing a row per save.
+
+
+---
+
+# HANDOVER, 2026-09-12
+
+_Written because the owner had to stop: «δεν μπορω να δοκιμασω τωρα ειμαι μονος». Nothing
+below can be checked by one person on one account, which is exactly why it is written down
+rather than remembered._
+
+## Live right now
+
+Seven pushes, `f860456..64c806e`. Vercel and Render deploy themselves from `main`.
+
+| | State |
+|---|---|
+| Sharing: invite, join, members, archive, activity log | live, **and a second person really joined** |
+| Assignee badge on rows, «Όλα / Δικά μου / Αδιάθετα» | live, **never seen by anyone** — renders nothing on a solo account by design |
+| Task sheet: icon rows, press-and-hold labels, pills | live, **confirmed by the owner on his phone** |
+| Agent on one line | live, **confirmed** |
+| Member-can-write fixes + the six latent bugs | live, **none verified by a person** |
+| Read-retry on 5xx, «Ο διακομιστής ξυπνάει…» | live, unverified |
+| Activity log stops inventing assignments | live, unverified |
+
+## THE ONE THING WAITING ON THE OWNER'S HANDS
+
+`docs/migrations/2026-09-12-lock-ai-snapshot-columns.sql`, in the Supabase SQL Editor.
+
+**Not urgent, and nothing is broken without it.** It locks a door that is currently
+unlocked: `ai_suggested_category` / `ai_suggested_priority` are required by the code and
+still nullable in the table, because a Postgres CHECK passes on NULL. Three steps, in the
+file: count (both must read 0 — measured 398 tasks, 0 null on 2026-09-12), uncomment the
+two ALTERs, uncomment the confirmation. If the count is ever non-zero, STOP — the ALTER
+refuses rather than damages, and those rows need deciding about first.
+
+The reason it is safe to leave undone: `tests/test_task_insert_paths.py` already fails on a
+developer's machine if a third task-creation path appears. The lock is a second net under
+the first.
+
+## WHAT NOBODY HAS SEEN, AND IT NEEDS EVI
+
+**None of this can be checked alone.** The assignee badge and the «Δικά μου» filter draw
+nothing at all on a solo account — opening the app by yourself proves only that they do not
+crash.
+
+Hand Evi a task, then have HER try, in this order — the first is the reported bug and the
+next four were broken by the same cause and had never been hit:
+
+1. **Close it.** The bug she found. Everything else is a bonus.
+2. **Rename it.**
+3. **Change its date** — then check the reminder actually fires. This one failed SILENTLY:
+   the flag that re-arms a reminder was never cleared, so the task simply stayed quiet.
+4. **Change its category.** It used to refuse with the wrong reason.
+5. **Re-assign it back to him.** It used to refuse with «this task has no workspace», about
+   a task that has one.
+6. **Ask the agent, from her account, about one of his tasks.** It used to answer «Task not
+   found» for a task it was showing her in the list.
+
+Then the three that are his to watch:
+
+- **A Hostaway task assigned to her.** The worst of the latent bugs: her tick processes it,
+  and before the fix the "answered" stamp was never written, so **the escalation re-sent
+  every two minutes forever on her phone.** The way to see it is that her phone does NOT
+  buzz repeatedly.
+- **«Δικά μου» against the agent.** Ask «τι έχω σήμερα» and count the list beside it. They
+  must agree — they share one definition on purpose, and two answers would mean the screen
+  and the agent disagree about whose work it is.
+- **The activity screen.** It should stop growing a row per save.
+
+## The pattern behind all seven bugs, worth keeping
+
+Sharing split one question into two: **"may I change this?"** and **"is it mine?"**.
+`access.py` answers the first. Everywhere the code still asked the second while meaning the
+first, something broke — and five of the seven broke **silently**. If a member ever
+"cannot" do something, or something quietly does not happen for them, that is the first
+suspicion, and `repository.scope_to_visible` is the shape of the answer.
+
+## Where the numbers stood at the close
+
+```
+505 passed in 4.79s                                    (backend)
+ui-check: OK — 81 files, 49 tokens, 477 translation keys
+✖ 12 problems (12 errors, 0 warnings)                  (lint baseline, unchanged)
+✓ built in 455ms                                       (vite build)
+```
+
+Design mockups he approved along the way, still readable:
+the task sheet — claude.ai/code/artifact/8785d076-bf46-496f-9d52-e97cb682567c
+the agent's three options — claude.ai/code/artifact/1378a12f-1fb2-4191-894d-f75558ac53ab

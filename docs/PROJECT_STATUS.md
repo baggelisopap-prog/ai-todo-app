@@ -9,6 +9,27 @@ _Earlier still: 2026-08-04 (conversation memory repointed from the dropped `agen
 AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categorizes and prioritizes them with Gemini, sends push reminders, syncs two-way with Google Calendar, has an AI agent that answers questions about your tasks AND can propose task changes (complete/update/create) via confirmation cards — see below. Backs a real Airbnb/Hostaway short-let business (Hostaway guest messages become tasks automatically). Multi-user and production-deployed.
 
 ## Shipped and live ✅
+
+- **Two people really share a workspace (2026-09-11 → 12).** Invite by link, a members
+  panel with faces, the assignee on task rows, an «Όλα / Δικά μου / Αδιάθετα» filter,
+  archiving with a way back, and an activity screen for the log that was already being
+  written. Alongside it the task sheet was rebuilt as four icon rows instead of nine
+  captioned boxes, and the AI helper folded from half a screen into one line.
+
+  **A second real account joined on 2026-09-12 and immediately found the feature was half
+  built**: a member could see everything in a shared room and change nothing in it.
+  `access.py` was deciding correctly — yes, she is a member — while the queries underneath
+  still asked the older question, "is this mine", and matched zero rows. Fixed in one place
+  (`repository.scope_to_visible`), together with six more of the same shape found by audit.
+  Five of those were SILENT; the worst would have re-sent a Hostaway escalation every two
+  minutes forever on the assignee's phone. Reads also retry themselves now, because the
+  free-tier backend sleeps and her first morning with the app was three red 503s.
+
+  **NOT VERIFIED BY A PERSON: everything that needs two accounts.** The assignee badge and
+  the filter render nothing at all on a solo account, by design, so opening the app alone
+  proves only that nothing crashes. `docs/CURRENT_TASK.md` → section "HANDOVER, 2026-09-12"
+  carries the exact list to run with the colleague present, and the one migration still
+  waiting to be run by hand. Reasoning in `DECISIONS.md`.
 - **The docs are asked for automatically after every push (2026-09-05)**: not app code — how this project is worked on. `.claude/skills/update-docs/SKILL.md` holds HOW the docs get written (which file gets what, correct-a-lying-doc out loud, write down what is NOT verified) and `.claude/hooks/docs-after-push.mjs` decides WHEN: a PostToolUse hook that fires after a push lands and, if any commit since the last docs commit touched something outside `docs/`, injects the instruction to write them now. A reminder rather than a gate, at the owner's explicit choice. Silent when the push failed, when the command was not a push, and when everything since the last docs commit is docs-only — that last rule is what keeps it from looping. Does NOT see pushes the owner types in his own terminal. All three branches tested with synthetic payloads, and the firing itself proven with a sentinel. See DECISIONS.md.
 - **An added task lands in the Inbox, and says which one it is (2026-09-05)**: adding through the + — typed, dictated or photographed — now switches to the Inbox, and the new cards take an amber ring that pulses three times and then stops, the ring staying until that card is opened or twelve seconds pass. Both halves answer one complaint: everything the + makes is born pending, and the Inbox is the only screen that lists pending tasks, so an add from Calendar or Today used to be invisible — a toast, a badge, nothing on screen — and then indistinguishable from the cards around it. Frontend only: five components pass one prop each, and `index.css` gains two tokens (in both palettes), a keyframe, and a reduced-motion rule that keeps the ring and drops the movement. `npm run check` exit 0 (`49 tokens`, up from 47), lint at its 12-problem baseline, build clean, and the class/keyframes/tokens read back out of the built CSS. **Deliberately not tested end to end in the running app — every add through the + is a paid Gemini call on the owner's account.** The animation itself was watched in a browser on a throwaway preview page, which is how the owner picked its strength. See DECISIONS.md.
 - **A desktop/tablet shell (2026-09-05)**: from 1024px up the four bottom tabs become a left sidebar — add-task button, the same four tabs, the workspaces (the chip row moves in, giving ~40px of height back to every screen), and the account at the foot. The top bar keeps the screen title and the agent button and drops its avatar. Calendar is the one screen that widens (`lg:max-w-none`); lists keep their 768px reading column because that is already the right measure. **The four view components were not edited** — this is a shell, so every control calls the handler its phone counterpart already called. One instance of the navigation exists at a time (a `useMediaQuery` branch, not CSS hiding), because the add-task control mounts a microphone and two file pickers. Below 1024px nothing changed at all. Run locally and confirmed working by the owner; the session's backend log shows every endpoint 200 and zero errors. **Not exercised: dictation and photo capture from the desktop button.** See DECISIONS.md.
