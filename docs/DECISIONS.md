@@ -1,6 +1,32 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: the workspace is a FILTER, not an address — every launch starts on «Όλα»
+**This reverses a decision the owner made on 2026-09-01 and confirmed on 2026-09-11**, and it is his: «να ειναι by default παντα στο ολα και να κανεις επιλογη αν και μονο θελεις να δεις μονο ενα χωρο αλλα μετα να μην μενει ετσι να γινεται δλδ μονο φιλτρο ουσιαστικα ο χωρος».
+
+**What we did first, and why it was reasonable.** The active workspace was persisted through `app_settings.active_workspace_id` — server-side, not localStorage, deliberately — so that switching to Business on the phone was still Business on the laptop. The workspace was modelled as WHERE YOU LIVE, and a home you have to re-choose on every device is an annoyance.
+
+**Why it was wrong.** It made the workspace the one control in the app with a different memory rule from every other filter, and the owner could not tell which was which without trying — which is the complaint that started this whole piece of work («δεν θυμούνται»). Worse in the direction nobody had noticed: a remembered room is a filter you did not switch on today, hiding work from a screen that does not say it is hiding anything. Exactly the failure the chip row was built to end, one level up.
+
+**So there is now ONE RULE for all four filters**: they live while the app is open, every launch starts clean, everything in force is visible, and one button clears the lot — the room included, because a control saying «Καθάρισε τα φίλτρα» cannot leave one running. That last part is the owner's too.
+
+**The cost, stated to him before it shipped and accepted:** adding a task while on «Όλα» — now almost every add — sends it to `default_workspace_id` rather than to the room you happened to be standing in. That path already existed (`services.resolve_extraction_workspace`), so the extractor is still scoped to ONE workspace's category names and is never asked to guess across several; but the destination is now a setting rather than a place, and his reads **Business**. He was told to check it and chose to leave every name as it is.
+
+**Also a consequence, and it is not small:** the category filter only exists inside a room, so with «Όλα» as the permanent default, **filtering by category now takes two steps** (pick the room, then the category). That is what pushes the grouped «Business › Hostaway» picker in BACKLOG.md from "nice" to "the next real question" — see that entry.
+
+`app_settings.active_workspace_id` is left in the database, written by nobody and read by nobody, exactly like `tasks.category`. Dropping a column cannot be undone and it costs nothing where it sits. `default_workspace_id` is a different setting and stays live.
+
+### Decision: the workspace's colour appears as a FRAME, never as a fill
+The owner asked for the colour and left the treatment to me: «οταν επιλεγη εναν χωρο να εχει και σαν περιγραμμα δημιουργικα και εξυπνα το χρωμα του χωρου καπου». Two devices, one fact — on «Όλα» the app bar's title is plain text; inside a room it becomes a pill framed in that room's colour with its dot inside, and the 1px grey hairline under the bar becomes 2px of the same colour.
+
+**The SHAPE carries the meaning and the colour only identifies which room.** That order is the accessibility rule this app already follows for its selection ticks: the state has to be readable by someone who cannot tell two shades apart. And a frame rather than a fill because a filled colour bar reads as IDENTITY ("this is the Business app") while a frame reads as a state you are in and can leave — which is precisely what a workspace became in the entry above.
+
+The hairline is the half worth keeping: it costs **no height at all** (the border already existed) and, because the bar is sticky, it keeps reporting "you are looking at one room" while a long list scrolls under it.
+
+**The guard is the engineering, not the decoration.** The colour is USER DATA — any hex, or none — and pale yellow on white is invisible, as is navy on the dark theme. `.ws-frame` in `index.css` mixes 28% of `--text-primary` into it, so one declaration covers both themes because that token flips. **Real data proved the second branch was needed**: his «My App» workspace has no colour at all, so `--ws-color` defaults to a neutral border token in both palettes and there is no "no colour" case to special-case. Lightning CSS emits a plain `var()` fallback ahead of the `color-mix`, verified in the built CSS, so a browser too old for it gets the raw colour rather than nothing.
+
+**Rejected: tinting the + button with the room's colour.** It would have said "what you add lands here", which is a real question now that the destination is a setting — but red is this app's primary-action colour and recolouring it per room breaks that identity for every pale hue. The answer belongs in words, as a line in the add sheet, not in the button's paint.
+
 ### Decision: the filters are shared across screens, visible while on, and NOT remembered after a restart
 The owner named two complaints and they turned out to be one problem: «χάνομαι — δεν βλέπω τι φίλτρο τρέχει και δεν έχω κουμπί να τα σβήσω όλα» and «δεν θυμούνται — αλλάζω οθόνη και ξαναρχίζουν». Three filters in three `useState`s per screen is what produced the second; a filter whose only record lives inside the menu that set it is what produced the first.
 
@@ -11,13 +37,6 @@ The owner named two complaints and they turned out to be one problem: «χάνο
 **The load-bearing rule is that a filter must never apply while the control that set it is off screen**, and it is why `resolveFilters` exists rather than being plumbing. Two live consequences: a category id belongs to ONE workspace, so filtering by κήπος and switching to Γραφείο gave an empty list and a blank control with no cause on screen; and «Δικά μου» hides its control on a solo workspace while the value it set kept filtering. The answer is that the STORED value and the value IN FORCE are different things — the category is stored **per workspace**, which makes the stale id unrepresentable instead of cleaned up afterwards, and gives back the filter when you return to that room. Derived with `useMemo`; copying it into state inside an effect is the cascading-render pattern this project's lint rule already flags twelve times.
 
 **Rejected: clearing the category on every workspace switch.** Simpler, and it throws away a choice the user made for a reason, every time they glance at another room.
-
-### Decision: the workspace switcher's shape is a function of how many workspaces there are
-A row of chips was the owner's own choice — one tap, current position always visible, ~40px on every screen. It stays the default. But "always visible" is only true while they FIT: past five the row scrolls sideways and the selected chip can sit off the right edge, so the one control whose whole job is showing where you are starts hiding it.
-
-He refused to have this tuned to his own account: «αναλογα με τον αριθμο να γινεται γτ δεν ξερω ο καθε χρηστης ποσα θα εχει». So it is `switcherShape()` in `utils/taskFilters.js`, a tested rule with the thresholds written down and the arithmetic behind them in the comment: under two → nothing at all (a control that cannot do anything, still costing height on every screen of every user who never organises); two to five → chips, plus `scrollIntoView` on the selected one, because the active workspace is restored from `app_settings` and the app can open already filtered by a chip nobody can see; six and up → one menu; past eight options → a find box, folding Greek accents through the same `foldForSearch` the task search uses.
-
-**Rejected: one hierarchical «Ακίνητα › Κήπος» picker replacing both the chips and the category menu.** It is the better answer to «φίλτρο μέσα στο φίλτρο» and it reverses a decision he made deliberately, so it was not smuggled in as part of an approved slice — it is the open question of slice 3, to be discussed rather than proposed finished.
 
 ### Decision: the two AI-snapshot columns become NOT NULL, and a tripwire test guards the reason
 `ai_suggested_category` / `ai_suggested_priority` are a frozen record of what the AI actually said at creation. `_supabase_row_to_task` has refused to build a TaskRecord without them since 2026-08; the TABLE always allowed NULL, because a Postgres CHECK passes on NULL — it tests values, and NULL is not one. So the only guard was the discipline of the code.

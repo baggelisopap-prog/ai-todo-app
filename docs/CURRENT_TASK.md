@@ -155,15 +155,120 @@ the key itself and the build stays green. That is not the same as seeing it.
 | The auto-scroll to the selected chip | Needs 4-5 workspaces so the row actually overflows |
 | Greek accent folding in the find box | Type «κηπος» without the accent and see «Κήπος» |
 
+## Slice 3 — the room becomes a filter, and the top of the screen changes shape
+
+Live: `e4abf4f`, pushed 2026-09-12. Slices 1-2 were `e8cb35a`.
+
+### What was asked, and the two decisions were his
+
+He looked at what slices 1-2 had shipped and said what was wrong with it:
+
+> «ρε τα μαζεωες παρα πολυ κολλητα χωρις αποστασεις και δεν φαινονται καλα. δεν μου αρέσει
+> που ειναι έτσι εκει πάνω τα φιλτρ για τουε χωρους κανε 2 3 προτυπα με διαφορες ιδεες σε
+> html και να διαλεξω»
+
+Two separate complaints in one sentence — the SPACING (4px between pills, 26px of pill
+height: mine, and he was right) and the PLACE of the workspace controls. He asked for
+mockups rather than a proposal in prose, so three shapes were built as one page:
+claude.ai/code/artifact/3b3f20c3-e070-4336-bbdd-cc29edb1ee05 — the current top bar for
+comparison, plus Α (the room becomes the title), Β (one calm row) and Γ (a drawer), each
+labelled with how many pixels it costs before the first task.
+
+He chose **Α**, and then made the bigger decision himself:
+
+> «σκεφτομαι να ειναι by default παντα στο ολα και να κανεις επιλογη αν και μονο θελεις να
+> δεις μονο ενα χωρο αλλα μετά να μην μενει ετσι να γινεται δλδ μονο φιλτρο ουσιαστικα ο
+> χωρος. επισης οταν επιλεγη εναν χωρο να εχει και σαν περιγραμμα δημιουργικα και εξυπνα
+> το χρωμα του χωρου καπου· για το δευτερο κομματι σκεψου το εσυ σαν ειδικος»
+
+So: **the workspace stops being an address and becomes a filter** — it reverses his own
+earlier decision that it be remembered across devices, and DECISIONS.md carries both halves.
+The colour treatment he delegated; its reasoning is its own entry there.
+
+Asked whether he wanted the default workspace changed, he answered: «οχι ρε εσυ το ειπες μην
+αλλαζεις ονοματα απο χωρους συνεχισε μονο με τον κωδικα». **Nothing was renamed and no
+setting was written.**
+
+### The real account, read read-only before touching anything
+
+There is **no workspace called «Ακίνητα»** — that name was invented for the mockup, and it
+was nearly written into his live settings on the strength of it. What exists:
+
+| Room | Colour | Tasks | Categories |
+|---|---|---|---|
+| Business | `#2563eb` | 212 | Hostaway *(locked)* |
+| Personal | `#16a34a` | 75 | none — **and this is the room shared with Evi** |
+| My App | **none** | 2 | Bugs, New Futures, Βελτιώσεις |
+| *unfiled* | — | 65 | — |
+
+Two findings that changed the work: **My App has no colour at all**, which is why the colour
+guard needs no "no colour" branch (the token's neutral default takes over), and the shared
+room is **Personal**, not Business — so the handover checklist at the bottom of this file is
+about Personal.
+
+### What shipped
+
+- **`app_settings.active_workspace_id` is no longer read or written.** The room lives in
+  React state and every launch starts on «Όλα». The column stays in the database, like
+  `tasks.category`. `default_workspace_id` is a different setting and stays live.
+- **`WorkspaceBar.jsx` is deleted**, and with it `switcherShape()` and its six checks —
+  shipped that same morning. They chose between chips and a menu for a row that no longer
+  exists. `needsFind()` survived. The superseded reasoning is in DECISIONS_ARCHIVE.md.
+- **`RoomTitle.jsx`** is the app bar's title on a phone: plain text on «Όλα», a pill framed
+  in the room's colour otherwise, opening `OptionSheet` with a dot and a live count per
+  room. `OptionSheet` gained `swatch`, `hint` and `searchable` rather than a second sheet
+  being written.
+- **`FilterSheet.jsx`** holds all three filters as visible pills — no dropdown inside a
+  menu — at 44px rows with real section labels. **`FilterBar.jsx` is now one 36px line**: a
+  «Φίλτρα» button with a count, and the active pills at 8px apart and 32px tall.
+- **Browse gave up its own category and priority controls** and uses the same button. It
+  keeps sort, and on History what kind and how far back.
+- **`countByWorkspace`** in `utils/workspaces.js`, three checks, for the count in the picker.
+- **`categoryOptions()` / `priorityOptions()` and their five checks are gone**: they built
+  glued labels ("Κήπος (7)") for dropdowns that no longer exist.
+- **`--ws-color` + `.ws-frame` / `.ws-dot` / `.ws-rule`** in `index.css`, in both palettes.
+
+**Before the first task on a phone: ~205px, now ~100px.**
+
+### Baselines, as the commands printed them
+
+```
+node scripts/task-filters.test.mjs   49 PASS, 0 FAIL
+node scripts/workspaces.test.mjs     all passed (3 new)
+npm run check                        ui-check: OK — 86 files, 50 tokens, 486 translation keys   (exit 0)
+npm run lint                         ✖ 12 problems — unchanged baseline
+npm run build                        ✓ built in 434ms
+pytest tests/ -q                     505 passed in 5.14s   (untouched; frontend only)
+```
+
+One extra check worth repeating by hand: `grep -o "\.ws-frame{[^}]*}" dist/assets/*.css`
+prints the rule **twice**, once as a plain `var()` and once as the `color-mix`. Lightning
+CSS adds that fallback itself, so a browser too old for `color-mix` gets the raw colour
+rather than no border at all.
+
+### What nobody has watched, and what would settle it
+
+| Not watched | What would settle it |
+|---|---|
+| The room pill and its coloured frame | Pick Business from the title; the pill should frame in blue and the hairline under the bar go blue |
+| The colourless room | Pick «My App»: the frame must still appear, in neutral grey, and the dot be a hollow ring |
+| «Όλα» sitting in the title slot all day | Use it for a day. If the screen's name is missed, it becomes a small line above the room — 5 lines of change |
+| The filter sheet's spacing, which is the whole point of this slice | Open «Φίλτρα» and try to hit a pill with a thumb |
+| That a launch really starts clean | Pick a room, close the app completely, reopen: it must read «Όλα» |
+| «Καθάρισε τα φίλτρα» returning to «Όλα» | Set a room + a priority, then clear |
+| Where a new task lands now | Add one from «Όλα» and check it appears under Business |
+| The find box in the room picker | Needs 8+ rooms. He has 3 — **still the least proven part of the day** |
+
 ## Still open, deliberately
 
-- **Slice 3 — the pickers behind one «Φίλτρα» button** (~60px back on every screen). Not
-  built, because it **reverses a decision he made himself**: the chip row is a row precisely
-  so the current position is always visible. He asked to brainstorm it rather than have it
-  proposed as a finished thing.
-- **The category control still disappears on «Όλα».** Left alone on purpose in slices 1-2:
-  fixing it properly means a cross-workspace, grouped «Ακίνητα › Κήπος» picker, which is
-  slice 3's territory. Today the coarse filtering is done by the chips instead. See BACKLOG.
+- **The grouped «Business › Hostaway» picker.** Promoted in BACKLOG.md the same day: with
+  «Όλα» as the permanent default, the category filter is unavailable until you pick a room,
+  so filtering by category costs two steps. It no longer reverses anything — the chip row it
+  would have replaced is gone — but it still needs an answer to "what does a cross-workspace
+  category list do when two rooms have a category with the same name?".
+- **«Θα μπει στα: Business» in the add sheet.** Promised in conversation, not built, kept
+  out on purpose so this slice stayed one thing. It matters more than it did: the
+  destination of a new task is now a setting rather than the room you are standing in.
 
 ---
 ---

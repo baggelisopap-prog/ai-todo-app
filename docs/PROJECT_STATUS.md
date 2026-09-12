@@ -10,6 +10,40 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **The workspace became a filter, and the top of the screen got its room back (2026-09-12).**
+  The owner's decision, reversing his own: the active workspace is no longer remembered at
+  all — every launch starts on «Όλα», and choosing a room is a temporary narrowing like any
+  other filter. «μονο φιλτρο ουσιαστικα ο χωρος». That is what made ONE memory rule cover
+  all four filters, which was the question this day's work started from. «Καθάρισε τα
+  φίλτρα» now returns you to «Όλα» too, because a button promising to clear the filters
+  cannot leave one running.
+
+  The chip row under the app bar is **deleted**: on a phone the bar's title IS the room
+  picker, chosen by the owner from three mockups. Inside a room the title becomes a pill
+  framed in that room's colour and the hairline under the bar becomes 2px of it — a frame
+  rather than a fill, because a fill reads as identity and a frame reads as a state you can
+  leave. The shape carries the meaning and the colour only says which room, so it still
+  reads for someone who cannot tell two shades apart. Any hex works: the frame mixes 28% of
+  the text colour in, which his own colourless «My App» workspace proved was needed.
+
+  The three filters moved off the screen into a sheet with room in it — 44px rows, every
+  option a visible pill with its count beside it — leaving one 36px line above the list: a
+  «Φίλτρα» button with a count, and a pill per active filter at 8px apart and 32px tall
+  (from 4px and 26px, which the owner rightly called unusable). **Before the first task on
+  a phone: ~205px, now ~100px.**
+
+  **Two consequences worth knowing.** Adding a task while on «Όλα» — now almost every add —
+  files it under `default_workspace_id` (his reads **Business**) rather than the room you
+  were standing in; the extractor is still scoped to one workspace's categories and never
+  guesses across several. And because categories only exist inside a room, filtering by
+  category now takes two steps, which is what promotes the grouped «Business › Hostaway»
+  picker in BACKLOG.md to the next real question.
+
+  **NOT SEEN BY ANYONE IN A BROWSER.** `npm run check` exit 0 (`86 files, 50 tokens, 486
+  translation keys`), 49 filter checks, lint at its 12-problem baseline, build clean, and
+  the colour class plus its fallback read back out of the built CSS — none of which is a
+  person looking at the room pill. Reasoning in DECISIONS.md; the superseded shape rule is
+  in DECISIONS_ARCHIVE.md.
 - **The filters remember, and the screen says what they hide (2026-09-12).** Category,
   priority and «Δικά μου» used to live in three `useState`s per screen, so walking from
   Today to the Calendar started over while the workspace chip came along — and the only
@@ -22,11 +56,13 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   value and the value in force are now different things, the category stored per workspace,
   so that state is unrepresentable rather than patched.
 
-  The switcher's shape follows the number of workspaces (a tested rule, not a layout tuned
-  to the owner's two): chips up to five with the selected one scrolled into view, one menu
-  from six, a find box past eight options. Three behaviour changes ride along — a task with
-  no priority counts as P3 the way its own row already printed it, «Δικά μου» finally
-  applies in Browse, and the category menu at rest names the axis instead of saying «Όλα».
+  ~~The switcher's shape follows the number of workspaces: chips up to five, one menu from
+  six.~~ **CORRECTED the same day** — that rule was deleted hours later when the room moved
+  into the app bar (bullet above). There is no chip row any more, so there is no shape to
+  choose; the find box past eight options survived. Three behaviour changes do still ride
+  along — a task with no priority counts as P3 the way its own row already printed it,
+  «Δικά μου» finally applies in Browse, and the category control at rest names the axis
+  instead of saying «Όλα».
 
   **NOT SEEN BY ANYONE IN A BROWSER.** 65 pure-function checks, `npm run check` exit 0
   (`85 files, 49 tokens, 483 translation keys`), lint at its 12-problem baseline, `vite
