@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useConfirm } from '../hooks/useConfirm';
+import { useMediaQuery, DESKTOP_QUERY } from '../hooks/useMediaQuery';
 import {
   isNotificationSupported,
   getNotificationPermission,
@@ -64,12 +65,25 @@ function getInitials(displayName, email) {
 const SCREENS = {
   profile: 'settings.my_profile',
   notifications: 'settings.notifications',
+  appearance: 'settings.appearance_language',
   recurrences: 'recurrence.title',
   workspaces: 'workspace.manage',
   calendar: 'settings.calendar',
   hostaway: 'hostaway.title',
   developer: 'settings.developer',
 };
+
+// The left column on a wide screen, grouped. The groups are not decoration:
+// they separate what is TRUE OF YOU (your name, your phone, your language)
+// from what is true of the WORK (rooms, repeats) and from the outside services
+// the app talks to. On a phone this grouping is carried by three separate
+// cards; here it is carried by three headings, because a nav column has the
+// vertical room to name them and a phone list does not.
+const NAV_GROUPS = [
+  { label: 'settings.group_account', items: ['notifications', 'appearance'] },
+  { label: 'settings.group_work', items: ['workspaces', 'recurrences'] },
+  { label: 'settings.group_connections', items: ['calendar', 'hostaway'] },
+];
 
 /**
  * Settings.
@@ -81,23 +95,44 @@ const SCREENS = {
  * Appearance three, About three lines of text.
  *
  * It is now a list of rows that state their own value, with sub-screens for the
- * two sections that have enough content to deserve one. Three deliberate
- * choices inside that:
+ * sections that have enough content to deserve one. Three deliberate choices
+ * inside that:
  *
  * - **Profile is a header, not a row.** It is who you are, not a setting, and
  *   it is the natural partner of the avatar in the app bar that opens this.
- * - **Language and Appearance did NOT get sub-screens.** A whole screen for a
- *   two-option choice is a tap in, a tap to choose and a tap back; the row
- *   already shows the value, so the screen would buy nothing. They open a small
- *   option sheet instead — see OptionSheet.jsx.
+ * - **Language and Appearance did NOT get sub-screens on a phone.** A whole
+ *   screen for a two-option choice is a tap in, a tap to choose and a tap back;
+ *   the row already shows the value, so the screen would buy nothing. They open
+ *   a small option sheet instead — see OptionSheet.jsx.
  * - **About stopped being a section.** A version string is a footer, not a door.
  *
- * Sign out and Delete account are isolated in their own group at the bottom,
- * away from anything you might tap while looking for something else.
+ * Sign out and Delete account are isolated at the bottom, away from anything
+ * you might tap while looking for something else.
+ *
+ * ── TWO SHAPES, ONE SET OF SCREENS ───────────────────────────────────────────
+ *
+ * From 1024px up this stops being a 448px window in the middle of a 1920px
+ * screen and becomes a page: a nav column on the left, the section on the
+ * right, which is what Notion, Slack and Linear all settled on and what the
+ * rest of this app has already done since the SideNav shipped.
+ *
+ * **Only the CHROME branches.** Every section component below is rendered by
+ * one `renderSection()` and does not know which shape it is inside — the
+ * alternative was a second Settings screen, and the phone one would have been
+ * the one that quietly fell behind. The branch is `useMediaQuery`, not CSS
+ * classes, for the same reason App.jsx branches rather than hiding: two trees
+ * rendered and one hidden would mount every section twice.
+ *
+ * The one thing the two shapes genuinely do not share is the root list. A
+ * phone needs it — it is the menu you drill down from. A wide screen has the
+ * nav column permanently on screen, so a root would be a page listing links to
+ * the links already visible beside it. On desktop there is therefore no 'root':
+ * the screen opens on Profile.
  */
 export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }) {
   useModalBehavior(onClose);
   const { t, i18n } = useTranslation();
+  const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
   // 'root', one named screen, and — for workspaces alone — one level below that.
   //
@@ -127,9 +162,20 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
   // every render of this modal.
   const closeWorkspace = useCallback(() => setOpenWorkspaceId(null), []);
 
+  // There is no 'root' on a wide screen, so a window resized from narrow to
+  // wide while sitting on the root list would otherwise render nothing at all.
+  const section = screen === 'root' ? 'profile' : screen;
+
+  function openSection(name) {
+    setOpenWorkspaceId(null);
+    setScreen(name);
+  }
+
   function handleBack() {
-    if (openWorkspaceId) setOpenWorkspaceId(null);
-    else setScreen('root');
+    if (openWorkspaceId) { setOpenWorkspaceId(null); return; }
+    // A wide screen has nowhere to go back TO — the nav is already on screen —
+    // so Back only ever exists there for the workspace level.
+    if (!isDesktop) setScreen('root');
   }
 
   const isOwner = profile?.id === OWNER_USER_ID;
@@ -171,10 +217,202 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
     setPicker(null);
   }
 
+  // The three preference rows, built once and rendered in two places: inside
+  // the phone's root list, and as the «Εμφάνιση & γλώσσα» section a wide screen
+  // needs because it has no root list to put them on. Written twice, they would
+  // drift — and this is exactly the shape that produced the eight accordions.
+  const preferenceRows = (
+    <SettingsGroup>
+      <SettingsRow
+        label={t('settings.language')}
+        value={languageOptions.find(o => o.value === currentLang)?.label}
+        onClick={() => setPicker('language')}
+      />
+      <SettingsRow
+        label={t('settings.appearance')}
+        value={themeOptions.find(o => o.value === theme)?.label}
+        onClick={() => setPicker('appearance')}
+      />
+      <SettingsRow
+        label={t('settings.dictation_language')}
+        value={dictationLabelFor(dictationLang)}
+        onClick={() => setPicker('dictation')}
+      />
+    </SettingsGroup>
+  );
+
+  const signOutGroup = (
+    <SettingsGroup>
+      <SettingsRow
+        label={t('settings.sign_out')}
+        onClick={() => supabase.auth.signOut()}
+        showChevron={false}
+      />
+      <DeleteAccountRow t={t} />
+    </SettingsGroup>
+  );
+
+  const versionLine = (
+    <p className="text-center text-xs text-[var(--text-muted)] pt-1">
+      {t('app.title')} · {t('settings.version')} {APP_VERSION}
+    </p>
+  );
+
+  // ONE renderer for both shapes. Nothing below knows whether it is inside a
+  // phone sheet or a desktop pane.
+  function renderSection(name) {
+    if (name === 'workspaces') {
+      return openWorkspaceId ? (
+        <WorkspaceDetail
+          workspaceId={openWorkspaceId}
+          onShowToast={onShowToast}
+          onBack={closeWorkspace}
+        />
+      ) : (
+        <WorkspacesView onShowToast={onShowToast} onOpen={setOpenWorkspaceId} />
+      );
+    }
+    if (name === 'profile') return <ProfileSection profile={profile} onProfileUpdate={onProfileUpdate} />;
+    if (name === 'notifications') return <NotificationsSection onShowToast={onShowToast} />;
+    if (name === 'appearance') return preferenceRows;
+    if (name === 'recurrences') return <RecurrencesView onShowToast={onShowToast} />;
+    if (name === 'calendar') return <CalendarConnectionView onShowToast={onShowToast} />;
+    if (name === 'hostaway') return <HostawayConnectionView onShowToast={onShowToast} />;
+    if (name === 'developer') return <DeveloperUsageView />;
+    return null;
+  }
+
   const title = openWorkspace
     ? openWorkspace.name
-    : screen === 'root' ? t('settings.title') : t(SCREENS[screen]);
+    : isDesktop ? t(SCREENS[section])
+      : screen === 'root' ? t('settings.title') : t(SCREENS[screen]);
 
+  const pickers = (
+    <>
+      {picker === 'language' && (
+        <OptionSheet
+          title={t('settings.language')}
+          options={languageOptions}
+          value={currentLang}
+          onPick={handleLanguagePick}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === 'appearance' && (
+        <OptionSheet
+          title={t('settings.appearance')}
+          options={themeOptions}
+          value={theme}
+          onPick={handleThemePick}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === 'dictation' && (
+        <OptionSheet
+          title={t('settings.dictation_language')}
+          options={dictationOptions}
+          value={dictationLang}
+          onPick={handleDictationPick}
+          onClose={() => setPicker(null)}
+        />
+      )}
+    </>
+  );
+
+  // ───────────────────────────────────────────────────────── wide screen
+  if (isDesktop) {
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-black/40 animate-fade-in flex items-center justify-center p-6"
+        onClick={onClose}
+      >
+        <div
+          className="w-full max-w-5xl h-[85vh] bg-[var(--bg-modal)] rounded-xl shadow-[var(--shadow-modal)] overflow-hidden grid grid-cols-[240px_1fr]"
+          onClick={e => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('settings.title')}
+        >
+          <nav className="flex flex-col gap-4 overflow-y-auto border-r border-[var(--border-subtle)] bg-[var(--bg-app)] p-3">
+            <ProfileHeader
+              profile={profile}
+              onClick={() => openSection('profile')}
+              t={t}
+              compact
+              selected={section === 'profile'}
+            />
+
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label} className="flex flex-col gap-0.5">
+                <span className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                  {t(group.label)}
+                </span>
+                {group.items.map((name) => (
+                  <NavItem
+                    key={name}
+                    label={t(SCREENS[name])}
+                    selected={section === name}
+                    onClick={() => openSection(name)}
+                  />
+                ))}
+              </div>
+            ))}
+
+            {isOwner && (
+              <div className="flex flex-col gap-0.5">
+                <NavItem
+                  label={t(SCREENS.developer)}
+                  selected={section === 'developer'}
+                  onClick={() => openSection('developer')}
+                />
+              </div>
+            )}
+
+            <div className="mt-auto flex flex-col gap-2 pt-2">
+              {signOutGroup}
+              {versionLine}
+            </div>
+          </nav>
+
+          <div className="flex min-w-0 flex-col">
+            <div className="flex flex-shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] p-4">
+              {openWorkspaceId && (
+                <button
+                  onClick={handleBack}
+                  className="tap-44 text-xl leading-none text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  aria-label={t('settings.back')}
+                >
+                  ‹
+                </button>
+              )}
+              <h2 className="flex-1 truncate text-lg font-semibold text-[var(--text-primary)]">
+                {title}
+              </h2>
+              <button
+                onClick={onClose}
+                className="tap-44 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                aria-label={t('actions.close')}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* The reading column stays 640px wide inside a pane that is
+                wider. A settings form stretched across 900px makes every label
+                and its value the length of the screen apart — the same measure
+                rule the task lists already keep at 768px. */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="max-w-2xl">{renderSection(section)}</div>
+            </div>
+          </div>
+        </div>
+
+        {pickers}
+      </div>
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────── phone
   return (
     <div
       className="fixed inset-0 z-50 bg-black/40 animate-fade-in flex items-end md:items-center justify-center md:p-4"
@@ -210,111 +448,65 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
         </div>
 
         <div className="p-4 overflow-y-auto">
-          {screen === 'root' && (
+          {screen === 'root' ? (
             <div className="space-y-4">
-              <ProfileHeader profile={profile} onClick={() => setScreen('profile')} t={t} />
+              <ProfileHeader profile={profile} onClick={() => openSection('profile')} t={t} />
 
               <SettingsGroup>
-                <SettingsRow label={t('settings.notifications')} onClick={() => setScreen('notifications')} />
-                <SettingsRow label={t('recurrence.title')} onClick={() => setScreen('recurrences')} />
-                <SettingsRow
-                  label={t('workspace.manage')}
-                  onClick={() => { setOpenWorkspaceId(null); setScreen('workspaces'); }}
-                />
-                <SettingsRow label={t('settings.calendar')} onClick={() => setScreen('calendar')} />
-                <SettingsRow label={t('hostaway.title')} onClick={() => setScreen('hostaway')} />
+                <SettingsRow label={t('settings.notifications')} onClick={() => openSection('notifications')} />
+                <SettingsRow label={t('recurrence.title')} onClick={() => openSection('recurrences')} />
+                <SettingsRow label={t('workspace.manage')} onClick={() => openSection('workspaces')} />
+                <SettingsRow label={t('settings.calendar')} onClick={() => openSection('calendar')} />
+                <SettingsRow label={t('hostaway.title')} onClick={() => openSection('hostaway')} />
               </SettingsGroup>
 
-              <SettingsGroup>
-                <SettingsRow
-                  label={t('settings.language')}
-                  value={languageOptions.find(o => o.value === currentLang)?.label}
-                  onClick={() => setPicker('language')}
-                />
-                <SettingsRow
-                  label={t('settings.appearance')}
-                  value={themeOptions.find(o => o.value === theme)?.label}
-                  onClick={() => setPicker('appearance')}
-                />
-                <SettingsRow
-                  label={t('settings.dictation_language')}
-                  value={dictationLabelFor(dictationLang)}
-                  onClick={() => setPicker('dictation')}
-                />
-              </SettingsGroup>
+              {preferenceRows}
 
               {isOwner && (
                 <SettingsGroup>
-                  <SettingsRow label={t('settings.developer')} onClick={() => setScreen('developer')} />
+                  <SettingsRow label={t('settings.developer')} onClick={() => openSection('developer')} />
                 </SettingsGroup>
               )}
 
               {/* Its own group, at the bottom, away from anything you might be
                   reaching for. Deleting the account still sits behind a
                   confirmation on top of that. */}
-              <SettingsGroup>
-                <SettingsRow
-                  label={t('settings.sign_out')}
-                  onClick={() => supabase.auth.signOut()}
-                  showChevron={false}
-                />
-                <DeleteAccountRow t={t} />
-              </SettingsGroup>
-
-              <p className="text-center text-xs text-[var(--text-muted)] pt-1">
-                {t('app.title')} · {t('settings.version')} {APP_VERSION}
-              </p>
+              {signOutGroup}
+              {versionLine}
             </div>
+          ) : (
+            renderSection(section)
           )}
-
-          {screen === 'profile' && <ProfileSection profile={profile} onProfileUpdate={onProfileUpdate} />}
-          {screen === 'notifications' && <NotificationsSection onShowToast={onShowToast} />}
-          {screen === 'recurrences' && <RecurrencesView onShowToast={onShowToast} />}
-          {screen === 'workspaces' && (
-            openWorkspaceId ? (
-              <WorkspaceDetail
-                workspaceId={openWorkspaceId}
-                onShowToast={onShowToast}
-                onBack={closeWorkspace}
-              />
-            ) : (
-              <WorkspacesView onShowToast={onShowToast} onOpen={setOpenWorkspaceId} />
-            )
-          )}
-          {screen === 'calendar' && <CalendarConnectionView onShowToast={onShowToast} />}
-          {screen === 'hostaway' && <HostawayConnectionView onShowToast={onShowToast} />}
-          {screen === 'developer' && <DeveloperUsageView />}
         </div>
       </div>
 
-      {picker === 'language' && (
-        <OptionSheet
-          title={t('settings.language')}
-          options={languageOptions}
-          value={currentLang}
-          onPick={handleLanguagePick}
-          onClose={() => setPicker(null)}
-        />
-      )}
-      {picker === 'appearance' && (
-        <OptionSheet
-          title={t('settings.appearance')}
-          options={themeOptions}
-          value={theme}
-          onPick={handleThemePick}
-          onClose={() => setPicker(null)}
-        />
-      )}
-      {picker === 'dictation' && (
-        <OptionSheet
-          title={t('settings.dictation_language')}
-          options={dictationOptions}
-          value={dictationLang}
-          onPick={handleDictationPick}
-          onClose={() => setPicker(null)}
-        />
-      )}
+      {pickers}
     </div>
+  );
+}
+
+/**
+ * One row in the desktop nav column.
+ *
+ * Selection is a filled row, not a coloured word: the column is scanned rather
+ * than read, and a background says "you are here" from the corner of an eye
+ * while a colour change has to be looked at. Same reasoning as the room pill,
+ * and the same shape SideNav already uses for the active tab.
+ */
+function NavItem({ label, selected, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={selected ? 'page' : undefined}
+      className={`w-full rounded-lg px-2 py-2 text-left text-sm transition-colors ${
+        selected
+          ? 'bg-[var(--bg-hover)] font-semibold text-[var(--text-primary)]'
+          : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+      }`}
+    >
+      <span className="block truncate">{label}</span>
+    </button>
   );
 }
 
@@ -322,25 +514,40 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
  * Identity, not a setting — so it gets the avatar and the email rather than a
  * row with a chevron and a name. It is also the partner of the app bar's
  * avatar, which is what opened this modal.
+ *
+ * `compact` is the nav-column size, not a second component: it is the same
+ * identity block the phone shows at the top of its root list, and splitting it
+ * in two would be two places to change a name.
  */
-function ProfileHeader({ profile, onClick, t }) {
+function ProfileHeader({ profile, onClick, t, compact = false, selected = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-4 p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+      aria-current={selected ? 'page' : undefined}
+      className={`w-full flex items-center rounded-lg border transition-colors text-left ${
+        compact ? 'gap-2.5 p-2' : 'gap-4 p-4'
+      } ${
+        selected
+          ? 'border-[var(--border-medium)] bg-[var(--bg-hover)]'
+          : 'border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-hover)]'
+      }`}
     >
       <span
-        className="w-12 h-12 rounded-full bg-[var(--brand-primary)] text-white flex items-center justify-center text-base font-semibold flex-shrink-0"
+        className={`rounded-full bg-[var(--brand-primary)] text-white flex items-center justify-center font-semibold flex-shrink-0 ${
+          compact ? 'w-9 h-9 text-sm' : 'w-12 h-12 text-base'
+        }`}
         aria-hidden="true"
       >
         {getInitials(profile?.display_name, profile?.email)}
       </span>
       <span className="flex-1 min-w-0">
-        <span className="block text-base font-semibold text-[var(--text-primary)] truncate">
+        <span className={`block font-semibold text-[var(--text-primary)] truncate ${compact ? 'text-sm' : 'text-base'}`}>
           {profile?.display_name || profile?.email || t('settings.loading')}
         </span>
-        <span className="block text-sm text-[var(--text-muted)] truncate">{profile?.email}</span>
+        <span className={`block text-[var(--text-muted)] truncate ${compact ? 'text-[11px]' : 'text-sm'}`}>
+          {profile?.email}
+        </span>
       </span>
     </button>
   );

@@ -327,7 +327,11 @@
     "delete_confirm": "Are you sure? This permanently deletes your account and all your data.",
     "deleting": "Deleting...",
     "version": "Version",
-    "delete_account_title": "Delete your account?"
+    "delete_account_title": "Delete your account?",
+    "appearance_language": "Appearance & language",
+    "group_account": "My account",
+    "group_work": "My work",
+    "group_connections": "Connections"
   },
   "agent": {
     "open": "Ask about your tasks",
