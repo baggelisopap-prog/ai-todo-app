@@ -483,7 +483,7 @@
     "name_label": "Workspace name",
     "color_label": "Colour",
     "default_switch": "Default for new tasks",
-    "archive_hint": "Nothing is lost, and you can restore it.",
+    "archive_hint": "The workspace is hidden from every member — it leaves the room picker and the filters. Tasks, categories and assignments stay untouched; nothing is deleted. Restore it whenever you like from Archived, with no deadline. If it was your default, the default moves back to Business.",
     "name_placeholder": "Name",
     "no_categories": "No categories yet",
     "system_locked": "Managed by the Hostaway integration — it cannot be renamed or deleted.",
@@ -506,7 +506,8 @@
     "danger_zone": "Danger zone",
     "archive_title": "Archive “{{name}}”?",
     "delete_category_title": "Delete the category “{{name}}”?",
-    "no_categories_hint": "Create categories to tell one kind of work in this room from another."
+    "no_categories_hint": "Create categories to tell one kind of work in this room from another.",
+    "archive_what": "What does archiving do?"
   },
   "members": {
     "title": "Members",

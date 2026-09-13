@@ -12,6 +12,7 @@ import MembersPanel from './MembersPanel';
 import ColorSwatches from './ColorSwatches';
 import ConfirmDialog from './ConfirmDialog';
 import KebabMenu from './KebabMenu';
+import { AlertCircleIcon } from './icons';
 import { nextPosition } from '../utils/workspaces';
 
 const TABS = ['general', 'categories', 'members'];
@@ -47,6 +48,9 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
   const [busy, setBusy] = useState(false);
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  // Closed by default: the danger block is a title and a button, and the full
+  // answer to "what does archiving do" opens from the (!) beside it.
+  const [archiveHelp, setArchiveHelp] = useState(false);
   // Which category has its palette open. One at a time, and by id rather than a
   // boolean per row, so opening a second one closes the first without any row
   // needing to know about the others.
@@ -225,20 +229,47 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
               the name. The border is what stops it reading as one more setting
               — the shape says "this one is different" before the colour does,
               which is also what keeps it legible to somebody who cannot tell
-              red from grey. */}
+              red from grey.
+
+              THE EXPLANATION IS BEHIND THE (!), and the reason is that the
+              owner read the old one and still had to ask what archiving does.
+              Two failures at once: the sentence said what is NOT lost without
+              ever saying what HAPPENS, and it sat there permanently, which is
+              what he called «χύμα» — a paragraph of small print nobody reads
+              until it is too late to matter. Now the block is a title and a
+              button, the full answer is one tap away, and the answer leads with
+              the consequence: the room disappears for everybody. */}
           <div className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] p-3 space-y-2">
             <span className="block text-xs font-semibold uppercase tracking-wide text-[var(--danger-text)]">
               {t('workspace.danger_zone')}
             </span>
-            <p className="text-xs text-[var(--danger-text)]">{t('workspace.archive_hint')}</p>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={handleArchive}
-              className="tap-44 rounded-lg border border-[var(--danger-border)] bg-[var(--bg-card)] px-3 py-2 text-sm font-medium text-[var(--danger-text)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
-            >
-              {t('workspace.archive')}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handleArchive}
+                className="tap-44 rounded-lg border border-[var(--danger-border)] bg-[var(--bg-card)] px-3 py-2 text-sm font-medium text-[var(--danger-text)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
+              >
+                {t('workspace.archive')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setArchiveHelp((v) => !v)}
+                aria-expanded={archiveHelp}
+                aria-label={t('workspace.archive_what')}
+                title={t('workspace.archive_what')}
+                className="tap-44 rounded-full p-1 text-[var(--danger-text)] hover:bg-[var(--bg-hover)] transition-colors"
+              >
+                <AlertCircleIcon />
+              </button>
+            </div>
+
+            {archiveHelp && (
+              <p className="text-xs leading-relaxed text-[var(--danger-text)]">
+                {t('workspace.archive_hint')}
+              </p>
+            )}
           </div>
         </div>
       )}
