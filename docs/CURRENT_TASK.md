@@ -198,7 +198,7 @@ vite dev        → all four changed modules transformed and served HTTP 200
 After slice 2:
 ```
 npm run check   → exit 0
-ui-check: OK — 92 files, 50 tokens, 516 translation keys
+ui-check: OK — 92 files, 50 tokens, 517 translation keys
 
 npm run lint    → ✖ 12 problems (12 errors, 0 warnings)     (still the standing baseline,
                   and ZERO in any of the ten files slice 2 touched)
@@ -261,6 +261,17 @@ tab shrank the dialog and it jumped under the finger that had just tapped it. Th
 have a 340px floor — a floor, not a fixed height, so fifteen categories still grow it — and
 the empty categories panel took the centred shape `RecurrencesView` already uses.
 
+**A second thing came back from him and was fixed after the push** (`b3e1a4a`). He read the
+danger block and still had to ask what archiving does: «αυτο που γραφεις επικυνδυνη ζωνη
+αρχειοθετηση καμια εργασια δεν χανεται και μπορεις να την επαναφερεις τι ειναι?». Two
+failures in one sentence — it said what is NOT lost without ever saying what HAPPENS (the
+room disappears for every member), and it sat on screen permanently, which he called «χύμα».
+The block is now a title and a button with a **(!)** beside it that opens the answer: «σε
+θαυμαστικό που θα ανοίγη όταν το πατάει ο χρήστης». The text was rewritten against
+`sharing.archive_workspace` rather than from memory, and it now carries the one consequence
+no version of it ever mentioned: **if the archived room was the default, the default moves
+back to Business — for every member who had it selected.**
+
 ### What a person has actually SEEN of slice 2
 
 He was asked to check the task ⋯ menu FIRST, because it is the one control in this slice
@@ -282,6 +293,7 @@ menu he opened, and the height fix that followed it has not been looked at by an
 | The task ⋯ menu in its harder positions | Open one on the LAST row of a long list: it must flip above the button, not open off the bottom |
 | A palette choice reaching the database | Pick a colour, close Settings, reopen. It must still be that colour |
 | The custom-colour swatch | Needs a workspace whose colour is not one of the eight — likely most of his |
+| The (!) disclosure on the danger block | Open Γενικά, tap the (!). The explanation opens and closes, and the block does not change size enough to move the button |
 
 ## The mockups he approved
 
