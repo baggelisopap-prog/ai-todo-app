@@ -1,6 +1,56 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: Settings stays a trip you come back from, not a place in the daily sidebar
+The owner asked it himself, looking at the finished desktop shape: «σκεφτομαι μηπως ολα αυτα
+των ρυθμισεων να ειναι στα αριστερα σαν τα υπολοιπα σαν dashboard η δεν ειναι καλη ιδεα;».
+
+**The pattern splits on what the app IS.** Tools you work inside — Notion, Slack, Linear,
+Todoist, Figma — put settings in an overlay with its own nav. Dashboards where configuration
+IS the work — Stripe, Vercel, AWS — put it in the main navigation. This is the first kind:
+the four tabs are the work, and Settings is visited about once a month.
+
+Three reasons it stays separate, and the first is the one that decided it:
+
+1. **It is a trip, not a place.** Press ✕ and you are exactly where you were — same filters,
+   same scroll position, same room. As a page in the main area it would have to remember and
+   restore all of that, and the app has no router to do it with.
+2. **The sidebar already carries five jobs** (add button, four tabs, the workspace filter,
+   the account). Settings would add seven permanent rows, seen every day, for something
+   opened rarely — and vertical room is the scarce resource that sidebar was built to save.
+3. **A second navigation is not a cost here, it is the point.** The app's sidebar answers
+   "what am I looking at". The Settings nav answers "what am I configuring". Merging them
+   makes one list answer two questions.
+
+He was shown three options with sketches — a full-screen takeover with a Back (the Linear
+shape), the centred card as built, and settings as rows in the daily sidebar — and chose the
+centred card. **No code changed as a result of this decision**, which is the useful kind:
+the question got a recorded answer instead of being re-asked in two months.
+
+### Decision: no router, and the two things that would reverse it
+Asked directly: «χρειαζομαστε ρουτερ και γιατι ναι η οχι?». Checked rather than recalled —
+there is no router in `package.json`, no `vercel.json` in the repo, and `App.jsx` holds all
+of "where am I" in `useState('inbox')`, with the URL used only as a one-time letterbox for
+OAuth and invite tokens, wiped by three `history.replaceState` calls.
+
+**What it would buy**: the phone's Back stepping back through the app instead of leaving it
+— the only item here that costs him something daily; links that can be SENT, "look at this
+task" to a colleague, impossible today; a refresh that keeps your place; history and
+bookmarks.
+
+**What it costs**: every navigation rewritten at once; a `vercel.json` rewrite rule that does
+not exist, whose absence gives a 404 on hard refresh **in production while working locally**,
+which is the exact shape of bug this project keeps getting burned by; and a decision per
+modal about whether it is a URL, where a wrong answer makes Back close the wrong thing.
+
+**This project has already paid once to avoid it**: the invite link is `?invite=<token>`
+rather than `/invite/<token>` precisely because the path form needs that rewrite.
+
+**Parked, because it solves no problem that has been reported.** The two triggers are written
+into BACKLOG.md and only he can answer them: does the phone's Back button annoy him, and does
+he ever want to send somebody a link to one specific task.
+
+
 ### Decision: one ⋯ menu for the whole app, extracted rather than copied
 Settings needed the menu the task rows already had. Two roads: copy the pattern into a small
 Settings-only menu, or pull the mechanism out of `TaskMenu` into `KebabMenu` and have both

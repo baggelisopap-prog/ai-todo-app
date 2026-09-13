@@ -10,6 +10,30 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **On a wide screen Settings stopped being a phone in the middle of a monitor (2026-09-13).**
+  Slice 4, the last of four. From 1024px up it is a page — nav column on the left, section on
+  the right — instead of a 448px window capped at 85vh floating in a 1920px screen.
+  **Only the chrome branches**: every section is rendered by one `renderSection()` and does
+  not know which shape it is inside, because a second Settings screen would have left the
+  phone one to fall behind, which is the failure this whole rebuild started from. Language,
+  appearance and dictation gained an «Εμφάνιση & γλώσσα» section, built from the same rows
+  the phone root renders, because a wide screen has no root list to put them on.
+
+  **The owner chose this shape AFTER seeing it built**, asking whether Settings should move
+  into the app's own sidebar «σαν dashboard». Shown three sketches — a full-screen takeover
+  with a Back, the centred card as built, or settings as permanent rows in the daily sidebar
+  — he kept the centred card, so nothing changed. **Not built, though the approved mockup had
+  it**: the workspace switcher at the top of the nav; what shipped reaches the same screens
+  in one more click, and he was told it was a deviation.
+
+  **`npm run check` exit 0 (`92 files, 50 tokens, 526 translation keys`), lint at its
+  12-problem baseline, `vite build` clean — and NOBODY HAS OPENED EITHER SHAPE IN A BROWSER.**
+  The phone shape is the one at risk: it was rearranged to share code with a screen it never
+  had before, and narrowing the window under 1024px is the check that settles it.
+
+  **With this, seven of the eight findings are closed and the Settings rebuild is done.** What
+  remains is not code: it is the two tables in `CURRENT_TASK.md` of things nobody has watched,
+  most of which need a second account in the room.
 - **The member rows say who these people are, and the invite says what it is about to make (2026-09-13).**
   Slice 3 of four, and the smallest — slice 1 had already brought the members out of their
   disclosure and slice 2 had already built the dialog this one needed. **`email` and

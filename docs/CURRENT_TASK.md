@@ -1,4 +1,4 @@
-ACTIVE TASK — Settings rebuilt in four slices, pushed one at a time. Slices 1–3 are live; only slice 4 (desktop) remains
+ACTIVE TASK — Settings rebuilt in four slices, pushed one at a time. ALL FOUR ARE LIVE; what remains is looking at them
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **This file was written BEFORE the code, at the owner's explicit request** — «εγραφη στα
@@ -6,9 +6,9 @@ _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" fi
 >
 > **CORRECTED twice the same day**: it first said "everything below the Slice 1 heading is a
 > PLAN, not a report. Nothing has been built yet." Then it said slices 2–4 were still plans.
-> **Slices 1 (`db307da`), 2 (`183f32a`, `4d98297`, `b3e1a4a`) and 3 (`9145afb`) are built,
-> pushed and live**; only slice 4 is still a plan. The three slice sections below are
-> reports.
+> **All four slices are built, pushed and live**: 1 `db307da`, 2 `183f32a`+`4d98297`+`b3e1a4a`,
+> 3 `9145afb`, 4 `61f5e8b`. Nothing below is a plan any more. What is left is the two tables
+> of things nobody has watched — which is now the whole of the remaining work.
 >
 > The previous task's "Still open, deliberately" and its HANDOVER section are CARRIED
 > FORWARD at the bottom of this file, unchanged. Nothing in them is closed: the handover
@@ -92,20 +92,21 @@ is worse than no button, the same rule the locked Hostaway category already foll
 | 1 | ~~The workspace gets its own screen~~ — **SHIPPED `db307da`, live** | 1, 2 | frontend only, no schema change |
 | 2 | ~~Actions that do not frighten~~ — **SHIPPED `183f32a`, live** | 3, 4, 5, 8 | frontend only, reached the task ⋯ menu too |
 | 3 | ~~Members and invites in the open~~ — **SHIPPED `9145afb`, live** | 6 | frontend only, needs a second person to check |
-| **4** | **Desktop gets its page** — full-page Settings with a left nav from 1024px | 7 | frontend only, the largest slice |
+| 4 | ~~Desktop gets its page~~ — **SHIPPED `61f5e8b`, live** | 7 | frontend only, the largest slice |
 
 **Why 2 before 3**: slice 2 builds the PARTS — the ⋯ menu, the confirm dialog, the labelled
 field — that slice 3 then uses. Reversed, the members screen gets written twice.
 
-## Not decided yet, and neither blocked slices 1 or 2
+## The two questions that were open, and how they closed
 
-Two of the four closing questions went unanswered and are deliberately left open:
+Both were answered by events rather than by being asked again:
 
-- **Does he use the desktop enough to justify slice 4?** Belongs to slice 4. If the answer
-  turns out to be "mostly phone", slice 4 is the one to drop, not to shrink.
-- **Do we go looking for a mail service?** Belongs to slice 3. Without it, the invite stays
-  link-only — which already works — and the email field stays out of the UI rather than
-  going in disabled.
+- **Does he use the desktop enough to justify slice 4?** Yes — he was looking at Settings on
+  a desktop when he asked why nothing had changed there, which is what moved slice 4 from
+  "maybe drop it" to "build it".
+- **Do we go looking for a mail service?** Never answered, and slice 3 shipped without one.
+  The invite stays link-only, which already works, and the disabled email field was kept OUT
+  of the UI rather than going in dead. Still open if he ever wants it.
 
 ## Slice 1 — SHIPPED `db307da`, pushed to `main` and live
 
@@ -363,6 +364,49 @@ confirming, and no pending invitation.
 | That the invite dialog still mints | Say yes to it. A link must appear, and the pending list must gain a row |
 | The pending row's new shape | Needs a live invitation in flight |
 | `joined_at` being present at all | It has never been rendered; if the server sends null for older rows the line simply will not draw, which is correct but untested |
+
+## Slice 4 — SHIPPED `61f5e8b`, pushed to `main` and live
+
+Finding 7, and the last one. From 1024px up Settings was still a 448px window capped at
+85vh, floating in the middle of a 1920px screen, while the rest of the app has had a sidebar
+shell since it shipped. It is now a page: a nav column on the left, the section on the right.
+
+**Only the CHROME branches.** Every section is rendered by one `renderSection()` and does not
+know which shape it is inside. A second Settings screen was the obvious alternative, and the
+phone one would have been the half that quietly fell behind — which is the exact failure
+this whole rebuild started from. The branch is `useMediaQuery(DESKTOP_QUERY)` rather than CSS
+classes, for the same reason `App.jsx` branches rather than hiding: two trees rendered with
+one hidden would mount every section twice, and these sections own notification permissions
+and network fetches.
+
+**Two things follow from there being no root list on a wide screen.** Language, appearance
+and dictation had nowhere to live — on a phone they are rows on the root that open sheets —
+so they became an «Εμφάνιση & γλώσσα» section built from the SAME rows the phone root
+renders, not a second copy. And Back exists on desktop only inside a workspace, because
+everywhere else the nav is already on screen.
+
+**The owner chose the shape after it was built, and chose the one already written.** He
+asked whether Settings should move into the app's own left sidebar «σαν dashboard». Shown
+three options with sketches — a full-screen takeover with a Back (the Linear shape), the
+centred card as built, or settings as permanent rows in the app's sidebar — he picked the
+centred card. So nothing changed. The argument that decided it is in DECISIONS.md.
+
+**Deliberately NOT built, and it was in the approved mockup**: the workspace switcher at the
+top of the nav, with Γενικά / Κατηγορίες / Μέλη as workspace-scoped nav items. It is nicer
+and it is a bigger change — the nav would become stateful about which room it describes, and
+`WorkspaceDetail` would have to hand its tab state upward. What shipped reaches the same
+screens in one more click, through the two-level navigation slice 1 already built. **He was
+told it was a deviation** and left it.
+
+### Not confirmed for slice 4 — and the phone shape is the one at risk
+
+| Not confirmed | What would settle it |
+|---|---|
+| The desktop shape at all | Open Settings on a wide window. Nav on the left, section on the right |
+| **The PHONE shape still working** | Narrow the window under 1024px. It must become the old drill-down list. This is the dangerous one: the phone screen was rearranged to share code with a screen it never had before |
+| «Εμφάνιση & γλώσσα», which exists only on desktop | Open it, change the theme, watch it take |
+| Back inside a workspace on desktop | Χώροι εργασίας → Business → ‹. The title must read «Business» and then go back to the list |
+| Resizing across 1024px mid-session | The section you were on must survive the switch — `screen === 'root'` is mapped to 'profile' for exactly this |
 
 ## The mockups he approved
 
