@@ -505,7 +505,8 @@
     "change_color": "Αλλαγή χρώματος",
     "danger_zone": "Επικίνδυνη ζώνη",
     "archive_title": "Αρχειοθέτηση του «{{name}}»;",
-    "delete_category_title": "Διαγραφή της κατηγορίας «{{name}}»;"
+    "delete_category_title": "Διαγραφή της κατηγορίας «{{name}}»;",
+    "no_categories_hint": "Φτιάξε κατηγορίες για να ξεχωρίζεις τι είδους δουλειά είναι η κάθε εργασία."
   },
   "members": {
     "title": "Μέλη",

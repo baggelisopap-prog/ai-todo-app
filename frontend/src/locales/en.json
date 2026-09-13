@@ -505,7 +505,8 @@
     "change_color": "Change colour",
     "danger_zone": "Danger zone",
     "archive_title": "Archive “{{name}}”?",
-    "delete_category_title": "Delete the category “{{name}}”?"
+    "delete_category_title": "Delete the category “{{name}}”?",
+    "no_categories_hint": "Create categories to tell one kind of work in this room from another."
   },
   "members": {
     "title": "Members",

@@ -164,6 +164,19 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
         ))}
       </div>
 
+      {/* ONE HEIGHT FOR ALL THREE TABS.
+          The modal is sized by its content, so a tab with less in it shrank the
+          whole window — and switching from Γενικά to Κατηγορίες made the dialog
+          jump up under the finger that had just tapped it. Reported by the
+          owner: «όταν πατάς στο κατηγορίες, επειδή δεν έχει τίποτα, όλο το
+          παράθυρο είναι πιο μικρό, έτσι φαίνεται άσχημο».
+
+          A floor rather than a fixed height: a room with fifteen categories
+          still grows, it just never shrinks below the tallest tab. 340px is
+          roughly what Γενικά needs (name, colour, switch, danger block) and
+          sits well inside the 85vh the modal is capped at, so it cannot force a
+          scrollbar onto a phone that did not have one. */}
+      <div className="min-h-[340px]">
       {tab === 'general' && (
         <div className="space-y-4">
           <label className="block space-y-1.5">
@@ -232,8 +245,15 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
 
       {tab === 'categories' && (
         <div className="space-y-2">
+          {/* The same shape RecurrencesView uses for its empty list, rather
+              than the one grey line this had: with the tabs now holding a
+              steady height, a single small sentence at the top left the rest of
+              the panel reading as a void. */}
           {categories.length === 0 && (
-            <p className="text-xs text-[var(--text-muted)]">{t('workspace.no_categories')}</p>
+            <div className="py-6 text-center">
+              <p className="text-sm text-[var(--text-primary)]">{t('workspace.no_categories')}</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">{t('workspace.no_categories_hint')}</p>
+            </div>
           )}
 
           {categories.map((category) => (
@@ -367,6 +387,7 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
           onChanged={reload}
         />
       )}
+      </div>
 
       <ConfirmDialog request={confirm.request} onAnswer={confirm.onAnswer} />
     </div>
