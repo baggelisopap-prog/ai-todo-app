@@ -513,8 +513,8 @@
     "title": "Members",
     "title_count": "Members ({{count}})",
     "loading": "Loading…",
-    "owner": "· owner",
-    "you": "· you",
+    "owner": "Owner",
+    "you": "you",
     "remove": "Remove",
     "remove_confirm": "Remove {{name}} from this workspace? Tasks they had taken stay here and become unclaimed.",
     "removed": "Removed",
@@ -542,7 +542,12 @@
     "revoked": "Invitation revoked",
     "remove_title": "Remove {{name}}?",
     "leave_title": "Leave “{{name}}”?",
-    "revoke_title": "Revoke this invitation?"
+    "revoke_title": "Revoke this invitation?",
+    "joined_on": "Joined {{date}}",
+    "invite_explain": "This creates a link that gives full access to this workspace. One use, valid for 7 days, and you can revoke it whenever you like. It is shown once and never again — nothing can read it back.",
+    "invite_title": "Invite someone to “{{name}}”?",
+    "invite_create": "Create link",
+    "pending_row": "Invitation link"
   },
   "assignment": {
     "label": "Whose",

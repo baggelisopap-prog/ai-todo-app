@@ -60,6 +60,19 @@ function InvitePanel({ workspace, isOwner, onShowToast }) {
   }
 
   async function handleInvite() {
+    // ASKS FIRST. Pressing this button used to mint a key on the spot: a
+    // working seven-day pass to the whole workspace, created by a tap whose
+    // label said only «Πρόσκληση». The dialog is not a safety gate — you can
+    // revoke it — it is the sentence that tells you what the button is about
+    // to make, before it exists.
+    const ok = await confirm.ask({
+      title: t('members.invite_title', { name: workspace.name }),
+      body: t('members.invite_explain'),
+      confirmLabel: t('members.invite_create'),
+      danger: false,
+    });
+    if (!ok) return;
+
     setBusy(true);
     try {
       const result = await createWorkspaceInvite(workspace.record_id);
@@ -197,22 +210,30 @@ function InvitePanel({ workspace, isOwner, onShowToast }) {
             {t('members.pending_title', { count: pending.length })}
           </span>
           {pending.map((invite) => (
-            <div key={invite.id} className="flex items-center gap-2">
-              <span className="flex-1 min-w-0 truncate text-xs text-[var(--text-secondary)]">
-                {/* Chosen here rather than by an i18next plural suffix: this
-                    project picks its own singular and plural keys in code
-                    (toast.added_one beside toast.added_many), and one key that
-                    quietly relied on the library's rules instead would be a
-                    second idiom hiding in the locale file. */}
-                {daysLeft(invite) <= 1
-                  ? t('members.pending_expires_soon')
-                  : t('members.pending_expires', { count: daysLeft(invite) })}
+            <div
+              key={invite.id}
+              className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2"
+            >
+              <span className="flex-1 min-w-0">
+                <span className="block truncate text-xs font-medium text-[var(--text-primary)]">
+                  {t('members.pending_row')}
+                </span>
+                <span className="block truncate text-[11px] text-[var(--text-muted)]">
+                  {/* Chosen here rather than by an i18next plural suffix: this
+                      project picks its own singular and plural keys in code
+                      (toast.added_one beside toast.added_many), and one key that
+                      quietly relied on the library's rules instead would be a
+                      second idiom hiding in the locale file. */}
+                  {daysLeft(invite) <= 1
+                    ? t('members.pending_expires_soon')
+                    : t('members.pending_expires', { count: daysLeft(invite) })}
+                </span>
               </span>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => handleRevoke(invite)}
-                className="tap-44 px-2 text-xs text-[var(--danger-text)] hover:underline flex-shrink-0"
+                className="tap-44 flex-shrink-0 rounded-lg border border-[var(--danger-border)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--danger-text)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
               >
                 {t('members.revoke')}
               </button>

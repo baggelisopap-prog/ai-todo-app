@@ -35,7 +35,7 @@ import KebabMenu from './KebabMenu';
  * somebody else gets in" are two jobs, and the second had grown a share dialog.
  */
 function MembersPanel({ workspace, onShowToast, onChanged }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const confirm = useConfirm();
   const [members, setMembers] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -98,24 +98,79 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
     run(() => leaveWorkspace(workspace.record_id), 'members.left');
   }
 
+  // The same locale expression ArchivedPanel and ActivityPanel already use.
+  // `uiLocale()` in utils/formatDate.js answers a neighbouring question but
+  // returns a bare language tag ('el') where these want the regional one
+  // ('el-GR'), so it cannot be reused as-is; the triplication is parked in
+  // BACKLOG.md rather than fixed here, because the other two components are
+  // not part of this work and a date format is not worth touching them for.
+  function shortDate(iso) {
+    return new Date(iso).toLocaleDateString(
+      i18n.language === 'en' ? 'en-GB' : 'el-GR',
+      { day: 'numeric', month: 'short' }
+    );
+  }
+
+  // The second line of a member row: their email, and when they joined.
+  //
+  // BOTH HAVE BEEN ARRIVING FROM THE SERVER SINCE SHARING SHIPPED and neither
+  // was displayed anywhere — `GET /workspaces/{id}/members` returns
+  // `email` and `joined_at` on every row. The email is the thing that confirms
+  // you invited the right account, which is exactly the question you have while
+  // looking at this list.
+  //
+  // The email is skipped when it is already the name: personName falls back to
+  // it when somebody has not set a display name, and a row reading
+  // "maria@…  /  maria@…" says nothing twice.
+  function detailsOf(member) {
+    const parts = [];
+    if (member.display_name && member.email) parts.push(member.email);
+    if (member.joined_at) parts.push(t('members.joined_on', { date: shortDate(member.joined_at) }));
+    return parts.join(' · ');
+  }
+
   return (
     <div className="space-y-3">
       {members === null && (
         <p className="text-xs text-[var(--text-muted)]">{t('members.loading')}</p>
       )}
 
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {members?.map((member) => (
-          <div key={member.user_id} className="flex items-center gap-2">
+          <div key={member.user_id} className="flex items-center gap-2.5">
             <Avatar member={member} size="md" />
             <span className="flex-1 min-w-0">
               <span className="block truncate text-sm text-[var(--text-primary)]">
                 {personName(member)}
+                {member.is_me && (
+                  <span className="text-[var(--text-muted)]"> · {t('members.you')}</span>
+                )}
               </span>
-              <span className="block text-[11px] text-[var(--text-muted)]">
-                {member.role === 'owner' ? t('members.owner') : t('members.member')}
-                {member.is_me && ` · ${t('members.you')}`}
-              </span>
+              {/* Rendered only when there is something in it, so a member with
+                  neither a display name nor a join date gets one clean line
+                  instead of a blank second one holding the row open. */}
+              {detailsOf(member) && (
+                <span className="block truncate text-[11px] text-[var(--text-muted)]">
+                  {detailsOf(member)}
+                </span>
+              )}
+            </span>
+
+            {/* The role moves off the second line and onto a pill, where the
+                other platforms put it: it is a PROPERTY of the person, not a
+                description of them, and on the second line it was competing
+                with the email for the same space. Both pills share a
+                background and differ by weight — the word is what separates
+                them, so it still reads for somebody who cannot tell two greys
+                apart. */}
+            <span
+              className={`flex-shrink-0 rounded-full bg-[var(--bg-hover)] px-2 py-0.5 text-[11px] ${
+                member.role === 'owner'
+                  ? 'font-semibold text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)]'
+              }`}
+            >
+              {member.role === 'owner' ? t('members.owner') : t('members.member')}
             </span>
             {/* Nothing at all for the owner: the backend answers 409, and a
                 control that always fails is worse than no control — the same
