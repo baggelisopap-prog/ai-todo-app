@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { getRecurrences, updateRecurrence, deleteRecurrence } from '../api';
 import { describeRecurrence } from '../utils/taskDisplay';
 import { useRecurrence } from '../hooks/useRecurrence';
+import { useConfirm } from '../hooks/useConfirm';
 import Switch from './Switch';
 import RecurrenceForm from './RecurrenceForm';
+import ConfirmDialog from './ConfirmDialog';
 
 // describeRecurrence lives in utils/taskDisplay.js, beside its sibling
 // categoryLabel — same shape (a domain object plus `t`, returns a string),
@@ -30,6 +32,7 @@ import RecurrenceForm from './RecurrenceForm';
  */
 function RecurrencesView({ onShowToast }) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // null | 'new' | rule object
@@ -83,7 +86,12 @@ function RecurrencesView({ onShowToast }) {
   }
 
   async function handleDelete(rule) {
-    if (!window.confirm(t('recurrence.delete_confirm'))) return;
+    const ok = await confirm.ask({
+      title: t('recurrence.delete_title'),
+      body: t('recurrence.delete_confirm'),
+      confirmLabel: t('actions.delete'),
+    });
+    if (!ok) return;
     try {
       await deleteRecurrence(rule.record_id);
       setRules((prev) => prev.filter((r) => r.record_id !== rule.record_id));
@@ -170,6 +178,8 @@ function RecurrencesView({ onShowToast }) {
           </button>
         </div>
       ))}
+
+      <ConfirmDialog request={confirm.request} onAnswer={confirm.onAnswer} />
     </div>
   );
 }

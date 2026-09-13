@@ -6,8 +6,12 @@ import {
 } from '../api';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { useConfirm } from '../hooks/useConfirm';
 import Switch from './Switch';
 import MembersPanel from './MembersPanel';
+import ColorSwatches from './ColorSwatches';
+import ConfirmDialog from './ConfirmDialog';
+import KebabMenu from './KebabMenu';
 import { nextPosition } from '../utils/workspaces';
 
 const TABS = ['general', 'categories', 'members'];
@@ -38,10 +42,15 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
   const { t } = useTranslation();
   const { workspaces, reload, categoriesFor } = useWorkspaces();
   const { settings, updateSettings } = useAppSettings();
+  const confirm = useConfirm();
   const [tab, setTab] = useState('general');
   const [busy, setBusy] = useState(false);
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  // Which category has its palette open. One at a time, and by id rather than a
+  // boolean per row, so opening a second one closes the first without any row
+  // needing to know about the others.
+  const [paletteFor, setPaletteFor] = useState(null);
 
   const workspace = workspaces.find((w) => w.record_id === workspaceId);
 
@@ -75,14 +84,19 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
     }
   }
 
-  function handleArchive() {
+  async function handleArchive() {
     // ARCHIVES, it does not delete — the owner's rule that work is never lost.
-    // The confirmation says what archiving MEANS rather than quoting a count:
-    // the number is not the part you need before clicking.
-    if (!window.confirm(t('workspace.archive_workspace_confirm', { name: workspace.name }))) return;
+    // The dialog says what archiving MEANS rather than quoting a count: the
+    // number is not the part you need before deciding.
+    const ok = await confirm.ask({
+      title: t('workspace.archive_title', { name: workspace.name }),
+      body: t('workspace.archive_workspace_confirm', { name: workspace.name }),
+      confirmLabel: t('workspace.archive'),
+    });
+    if (!ok) return;
 
-    // Then an UNDO in the toast. The confirmation already asked, so this is not
-    // a second gate — it is the one-tap way back for the case a confirmation
+    // Then an UNDO in the toast. The dialog already asked, so this is not a
+    // second gate — it is the one-tap way back for the case a confirmation
     // cannot catch: the right answer given about the wrong room.
     setBusy(true);
     archiveWorkspace(workspace.record_id)
@@ -109,8 +123,13 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
       .finally(() => setBusy(false));
   }
 
-  function handleDeleteCategory(category) {
-    if (!window.confirm(t('workspace.delete_category_confirm', { name: category.name }))) return;
+  async function handleDeleteCategory(category) {
+    const ok = await confirm.ask({
+      title: t('workspace.delete_category_title', { name: category.name }),
+      body: t('workspace.delete_category_confirm', { name: category.name }),
+      confirmLabel: t('actions.delete'),
+    });
+    if (!ok) return;
     run(() => deleteCategory(category.record_id), 'workspace.deleted');
   }
 
@@ -167,17 +186,17 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
             />
           </label>
 
-          <label className="flex items-center gap-3">
-            <input
-              type="color"
-              value={workspace.color || '#888888'}
+          <div className="space-y-1.5">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+              {t('workspace.color_label')}
+            </span>
+            <ColorSwatches
+              value={workspace.color}
               disabled={busy}
-              onChange={(e) => run(() => updateWorkspace(workspace.record_id, { color: e.target.value }))}
-              className="w-9 h-9 rounded border-0 bg-transparent flex-shrink-0"
-              aria-label={t('workspace.color_label')}
+              label={t('workspace.color_label')}
+              onChange={(color) => run(() => updateWorkspace(workspace.record_id, { color }))}
             />
-            <span className="text-sm text-[var(--text-primary)]">{t('workspace.color_label')}</span>
-          </label>
+          </div>
 
           <div className="pt-3 border-t border-[var(--border-subtle)]">
             <Switch
@@ -189,18 +208,24 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
             />
           </div>
 
-          <div className="pt-3 border-t border-[var(--border-subtle)]">
+          {/* Its own bordered block at the foot, rather than a red word beside
+              the name. The border is what stops it reading as one more setting
+              — the shape says "this one is different" before the colour does,
+              which is also what keeps it legible to somebody who cannot tell
+              red from grey. */}
+          <div className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] p-3 space-y-2">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-[var(--danger-text)]">
+              {t('workspace.danger_zone')}
+            </span>
+            <p className="text-xs text-[var(--danger-text)]">{t('workspace.archive_hint')}</p>
             <button
               type="button"
               disabled={busy}
               onClick={handleArchive}
-              className="tap-44 w-full text-left px-3 py-2 rounded-md text-sm text-[var(--danger)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
+              className="tap-44 rounded-lg border border-[var(--danger-border)] bg-[var(--bg-card)] px-3 py-2 text-sm font-medium text-[var(--danger-text)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
             >
               {t('workspace.archive')}
             </button>
-            <p className="mt-1 px-3 text-xs text-[var(--text-muted)]">
-              {t('workspace.archive_hint')}
-            </p>
           </div>
         </div>
       )}
@@ -212,49 +237,87 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
           )}
 
           {categories.map((category) => (
-            <div key={category.record_id} className="flex items-center gap-2">
-              <input
-                type="color"
-                value={category.color || '#888888'}
-                disabled={busy}
-                onChange={(e) => run(() => updateCategory(category.record_id, { color: e.target.value }))}
-                className="w-6 h-6 rounded border-0 bg-transparent flex-shrink-0"
-                aria-label={`${category.name} — ${t('workspace.category_label')}`}
-              />
-              {/* No name field and no delete for the Hostaway category: the
-                  backend refuses both with a 422 either way, and a button that
-                  always fails is worse than no button. */}
-              {category.system_key ? (
-                <span
-                  className="flex-1 min-w-0 truncate text-sm text-[var(--text-secondary)]"
-                  title={t('workspace.system_locked')}
-                >
-                  {category.name} 🔒
-                </span>
-              ) : (
-                <>
-                  <input
-                    type="text"
-                    defaultValue={category.name}
-                    disabled={busy}
-                    onBlur={(e) => {
-                      const name = e.target.value.trim();
-                      if (name && name !== category.name) {
-                        run(() => updateCategory(category.record_id, { name }), 'workspace.saved');
-                      }
-                    }}
-                    className="flex-1 min-w-0 bg-transparent text-sm text-[var(--text-primary)] focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => handleDeleteCategory(category)}
-                    className="tap-44 px-2 text-xs text-[var(--danger-text)] hover:underline flex-shrink-0"
-                    aria-label={`${t('workspace.remove')} ${category.name}`}
+            <div key={category.record_id}>
+              <div className="flex items-center gap-2">
+                {/* The dot IS the colour control. A row of eight swatches per
+                    category would be forty controls on a screen whose question
+                    is "what are my categories" — so the palette opens under the
+                    one row you tapped, and only that one. */}
+                <button
+                  type="button"
+                  disabled={busy || Boolean(category.system_key)}
+                  onClick={() => setPaletteFor((id) => (id === category.record_id ? null : category.record_id))}
+                  aria-label={`${t('workspace.change_color')} — ${category.name}`}
+                  aria-expanded={paletteFor === category.record_id}
+                  className="w-6 h-6 rounded-full flex-shrink-0 disabled:cursor-default"
+                  style={{
+                    backgroundColor: category.color || 'var(--text-muted)',
+                    boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)',
+                  }}
+                />
+
+                {/* No name field and no menu for the Hostaway category: the
+                    backend refuses both with a 422 either way, and a control
+                    that always fails is worse than no control. */}
+                {category.system_key ? (
+                  <span
+                    className="flex-1 min-w-0 truncate text-sm text-[var(--text-secondary)]"
+                    title={t('workspace.system_locked')}
                   >
-                    ✕
-                  </button>
-                </>
+                    {category.name} 🔒
+                  </span>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      defaultValue={category.name}
+                      disabled={busy}
+                      onBlur={(e) => {
+                        const name = e.target.value.trim();
+                        if (name && name !== category.name) {
+                          run(() => updateCategory(category.record_id, { name }), 'workspace.saved');
+                        }
+                      }}
+                      // A border that appears under the pointer and stays while
+                      // focused. The field used to be invisible until you
+                      // guessed it was one — finding 3 of the eight.
+                      className="flex-1 min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-[var(--text-primary)] transition-colors hover:border-[var(--border-subtle)] focus:border-[var(--border-focus)] focus:outline-none"
+                    />
+                    <KebabMenu
+                      ariaLabel={`${t('menu.open_menu')} — ${category.name}`}
+                      items={[
+                        {
+                          key: 'color',
+                          label: t('workspace.change_color'),
+                          onClick: () => setPaletteFor(category.record_id),
+                        },
+                        {
+                          key: 'delete',
+                          label: t('actions.delete'),
+                          danger: true,
+                          separator: true,
+                          disabled: busy,
+                          onClick: () => handleDeleteCategory(category),
+                        },
+                      ]}
+                    />
+                  </>
+                )}
+              </div>
+
+              {paletteFor === category.record_id && (
+                <div className="pl-8 pt-2">
+                  <ColorSwatches
+                    size="sm"
+                    value={category.color}
+                    disabled={busy}
+                    label={`${t('workspace.color_label')} — ${category.name}`}
+                    onChange={(color) => {
+                      setPaletteFor(null);
+                      run(() => updateCategory(category.record_id, { color }));
+                    }}
+                  />
+                </div>
               )}
             </div>
           ))}
@@ -281,7 +344,7 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
                 placeholder={t('workspace.name_placeholder')}
                 onChange={(e) => setNewCategoryName(e.target.value)}
                 onBlur={() => { if (!newCategoryName.trim()) setAddingCategory(false); }}
-                className="w-full bg-[var(--bg-card)] rounded px-2 py-1 text-sm border border-[var(--border-subtle)] focus:outline-none"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--border-focus)] focus:outline-none"
               />
             </form>
           ) : (
@@ -304,6 +367,8 @@ function WorkspaceDetail({ workspaceId, onShowToast, onBack }) {
           onChanged={reload}
         />
       )}
+
+      <ConfirmDialog request={confirm.request} onAnswer={confirm.onAnswer} />
     </div>
   );
 }

@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import {
   createWorkspaceInvite, getWorkspaceInvites, revokeWorkspaceInvite, inviteLink,
 } from '../api';
+import { useConfirm } from '../hooks/useConfirm';
+import ConfirmDialog from './ConfirmDialog';
 
 /**
  * Minting an invitation link, handing it to somebody, and taking it back.
@@ -27,6 +29,7 @@ import {
  */
 function InvitePanel({ workspace, isOwner, onShowToast }) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [invites, setInvites] = useState(null);
   // The freshly minted link. Deliberately NOT persisted anywhere: it lives in
@@ -70,7 +73,12 @@ function InvitePanel({ workspace, isOwner, onShowToast }) {
   }
 
   async function handleRevoke(invite) {
-    if (!window.confirm(t('members.revoke_confirm'))) return;
+    const ok = await confirm.ask({
+      title: t('members.revoke_title'),
+      body: t('members.revoke_confirm'),
+      confirmLabel: t('members.revoke'),
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await revokeWorkspaceInvite(workspace.record_id, invite.id);
@@ -212,6 +220,8 @@ function InvitePanel({ workspace, isOwner, onShowToast }) {
           ))}
         </div>
       )}
+
+      <ConfirmDialog request={confirm.request} onAnswer={confirm.onAnswer} />
     </div>
   );
 }

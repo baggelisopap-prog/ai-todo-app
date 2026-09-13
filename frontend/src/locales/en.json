@@ -326,7 +326,8 @@
     "delete_account": "Delete account",
     "delete_confirm": "Are you sure? This permanently deletes your account and all your data.",
     "deleting": "Deleting...",
-    "version": "Version"
+    "version": "Version",
+    "delete_account_title": "Delete your account?"
   },
   "agent": {
     "open": "Ask about your tasks",
@@ -457,7 +458,8 @@
     "form_save": "Save",
     "form_cancel": "Cancel",
     "error_no_days": "Pick at least one day.",
-    "error_no_name": "Give it a name."
+    "error_no_name": "Give it a name.",
+    "delete_title": "Delete this recurrence?"
   },
   "workspace": {
     "pick": "Workspace: {{name}} — change",
@@ -499,7 +501,11 @@
     "archived_on": "Archived {{date}}",
     "restore": "Restore",
     "restored": "Restored",
-    "undo": "Undo"
+    "undo": "Undo",
+    "change_color": "Change colour",
+    "danger_zone": "Danger zone",
+    "archive_title": "Archive “{{name}}”?",
+    "delete_category_title": "Delete the category “{{name}}”?"
   },
   "members": {
     "title": "Members",
@@ -531,7 +537,10 @@
     "pending_expires_soon": "Expires in under a day",
     "revoke": "Revoke",
     "revoke_confirm": "Revoke this invitation? Whoever holds the link will no longer be able to join.",
-    "revoked": "Invitation revoked"
+    "revoked": "Invitation revoked",
+    "remove_title": "Remove {{name}}?",
+    "leave_title": "Leave “{{name}}”?",
+    "revoke_title": "Revoke this invitation?"
   },
   "assignment": {
     "label": "Whose",
@@ -565,5 +574,16 @@
     "workspace_restored": "{{actor}}: restored the workspace",
     "task_assigned": "{{actor}}: assigned «{{task}}» to {{member}}",
     "task_unassigned": "{{actor}}: put «{{task}}» back on the pile"
+  },
+  "color": {
+    "purple": "Purple",
+    "blue": "Blue",
+    "teal": "Teal",
+    "green": "Green",
+    "amber": "Amber",
+    "red": "Red",
+    "pink": "Pink",
+    "grey": "Grey",
+    "custom": "The current colour"
   }
 }

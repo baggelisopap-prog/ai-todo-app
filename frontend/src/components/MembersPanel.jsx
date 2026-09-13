@@ -4,11 +4,14 @@ import {
   getWorkspaceMembers, removeWorkspaceMember, leaveWorkspace, setWorkspaceNotifyAll,
 } from '../api';
 import { useMembers } from '../hooks/useMembers';
+import { useConfirm } from '../hooks/useConfirm';
 import { personName } from '../utils/people';
 import Switch from './Switch';
 import Avatar from './Avatar';
 import InvitePanel from './InvitePanel';
 import ActivityPanel from './ActivityPanel';
+import ConfirmDialog from './ConfirmDialog';
+import KebabMenu from './KebabMenu';
 
 /**
  * Who is in one workspace, and what this person may do about it.
@@ -33,6 +36,7 @@ import ActivityPanel from './ActivityPanel';
  */
 function MembersPanel({ workspace, onShowToast, onChanged }) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [members, setMembers] = useState(null);
   const [busy, setBusy] = useState(false);
   // So the avatars on task rows update the moment somebody joins or leaves,
@@ -73,14 +77,24 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
     }
   }
 
-  function handleRemove(member) {
+  async function handleRemove(member) {
     const name = personName(member);
-    if (!window.confirm(t('members.remove_confirm', { name }))) return;
+    const ok = await confirm.ask({
+      title: t('members.remove_title', { name }),
+      body: t('members.remove_confirm', { name }),
+      confirmLabel: t('members.remove'),
+    });
+    if (!ok) return;
     run(() => removeWorkspaceMember(workspace.record_id, member.user_id), 'members.removed');
   }
 
-  function handleLeave() {
-    if (!window.confirm(t('members.leave_confirm', { name: workspace.name }))) return;
+  async function handleLeave() {
+    const ok = await confirm.ask({
+      title: t('members.leave_title', { name: workspace.name }),
+      body: t('members.leave_confirm', { name: workspace.name }),
+      confirmLabel: t('members.leave'),
+    });
+    if (!ok) return;
     run(() => leaveWorkspace(workspace.record_id), 'members.left');
   }
 
@@ -103,20 +117,26 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
                 {member.is_me && ` · ${t('members.you')}`}
               </span>
             </span>
-            {/* No button for the owner: the backend answers 409 and a
-                button that always fails is worse than no button — the same
-                rule the locked Hostaway category follows. */}
+            {/* Nothing at all for the owner: the backend answers 409, and a
+                control that always fails is worse than no control — the same
+                rule the locked Hostaway category follows.
+
+                For everybody else this is a ⋯ rather than the ✕ that used to
+                sit two pixels from the person's name, permanently armed, in a
+                list scrolled with a thumb. */}
             {isOwner && member.role !== 'owner' && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => handleRemove(member)}
-                aria-label={`${t('members.remove')} ${personName(member)}`}
-                title={t('members.remove')}
-                className="tap-44 px-2 text-sm text-[var(--danger-text)] hover:underline flex-shrink-0"
-              >
-                ✕
-              </button>
+              <KebabMenu
+                ariaLabel={`${t('menu.open_menu')} — ${personName(member)}`}
+                items={[
+                  {
+                    key: 'remove',
+                    label: t('members.remove'),
+                    danger: true,
+                    disabled: busy,
+                    onClick: () => handleRemove(member),
+                  },
+                ]}
+              />
             )}
           </div>
         ))}
@@ -157,6 +177,8 @@ function MembersPanel({ workspace, onShowToast, onChanged }) {
           {t('members.leave')}
         </button>
       )}
+
+      <ConfirmDialog request={confirm.request} onAnswer={confirm.onAnswer} />
     </div>
   );
 }

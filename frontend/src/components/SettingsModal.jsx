@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useConfirm } from '../hooks/useConfirm';
 import {
   isNotificationSupported,
   getNotificationPermission,
@@ -35,6 +36,7 @@ import OptionSheet from './OptionSheet';
 import RecurrencesView from './RecurrencesView';
 import WorkspacesView from './WorkspacesView';
 import WorkspaceDetail from './WorkspaceDetail';
+import ConfirmDialog from './ConfirmDialog';
 
 // Hardcoded owner user_id, used purely for frontend visibility: it hides the
 // Developer section from everyone else. The /dev/token-usage endpoint still
@@ -346,9 +348,15 @@ function ProfileHeader({ profile, onClick, t }) {
 
 function DeleteAccountRow({ t }) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const confirm = useConfirm();
 
   async function handleDeleteAccount() {
-    if (!window.confirm(t('settings.delete_confirm'))) return;
+    const ok = await confirm.ask({
+      title: t('settings.delete_account_title'),
+      body: t('settings.delete_confirm'),
+      confirmLabel: t('settings.delete_account'),
+    });
+    if (!ok) return;
     setIsDeleting(true);
     try {
       await deleteAccount();
@@ -362,12 +370,19 @@ function DeleteAccountRow({ t }) {
   }
 
   return (
-    <SettingsRow
-      label={isDeleting ? t('settings.deleting') : t('settings.delete_account')}
-      onClick={handleDeleteAccount}
-      danger
-      showChevron={false}
-    />
+    <>
+      <SettingsRow
+        label={isDeleting ? t('settings.deleting') : t('settings.delete_account')}
+        onClick={handleDeleteAccount}
+        danger
+        showChevron={false}
+      />
+      {/* Inside the group's divided list, which is why it is a fragment rather
+          than a wrapper div: a div here would become a third "row" and take the
+          divider that belongs between Sign out and this one. The dialog itself
+          portals to body, so it renders nowhere near this markup. */}
+      <ConfirmDialog request={confirm.request} onAnswer={confirm.onAnswer} />
+    </>
   );
 }
 
