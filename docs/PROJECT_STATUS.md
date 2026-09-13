@@ -10,6 +10,40 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **A workspace stopped being a card that does six jobs and became a screen (2026-09-13).**
+  Slice 1 of four in a Settings rebuild the owner approved off mockups. «Χώροι εργασίας» was
+  one scrolling column in which every workspace drew its name, colour, categories, a
+  collapsed members panel, an invite panel, an activity panel and an archive button — six
+  jobs in one card, five levels of nesting, and the question most visits actually ask
+  ("who is in here?") three taps deep with **no face visible before any of them**. It is now
+  a LIST whose row carries the answer (how many categories, whether it is the default, and
+  an overlapped stack of the members' faces) and, one tap in, a workspace screen with three
+  tabs — Γενικά / Κατηγορίες / Μέλη — for the three unrelated things a workspace holds.
+
+  **The faces cost zero new requests**, which is the only reason they are there:
+  `MembersProvider` already held the members of every shared room, fetched once for the
+  avatars on task rows, and `member_count` already rides along with the workspaces. A solo
+  account fetches nothing and draws nothing, the same rule every other piece of people-UI
+  here follows. `MembersPanel` lost its disclosure and became the Μέλη tab; the reasoning
+  that put it behind one still holds and is still obeyed, since it now mounts only once
+  somebody has opened ONE workspace and asked for its people.
+
+  **One behaviour change**: the default workspace moved from a picker at the top of the list
+  to a switch on the workspace itself, with a badge on the list row. Its two positions are
+  the picker's own two answers — this workspace, or `null`, which has always meant
+  «Ακατάτακτες».
+
+  **The owner opened it locally, on a desktop, against his real data, and authorised the
+  push — but he did NOT walk the checklist.** What is unconfirmed by anyone: that the list
+  really draws the faces (it needs a shared room; a solo account draws none by design), that
+  it really fires no members request, and that nothing was lost in the move — rename,
+  colour, category add/delete, member removal, invite, archive + its UNDO toast. `npm run
+  check` exit 0 (`87 files, 50 tokens, 497 translation keys`), lint at its 12-problem
+  baseline with nothing new, `vite build` clean, and all four changed modules served by the
+  dev server without a transform error. The table of what would settle each open item is in
+  `CURRENT_TASK.md`. **Not built, on purpose: slices 2, 3 and 4** — the ⋯ menus and our own
+  confirm dialogs, the invite dialog, and the full-page desktop Settings, which the owner
+  explicitly chose to leave last («οχι αστο για οτανειναι»). Reasoning in DECISIONS.md.
 - **The workspace became a filter, and the top of the screen got its room back (2026-09-12).**
   The owner's decision, reversing his own: the active workspace is no longer remembered at
   all — every launch starts on «Όλα», and choosing a room is a temporary narrowing like any

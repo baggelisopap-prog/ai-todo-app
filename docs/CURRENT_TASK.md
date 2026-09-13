@@ -3,8 +3,10 @@ _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" fi
 
 > **This file was written BEFORE the code, at the owner's explicit request** — «εγραφη στα
 > ντοκς οι αποφασεις ωστε αν δεν τα τελιωσω σημερα να ξερω τι εχω κανει και που ειμαστε».
-> Everything below the "Slice 1" heading is therefore a PLAN, not a report, until it says
-> otherwise. Nothing has been built yet.
+>
+> **CORRECTED the same day**: it said "everything below the Slice 1 heading is a PLAN, not a
+> report. Nothing has been built yet." Slice 1 is now built, pushed (`db307da`) and live.
+> Slices 2–4 are still plans. The Slice 1 section below has been rewritten as a report.
 >
 > The previous task's "Still open, deliberately" and its HANDOVER section are CARRIED
 > FORWARD at the bottom of this file, unchanged. Nothing in them is closed: the handover
@@ -85,8 +87,8 @@ is worse than no button, the same rule the locked Hostaway category already foll
 
 | # | What | Findings | Touches |
 |---|---|---|---|
-| **1** | **The workspace gets its own screen** — a list showing faces + counts, and three tabs inside | 1, 2 | frontend only, no schema change |
-| 2 | Actions that do not frighten — ⋯ menus, our own confirm dialogs, fields that look like fields, an 8-colour palette | 3, 4, 5, 8 | frontend only, reaches other screens too |
+| 1 | ~~The workspace gets its own screen~~ — **SHIPPED `db307da`, live** | 1, 2 | frontend only, no schema change |
+| **2** | **Actions that do not frighten** — ⋯ menus, our own confirm dialogs, fields that look like fields, an 8-colour palette | 3, 4, 5, 8 | frontend only, reaches other screens too |
 | 3 | Members and invites in the open — email + joined date on the row, pending invites beside the members, an invite dialog that says what it will do | 6 | frontend only, needs a second person to check |
 | 4 | Desktop gets its page — full-page Settings with a left nav from 1024px | 7 | frontend only, the largest slice |
 
@@ -103,11 +105,11 @@ Two of the four closing questions went unanswered and are deliberately left open
   link-only — which already works — and the email field stays out of the UI rather than
   going in disabled.
 
-## Slice 1 — what it is
+## Slice 1 — SHIPPED `db307da`, pushed to `main` and live
 
-**PLAN, not yet built.** `WorkspacesView.jsx` (323 lines) today renders every workspace, its
-categories, its members panel, its invite panel, its activity panel and the archive section
-in one scrolling column. It becomes two screens:
+`WorkspacesView.jsx` (323 lines) rendered every workspace, its categories, its members
+panel, its invite panel, its activity panel and the archive section in one scrolling
+column. It is now two screens:
 
 - **The list.** One row per workspace: colour, name, a subtitle counting its categories and
   saying whether it is the default, and an avatar stack of its members on the right —
@@ -119,34 +121,77 @@ in one scrolling column. It becomes two screens:
 
 What slice 1 does NOT do, on purpose: the ⋯ menu, the confirm dialogs, the colour palette
 and the invite dialog are slice 2 and 3. Slice 1 moves things; it does not restyle the
-controls.
+controls. **One exception**, taken deliberately: the workspace name got its label and
+border, because a tab holding a borderless input would have read as unfinished while that
+markup was being written anyway.
 
-**The avatar stack costs a decision that has to be made honestly**: today `MembersPanel`
-fetches ONLY when opened, precisely so a list of workspaces does not become one members
-request per workspace on every visit to Settings. A list that shows faces without opening
-needs those members up front. Whichever way this goes — one batched read, or reusing what
-`useMembers` already holds — it must not become N requests, and the answer belongs in
-DECISIONS.md once it is made.
+**The avatar stack's cost, which was flagged as an open question, turned out to be zero.**
+`MembersPanel` fetches only when opened, precisely so a list of workspaces does not become
+one members request per workspace. But `MembersProvider` ALREADY holds the members of every
+shared workspace — fetched once for the avatars on task rows — and `member_count` already
+rides along with the workspaces themselves. So the list reads what was on hand: no new
+request, and a solo account (where `member_count` is 1) fetches nothing and draws nothing,
+the same rule every other piece of people-UI in this app follows.
 
-## What would settle slice 1
+**One behaviour change rode along**: the default workspace moved from a `CustomSelect` at
+the top of the list to a `Switch` on the workspace itself, with a badge on the list row. Its
+two positions are the picker's own two answers — this workspace, or `null`, which has always
+meant «Ακατάτακτες». Nothing new is representable; what changed is that setting it now
+happens where the workspace lives.
 
-Nothing here is settled by a test. To be filled in as they happen:
+**`SettingsModal` went two levels deep**, and the comment saying it never would was
+corrected in place rather than deleted: it claimed "two screens deep is already more than
+this amount of settings justifies". The reason it went deeper was never the amount of
+settings — it is that one workspace holds three unrelated jobs. It is still not a general
+navigation stack (exactly one screen may have a child, addressed by id, and Back is two
+explicit cases), which is the part that comment was right about.
 
-| Not watched | What would settle it |
+## What a person has actually SEEN of slice 1
+
+**The owner opened it, on a desktop, against a local backend and his real Supabase data**
+(`npm run dev` + `uvicorn main:app --port 8000`), and then authorised the push. So it
+renders, it does not crash, and he was satisfied enough to ship it.
+
+**That is the whole of it, and it is less than the checklist below asked for.** He did not
+report the items one by one; what he reported was a question about the DESKTOP — «εκανες
+και τις αλλαγες και στο περιβαλλον για ταμπλετ υπολογιστη γτ δεν βλεπω κατι εδω» — which
+was answered rather than fixed, because two different things are called «Χώροι εργασίας» on
+a wide screen: the SideNav section (the FILTER — which room am I looking at, untouched by
+this slice and correctly so) and Settings → Χώροι εργασίας (the MANAGEMENT, which is what
+changed). The full-page desktop Settings is slice 4 and he chose to leave it there:
+«οχι αστο για οτανειναι».
+
+## What nobody has confirmed, and what would settle each
+
+| Not confirmed | What would settle it |
 |---|---|
-| The list showing faces | Open Settings → Χώροι εργασίας. Business must show two avatars without any tap |
-| That it did not become N requests | Watch the network panel: opening the list must not fire one members call per workspace |
+| The list showing faces | Open Settings → Χώροι εργασίας. Business must show two avatars without any tap. **Needs a shared room** — a solo account draws none by design |
+| That it did not become N requests | Network panel: opening the list must fire NO members call at all. The claim is that MembersProvider had already fetched them |
 | The three tabs | Open Business, move between Γενικά / Κατηγορίες / Μέλη |
-| That nothing was lost in the move | Every action that worked before must still work: rename, colour, add/delete category, remove member, invite, leave, archive, restore |
+| That nothing was lost in the move | Rename, colour, add and delete a category, remove a member, invite, leave, archive + the UNDO toast, restore |
 | The Hostaway category still locked | It must still show 🔒 and offer no delete |
+| The default switch | Turn it on for Personal: Business must stop showing the «προεπιλογή» badge, and a task added from «Όλα» must land in Personal |
 
-## Where the numbers stood BEFORE this work, as the commands printed them
+## Baselines, as the commands printed them
 
+Before:
+```
+ui-check: OK — 86 files, 50 tokens, 486 translation keys
+```
+
+After slice 1:
 ```
 npm run check   → exit 0
-ui-check: OK — 86 files, 50 tokens, 486 translation keys
+ui-check: OK — 87 files, 50 tokens, 497 translation keys
 
-npm run lint    → ✖ 12 problems (12 errors, 0 warnings)     (the standing baseline, unchanged)
+npm run lint    → ✖ 12 problems (12 errors, 0 warnings)     (the standing baseline, unchanged;
+                  the one error inside a file this slice touched is pre-existing —
+                  SettingsModal.jsx's ProfileSection effect, already in the 12)
+
+vite build      → ✓ built in 357ms
+
+vite dev        → all four changed modules transformed and served HTTP 200
+                  (WorkspaceDetail, WorkspacesView, MembersPanel, SettingsModal)
 ```
 
 Backend not run: this slice touches no Python. The last backend number on record is
