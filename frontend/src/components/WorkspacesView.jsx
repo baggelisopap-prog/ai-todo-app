@@ -1,53 +1,61 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  createWorkspace, updateWorkspace, archiveWorkspace, restoreWorkspace,
-  createCategory, updateCategory, deleteCategory,
-} from '../api';
+import { createWorkspace } from '../api';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useMembers } from '../hooks/useMembers';
 import { useAppSettings } from '../hooks/useAppSettings';
-import CustomSelect from './CustomSelect';
-import MembersPanel from './MembersPanel';
+import Avatar from './Avatar';
 import ArchivedPanel from './ArchivedPanel';
 import { nextPosition } from '../utils/workspaces';
 
 /**
- * Create, rename and delete workspaces and the categories inside them.
+ * The list of workspaces: one row each, and a way in.
  *
- * Two levels in ONE screen rather than a drill-down: a workspace with three
- * categories is a four-line block, and hiding those three behind another tap
- * makes the one question the user actually has — "what have I got?" — cost a
- * tap per workspace to answer.
+ * THIS USED TO BE THE WHOLE SCREEN. Every workspace rendered its name, its
+ * colour, its categories, a collapsed members panel, an invite panel, an
+ * activity panel and an archive button in one scrolling column — six jobs in
+ * one card, five levels of nesting, and the question most visits actually ask
+ * ("who is in here?") three taps deep with no face visible before any of them.
+ * The two levels are now two screens: this one, and WorkspaceDetail.
  *
- * The Hostaway category renders with no name field and no delete button. The
- * backend refuses both with a 422 either way (main.py's category routes); not
- * offering the action is the point, because a button that always fails is
- * worse than no button.
+ * The old comment defending one screen said hiding three categories behind
+ * another tap makes "what have I got?" cost a tap per workspace. That was
+ * right about the question and wrong about the answer: the row now CARRIES the
+ * answer — how many categories, whether it is the default, and who is in it —
+ * so nothing has to be opened to see it, which the old card could not manage
+ * even while showing everything.
  *
- * Modelled on RecurrencesView — same bordered bg-input card per row, same
- * toast calls — so Settings keeps one idiom instead of growing a second.
+ * THE FACES COST NOTHING, and that is the only reason they are here.
+ * MembersProvider already holds the members of every SHARED workspace, fetched
+ * once for the avatars on task rows, and `member_count` rides along with the
+ * workspaces themselves. So this list adds zero requests: `isShared` is
+ * answered from a count that was already on hand, and a solo account — where
+ * the only member is you, and your own initials three times over are noise —
+ * fetches nothing and draws nothing.
  */
-function WorkspacesView({ onShowToast }) {
+function WorkspacesView({ onShowToast, onOpen }) {
   const { t } = useTranslation();
   const { workspaces, reload, categoriesFor } = useWorkspaces();
-  const { settings, updateSettings } = useAppSettings();
+  const { settings } = useAppSettings();
+  const { membersFor, isShared } = useMembers();
   const [busy, setBusy] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
-  const [newCategoryFor, setNewCategoryFor] = useState(null); // workspace_id
-  const [newCategoryName, setNewCategoryName] = useState('');
-  // Bumped whenever a workspace is archived or restored, so the Αρχειοθετημένα
-  // section below refetches instead of waiting for the next visit to Settings.
+  // Bumped when a workspace is restored from the archive, so that section
+  // refetches instead of waiting for the next visit to Settings. Archiving
+  // itself happens on the detail screen, which unmounts this one — coming back
+  // remounts it, and ArchivedPanel fetches on mount.
   const [archivedVersion, setArchivedVersion] = useState(0);
 
-  // Every write goes through here: one place that reports failure, reloads the
-  // shared copy so the chip row updates too, and cannot leave `busy` stuck on
-  // if the call throws.
-  async function run(action, successKey) {
+  async function handleCreate(e) {
+    e.preventDefault();
+    const name = newWorkspaceName.trim();
+    if (!name) return;
+    setNewWorkspaceName('');
     setBusy(true);
     try {
-      await action();
+      await createWorkspace({ name, position: nextPosition(workspaces) });
       await reload();
-      if (successKey) onShowToast?.(t(successKey), 'success');
+      onShowToast?.(t('workspace.saved'), 'success');
     } catch (err) {
       // 409 is the one failure the user can act on, so it gets its own words
       // rather than the raw server sentence.
@@ -60,252 +68,70 @@ function WorkspacesView({ onShowToast }) {
     }
   }
 
-  function handleArchiveWorkspace(workspace) {
-    // ARCHIVES, it does not delete — the owner's rule that work is never lost.
-    //
-    // Deleting already preserved the tasks (ON DELETE SET NULL), but destroyed
-    // everything that made them findable: which workspace, which category,
-    // and — now that visibility comes from membership — who could see them at
-    // all. A colleague would keep what she wrote and lose what was assigned to
-    // her, while still being the person who has to do it.
-    //
-    // The confirmation says what archiving MEANS rather than quoting a count,
-    // for the same reason the old one did: the number is not the part you need
-    // before clicking.
-    if (!window.confirm(t('workspace.archive_workspace_confirm', { name: workspace.name }))) return;
-
-    // Archiving, then an UNDO in the toast. The confirmation already asked, so
-    // this is not a second gate — it is the one-tap way back for the case a
-    // confirmation cannot catch: the right answer given to the wrong row.
-    // Restoring is one write and nothing was taken apart, so there is no state
-    // to reconstruct and no reason to make somebody hunt for the section below.
-    setBusy(true);
-    archiveWorkspace(workspace.record_id)
-      .then(async () => {
-        await reload();
-        setArchivedVersion((v) => v + 1);
-        onShowToast?.({
-          message: t('workspace.archived'),
-          variant: 'success',
-          // Longer than the default 3s: an undo nobody has time to read is a
-          // toast with a decoration on it.
-          duration: 8000,
-          action: {
-            label: t('workspace.undo'),
-            onClick: () => {
-              restoreWorkspace(workspace.record_id)
-                .then(async () => {
-                  await reload();
-                  setArchivedVersion((v) => v + 1);
-                })
-                .catch((err) => onShowToast?.(err.detail || err.message, 'error'));
-            },
-          },
-        });
-      })
-      .catch((err) => onShowToast?.(err.detail || err.message, 'error'))
-      .finally(() => setBusy(false));
-  }
-
-  function handleDeleteCategory(category) {
-    if (!window.confirm(t('workspace.delete_category_confirm', { name: category.name }))) return;
-    run(() => deleteCategory(category.record_id), 'workspace.deleted');
+  // What the row says under the name. Singular and plural are separate keys
+  // rather than an i18next plural suffix, because that is what this project
+  // already does everywhere else (toast.added_one beside toast.added_many) and
+  // one key quietly relying on the library's rules would be a second idiom
+  // hiding in the locale file.
+  function subtitleFor(workspace) {
+    const count = categoriesFor(workspace.record_id).length;
+    const parts = [
+      count === 0 ? t('workspace.cat_count_none')
+        : count === 1 ? t('workspace.cat_count_one')
+          : t('workspace.cat_count_many', { count }),
+    ];
+    if (settings?.default_workspace_id === workspace.record_id) {
+      parts.push(t('workspace.default_badge'));
+    }
+    return parts.join(' · ');
   }
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--text-secondary)]">{t('workspace.manage_hint')}</p>
 
-      {/* Which vocabulary the extractor is given when the user is on "Όλα".
-          A second setting beside the switcher, not a reuse of it: "where am I
-          looking" and "whose category names should the model see" are
-          different questions, and "Όλα" cannot answer the second — the model
-          must never be handed several workspaces and asked to guess. */}
+      {/* No empty card when there is nothing in it. Every account is furnished
+          with Business + Personal on creation, so this is the one-second gap
+          before the first fetch lands rather than a state anybody lives in —
+          and an empty bordered box reads as something being broken. */}
       {workspaces.length > 0 && (
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-input)] p-3 space-y-1">
-          <span className="text-xs text-[var(--text-secondary)] font-medium uppercase tracking-wide block">
-            {t('workspace.default_label')}
-          </span>
-          <CustomSelect
-            compact
-            value={settings?.default_workspace_id || ''}
-            options={[
-              { value: '', label: t('workspace.unfiled') },
-              ...workspaces.map((w) => ({ value: w.record_id, label: w.name })),
-            ]}
-            onChange={(value) =>
-              updateSettings({ default_workspace_id: value || null })?.catch?.(
-                (err) => onShowToast?.(err.message, 'error')
-              )
-            }
-            ariaLabel={t('workspace.default_label')}
-          />
-          <p className="text-xs text-[var(--text-muted)]">{t('workspace.default_hint')}</p>
-        </div>
+      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] overflow-hidden divide-y divide-[var(--border-subtle)]">
+        {workspaces.map((workspace) => (
+          <button
+            key={workspace.record_id}
+            type="button"
+            onClick={() => onOpen(workspace.record_id)}
+            className="w-full flex items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--bg-hover)]"
+          >
+            <span
+              aria-hidden="true"
+              className="w-7 h-7 rounded-md flex-shrink-0"
+              style={{ backgroundColor: workspace.color || 'var(--text-muted)' }}
+            />
+            <span className="flex-1 min-w-0">
+              <span className="block truncate text-sm font-medium text-[var(--text-primary)]">
+                {workspace.name}
+              </span>
+              <span className="block truncate text-xs text-[var(--text-muted)]">
+                {subtitleFor(workspace)}
+              </span>
+            </span>
+            {isShared(workspace.record_id) && (
+              <MemberStack members={membersFor(workspace.record_id)} />
+            )}
+            <ChevronIcon />
+          </button>
+        ))}
+      </div>
       )}
 
-      {workspaces.map((workspace) => {
-        const categories = categoriesFor(workspace.record_id);
-        return (
-          <div
-            key={workspace.record_id}
-            className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-input)] p-3 space-y-2"
-          >
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={workspace.color || '#888888'}
-                disabled={busy}
-                onChange={(e) => run(() => updateWorkspace(workspace.record_id, { color: e.target.value }))}
-                className="w-7 h-7 rounded border-0 bg-transparent flex-shrink-0"
-                aria-label={`${workspace.name} — ${t('workspace.label')}`}
-              />
-              <input
-                type="text"
-                defaultValue={workspace.name}
-                disabled={busy}
-                // onBlur, not onChange: a PATCH per keystroke would be one
-                // request per letter, and each half-typed name can 409.
-                onBlur={(e) => {
-                  const name = e.target.value.trim();
-                  if (name && name !== workspace.name) {
-                    run(() => updateWorkspace(workspace.record_id, { name }), 'workspace.saved');
-                  }
-                }}
-                className="flex-1 min-w-0 bg-transparent text-[var(--text-primary)] font-medium focus:outline-none"
-              />
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => handleArchiveWorkspace(workspace)}
-                className="tap-44 px-2 text-sm text-[var(--danger-text)] hover:underline flex-shrink-0"
-              >
-                {t('workspace.archive')}
-              </button>
-            </div>
-
-            <div className="pl-9 space-y-1">
-              {categories.length === 0 && (
-                <p className="text-xs text-[var(--text-muted)]">{t('workspace.no_categories')}</p>
-              )}
-
-              {categories.map((category) => (
-                <div key={category.record_id} className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={category.color || '#888888'}
-                    disabled={busy}
-                    onChange={(e) => run(() => updateCategory(category.record_id, { color: e.target.value }))}
-                    className="w-5 h-5 rounded border-0 bg-transparent flex-shrink-0"
-                    aria-label={`${category.name} — ${t('workspace.category_label')}`}
-                  />
-                  {category.system_key ? (
-                    <span
-                      className="flex-1 min-w-0 truncate text-sm text-[var(--text-secondary)]"
-                      title={t('workspace.system_locked')}
-                    >
-                      {category.name} 🔒
-                    </span>
-                  ) : (
-                    <>
-                      <input
-                        type="text"
-                        defaultValue={category.name}
-                        disabled={busy}
-                        onBlur={(e) => {
-                          const name = e.target.value.trim();
-                          if (name && name !== category.name) {
-                            run(() => updateCategory(category.record_id, { name }), 'workspace.saved');
-                          }
-                        }}
-                        className="flex-1 min-w-0 bg-transparent text-sm text-[var(--text-primary)] focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => handleDeleteCategory(category)}
-                        className="tap-44 px-2 text-xs text-[var(--danger-text)] hover:underline flex-shrink-0"
-                        aria-label={`${t('workspace.remove')} ${category.name}`}
-                      >
-                        ✕
-                      </button>
-                    </>
-                  )}
-                </div>
-              ))}
-
-              {newCategoryFor === workspace.record_id ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const name = newCategoryName.trim();
-                    if (!name) return;
-                    setNewCategoryName('');
-                    setNewCategoryFor(null);
-                    run(() => createCategory({
-                      workspace_id: workspace.record_id,
-                      name,
-                      position: nextPosition(categories),
-                    }), 'workspace.saved');
-                  }}
-                >
-                  <input
-                    autoFocus
-                    type="text"
-                    value={newCategoryName}
-                    placeholder={t('workspace.name_placeholder')}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    onBlur={() => { if (!newCategoryName.trim()) setNewCategoryFor(null); }}
-                    className="w-full bg-[var(--bg-card)] rounded px-2 py-1 text-sm border border-[var(--border-subtle)] focus:outline-none"
-                  />
-                </form>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setNewCategoryFor(workspace.record_id)}
-                  className="tap-44 text-xs text-[var(--brand-primary)] hover:underline"
-                >
-                  + {t('workspace.new_category')}
-                </button>
-              )}
-            </div>
-
-            {/* Collapsed by default and fetches only when opened: a list of
-                workspaces must not become one members request per workspace
-                every time Settings is visited, and a solo account has exactly
-                one member to show. */}
-            <MembersPanel
-              workspace={workspace}
-              onShowToast={onShowToast}
-              onChanged={reload}
-            />
-          </div>
-        );
-      })}
-
-      <ArchivedPanel
-        version={archivedVersion}
-        onShowToast={onShowToast}
-        onRestored={() => { reload(); setArchivedVersion((v) => v + 1); }}
-      />
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const name = newWorkspaceName.trim();
-          if (!name) return;
-          setNewWorkspaceName('');
-          run(() => createWorkspace({ name, position: nextPosition(workspaces) }), 'workspace.saved');
-        }}
-        className="flex gap-2"
-      >
+      <form onSubmit={handleCreate} className="flex gap-2">
         <input
           type="text"
           value={newWorkspaceName}
           placeholder={t('workspace.new_workspace')}
           onChange={(e) => setNewWorkspaceName(e.target.value)}
-          className="flex-1 min-w-0 bg-[var(--bg-input)] rounded-lg px-3 py-2 text-sm border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none"
+          className="flex-1 min-w-0 bg-[var(--bg-input)] rounded-lg px-3 py-2 text-sm border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)]"
         />
         <button
           type="submit"
@@ -316,7 +142,71 @@ function WorkspacesView({ onShowToast }) {
           +
         </button>
       </form>
+
+      <ArchivedPanel
+        version={archivedVersion}
+        onShowToast={onShowToast}
+        onRestored={() => { reload(); setArchivedVersion((v) => v + 1); }}
+      />
     </div>
+  );
+}
+
+/**
+ * Up to three faces and then a count.
+ *
+ * Overlapped rather than spaced, which is the shape Trello and Figma both
+ * settled on: it reads as ONE group at a glance instead of as three separate
+ * things, and it stays the same width whether a room has three people or
+ * eleven. The ring is the card's own background, so the circles cut into each
+ * other cleanly on either theme — as an inline boxShadow rather than a Tailwind
+ * ring class, because the colour has to come from the token and be certain to
+ * survive the build.
+ */
+function MemberStack({ members }) {
+  const shown = members.slice(0, 3);
+  const extra = members.length - shown.length;
+  if (shown.length === 0) return null;
+
+  const ring = { boxShadow: '0 0 0 2px var(--bg-card)' };
+
+  return (
+    <span className="flex items-center flex-shrink-0">
+      {/* The ring goes on a wrapper rather than on Avatar itself: Avatar takes
+          no style prop, and giving it one so that a list row can draw a border
+          would push a caller's layout concern into a component every screen
+          shares. */}
+      {shown.map((member, index) => (
+        <span
+          key={member.user_id}
+          style={ring}
+          className={`rounded-full flex flex-shrink-0 ${index > 0 ? '-ml-2' : ''}`}
+        >
+          <Avatar member={member} size="sm" />
+        </span>
+      ))}
+      {extra > 0 && (
+        <span
+          style={ring}
+          className="-ml-2 w-6 h-6 rounded-full bg-[var(--bg-hover)] text-[10px] font-semibold text-[var(--text-secondary)] flex items-center justify-center flex-shrink-0"
+        >
+          +{extra}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg
+      width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className="text-[var(--text-muted)] flex-shrink-0"
+      aria-hidden="true"
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
   );
 }
 

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useModalBehavior } from '../hooks/useModalBehavior';
+import { useWorkspaces } from '../hooks/useWorkspaces';
 import {
   isNotificationSupported,
   getNotificationPermission,
@@ -33,6 +34,7 @@ import SettingsRow, { SettingsGroup } from './SettingsRow';
 import OptionSheet from './OptionSheet';
 import RecurrencesView from './RecurrencesView';
 import WorkspacesView from './WorkspacesView';
+import WorkspaceDetail from './WorkspaceDetail';
 
 // Hardcoded owner user_id, used purely for frontend visibility: it hides the
 // Developer section from everyone else. The /dev/token-usage endpoint still
@@ -95,11 +97,38 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
   useModalBehavior(onClose);
   const { t, i18n } = useTranslation();
 
-  // 'root' plus one level. Not a general navigation stack: two screens deep is
-  // already more than this amount of settings justifies, and a stack would need
-  // history handling to stop Back closing the whole modal.
+  // 'root', one named screen, and — for workspaces alone — one level below that.
+  //
+  // CORRECTED: this comment used to read "'root' plus one level. Not a general
+  // navigation stack: two screens deep is already more than this amount of
+  // settings justifies." Workspaces went two deep anyway, and not because the
+  // settings grew: ONE workspace holds three unrelated jobs (what it is called,
+  // what categories are in it, who is in it), and flattening those into one card
+  // is what put its people three taps away behind a disclosure.
+  //
+  // It is still not a general stack. Exactly one screen may have a child, the
+  // child is identified by an id rather than by a name, and Back is two explicit
+  // cases — because a real history would need handling to stop Back closing the
+  // whole modal, which is the thing that comment was right about.
   const [screen, setScreen] = useState('root');
+  const [openWorkspaceId, setOpenWorkspaceId] = useState(null);
   const [picker, setPicker] = useState(null); // 'language' | 'appearance' | null
+
+  // Looked up rather than carried: the title below is this name, and a copy
+  // taken when the row was tapped would still say «Business» after it was
+  // renamed on the screen underneath.
+  const { workspaces } = useWorkspaces();
+  const openWorkspace = workspaces.find((w) => w.record_id === openWorkspaceId);
+
+  // Stable, because WorkspaceDetail calls it from an effect when its workspace
+  // disappears — a fresh function each render would make that effect re-run on
+  // every render of this modal.
+  const closeWorkspace = useCallback(() => setOpenWorkspaceId(null), []);
+
+  function handleBack() {
+    if (openWorkspaceId) setOpenWorkspaceId(null);
+    else setScreen('root');
+  }
 
   const isOwner = profile?.id === OWNER_USER_ID;
 
@@ -140,7 +169,9 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
     setPicker(null);
   }
 
-  const title = screen === 'root' ? t('settings.title') : t(SCREENS[screen]);
+  const title = openWorkspace
+    ? openWorkspace.name
+    : screen === 'root' ? t('settings.title') : t(SCREENS[screen]);
 
   return (
     <div
@@ -157,7 +188,7 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
         <div className="flex items-center gap-2 p-4 border-b border-[var(--border-subtle)] flex-shrink-0">
           {screen !== 'root' && (
             <button
-              onClick={() => setScreen('root')}
+              onClick={handleBack}
               className="tap-44 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xl leading-none"
               aria-label={t('settings.back')}
             >
@@ -184,7 +215,10 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
               <SettingsGroup>
                 <SettingsRow label={t('settings.notifications')} onClick={() => setScreen('notifications')} />
                 <SettingsRow label={t('recurrence.title')} onClick={() => setScreen('recurrences')} />
-                <SettingsRow label={t('workspace.manage')} onClick={() => setScreen('workspaces')} />
+                <SettingsRow
+                  label={t('workspace.manage')}
+                  onClick={() => { setOpenWorkspaceId(null); setScreen('workspaces'); }}
+                />
                 <SettingsRow label={t('settings.calendar')} onClick={() => setScreen('calendar')} />
                 <SettingsRow label={t('hostaway.title')} onClick={() => setScreen('hostaway')} />
               </SettingsGroup>
@@ -234,7 +268,17 @@ export function SettingsModal({ onClose, onShowToast, profile, onProfileUpdate }
           {screen === 'profile' && <ProfileSection profile={profile} onProfileUpdate={onProfileUpdate} />}
           {screen === 'notifications' && <NotificationsSection onShowToast={onShowToast} />}
           {screen === 'recurrences' && <RecurrencesView onShowToast={onShowToast} />}
-          {screen === 'workspaces' && <WorkspacesView onShowToast={onShowToast} />}
+          {screen === 'workspaces' && (
+            openWorkspaceId ? (
+              <WorkspaceDetail
+                workspaceId={openWorkspaceId}
+                onShowToast={onShowToast}
+                onBack={closeWorkspace}
+              />
+            ) : (
+              <WorkspacesView onShowToast={onShowToast} onOpen={setOpenWorkspaceId} />
+            )
+          )}
           {screen === 'calendar' && <CalendarConnectionView onShowToast={onShowToast} />}
           {screen === 'hostaway' && <HostawayConnectionView onShowToast={onShowToast} />}
           {screen === 'developer' && <DeveloperUsageView />}
