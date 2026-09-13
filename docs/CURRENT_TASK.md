@@ -1,263 +1,167 @@
-ACTIVE TASK — Filters: one memory, and a screen that stops lying about being empty
+ACTIVE TASK — Settings rebuilt in four slices, pushed one at a time. Slice 1: the workspace gets its own screen
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
-> The previous task's HANDOVER section is CARRIED FORWARD at the bottom of this file,
-> unchanged. Nothing in it is done: it needs a second person in the room and one migration
-> run by hand. `PROJECT_STATUS.md` points at it by name, so it stays until it is closed.
-> What was dropped from this file is only the multi-user task's slice-by-slice history —
-> that lives in git (`823e824` and its parents) and in summary in `PROJECT_STATUS.md`.
+> **This file was written BEFORE the code, at the owner's explicit request** — «εγραφη στα
+> ντοκς οι αποφασεις ωστε αν δεν τα τελιωσω σημερα να ξερω τι εχω κανει και που ειμαστε».
+> Everything below the "Slice 1" heading is therefore a PLAN, not a report, until it says
+> otherwise. Nothing has been built yet.
+>
+> The previous task's "Still open, deliberately" and its HANDOVER section are CARRIED
+> FORWARD at the bottom of this file, unchanged. Nothing in them is closed: the handover
+> still needs a second person in the room and one migration run by hand, and
+> `PROJECT_STATUS.md` points at it by name. What was dropped is only the filters task's
+> slice-by-slice history — that lives in git (`e8cb35a`, `e4abf4f` and their parents) and in
+> summary in `PROJECT_STATUS.md`.
 
 ## What was asked
 
-The owner, 2026-09-12, opening the session by declaring the day's subject: «σημερα θελω να
-δουλεψουμε το ui and ux οποτε θελω να είσαι expert σε αυτο τον τομέα». Then the actual
-request:
+The owner, 2026-09-13, opening the session:
 
-> «επιδει εχουμε πολλα πλεον workplaces gategorys φιλτρο μεσα στο φιλτρο θελω να γινει λιγο
-> ποιο εξυπνο λειτουργικο και ευχρηστο ταυτοχρονα για ανηδεους χρήστες.»
+> «θελω λιγο να βελτιωσουμε το ux ui τις καρτελας με τις ρυθμίσεις πχ για τους χωρους
+> εργασίας για τα προσθετα μέλοι κτλ κάνε ερευνα πως τα εχουμε πως έχουν οι μεγαλες
+> πλατφορμες ελα να κανουμε brainstorm να πειραματιστουμε και να αποφασισω πως θα
+> προσωρησουμε ρωτα πριν τρεξεις κατι αμα χρειαζεσαι περισσοτερες πληροφοιρες»
 
-Six things were found in the code before anything was proposed, and he was shown all six:
-the vertical cost (~190px of controls above the first task on a phone, ~30% of the screen),
-two different memory rules sitting 30px apart, the category control vanishing on «Όλα», no
-sign anywhere that a filter was on, two different habits for one job (Browse had counts and
-a sort, Today had neither), and chips that scroll off the right edge with no way back to
-the selected one.
+Three instructions in one sentence, and all three were followed: research first, then
+mockups to experiment on, then **he** decides. No code before that.
+
+## The eight findings, shown to him before anything was proposed
+
+Read out of the running code (`SettingsModal.jsx`, `WorkspacesView.jsx`, `MembersPanel.jsx`,
+`InvitePanel.jsx`), not from memory:
+
+1. **Three taps to see who is in a workspace** — avatar → Χώροι εργασίας → Μέλη. A fourth
+   for the activity log. No face is visible before any of them.
+2. **One workspace is ONE card doing six jobs** — name, colour, categories, members,
+   invites, activity, archiving. Five levels of nesting: modal → screen → card →
+   disclosure → disclosure.
+3. **The fields do not look like fields** — the workspace name is a borderless `<input>`
+   that saves `onBlur`, with nothing on screen saying either thing.
+4. **Destructive actions are permanently visible** — a red «Αρχειοθέτηση» on every
+   workspace row, a ✕ beside every category and every member.
+5. **The confirmations are the browser's** — `window.confirm` in 8 places across the
+   frontend. It cannot say what will be lost and does not carry the app's styling.
+6. **Invite means "press a button, get a link"** — no role, and pending invites are visible
+   only three levels deep.
+7. **On desktop, Settings is still a phone** — a 448px modal capped at 85vh, while the rest
+   of the app has had a sidebar shell since 1024px.
+8. **Colour opens the OS colour dialog** — `<input type="color">`, a spectrum and hex codes
+   for a choice that wants eight swatches.
+
+## What the research changed, and this is the part worth keeping
+
+Five platforms were read for their member-management screens (Notion, Slack, Linear, Trello,
+Todoist). Six patterns recur. **Two of them cannot be built here today, and that was found
+by reading `main.py` and `sharing.py` BEFORE drawing anything** — a button that always fails
+is worse than no button, the same rule the locked Hostaway category already follows:
+
+- **Invite by email is impossible.** There is no mail-sending service in this app; the
+  verification emails are sent by Supabase on its own behalf, not by us. Drawn faded in the
+  mockup with a «δεν υπάρχει» badge rather than drawn working.
+- **A role dropdown has nothing to select.** There are exactly two roles (`owner`,
+  `member`) and **no route that changes an existing member's role** — `PATCH
+  /workspaces/{id}/members/me` only carries `notify_all`. So the role is a LABEL in the
+  mockup, not a control. Making it a control needs a third role AND a new endpoint.
+- **Two things come free.** `GET /workspaces/{id}/members` already returns `email` and
+  `joined_at` for every member and **nothing displays either**. `sharing.create_invite`
+  already takes a `role` argument the HTTP route does not expose.
 
 ## The decisions, and they were his
 
-1. **Which two of the six actually hurt.** Asked to pick, he chose «2 και 3» — *«χάνομαι:
-   δεν ξέρω τι φίλτρο είναι ανοιχτό»* and *«τα φίλτρα δεν θυμούνται»*. The height complaint
-   he did NOT pick, which is why the pickers were left where they are.
-2. **The shape follows the number, not his own account**: «αναλογα με τον αριθμο να γινεται
-   γτ δεν ξερω ο καθε χρηστης ποσα θα εχει». This is why `switcherShape()` is a tested rule
-   with stated thresholds instead of a layout tuned to his two workspaces.
-3. **Slices 1 and 2 now, slice 3 by discussion**: «κανε τα 2 και ελα για σκεψη
-   καταιγιδισμο ιδεων για το 3».
-4. **Push before the talk**, so he could look at it: «κανε πρωτα ενα push να δω τι εχεις
-   κανει μεχρι τωρα».
+1. **All eight, not a subset** — «ολα θα τα φτιαξουμε». Deliberately different from
+   2026-09-12, where he was shown six findings and picked two. The reason it is safe to say
+   yes to all eight here is decision 3.
+2. **The shape is approved** — «για αρχη ναι με πειθει». A list of workspaces that shows the
+   faces without opening anything, and inside each workspace three tabs: Γενικά /
+   Κατηγορίες / Μέλη. Desktop is the same structure opened out, not a second design.
+3. **One push per slice, and the slice is looked at first** — «θα κανουμε πουσκ ενα ενα οχι
+   ολα μαζι το 1 αν μας αρεσει πουσ αν οχι συνεχεια μεχρι να μας αρεσει και ουτο
+   κααθεξεις». This is the decision that makes "all eight" affordable: nothing accumulates
+   unseen, and each slice is iterated until he likes it **before** it is pushed.
+4. **The order is 1 → 2 → 3 → 4** as proposed — «παμε με την σειρα».
+5. **The docs are written before the code**, not after — see the note at the top.
 
-## What shipped — `e8cb35a`, pushed to `main`
+## The four slices
 
-**One shared copy of the filters.** Category, priority and whose lived in three `useState`s
-PER SCREEN. `components/TaskFilterProvider.jsx` now holds one copy, mounted inside
-`TaskViews` — below the workspace scoping, because that is the first line where both things
-it needs are known: the active room, and the task list the counts come from. `FilterBar`
-consequently takes **no props at all**, where it used to take six.
-
-**It deliberately does not persist.** A P1 left on from Tuesday is work hidden on Thursday.
-The filters live as long as the app is open; the workspace remains the only thing that
-survives a restart (it is in `app_settings`, so phone and laptop agree). See DECISIONS.md.
-
-**The rule that carries the whole change**, in `utils/taskFilters.js`: *a filter must never
-apply while the control that set it is off screen.* Two ways that used to happen, both
-producing an empty list with nothing on screen to explain it:
-
-- A category id belongs to ONE workspace. Filtering by κήπος and switching to Γραφείο left
-  the id in place: **zero tasks, and a category control rendering a blank label** because
-  nothing in its options matched. This was a live bug, not a theory.
-- «Δικά μου» hides its own control on a solo workspace, while the value it had set stayed
-  behind and kept filtering.
-
-So the STORED value and the value IN FORCE are not the same thing. The category is stored
-**per workspace**, which makes the stale id unrepresentable rather than merely fixed — and
-has the side effect that coming back to a room finds the filter where it was left. Derived
-with `useMemo`, never copied into state by an effect, so nothing has to clean up after a
-switch.
-
-**The row that says what is hidden.** `components/ActiveFilters.jsx`: one pill per active
-filter with an ×, a funnel in front, and «Καθάρισε τα φίλτρα» from two filters up. It
-renders **nothing at all** when nothing is filtered, so the common case costs no height —
-it appears only in the state that needs explaining. Used by Today, the Calendar and both
-Browse tabs, in the same place with the same gesture.
-
-**The empty screens stopped lying.** Where a list is empty BECAUSE of a filter, the message
-is «Κρυμμένες από τα φίλτρα: 12» with a clear button, instead of «Τίποτα για σήμερα 🎉»
-over a day that has work in it. The count is measured against the unfiltered list only in
-that one case. On the history tab it is counted in the same pass as the rows: asking
-`historyCounts.all` instead would count every KIND of event in the range, so a filter
-hiding three completions would have claimed to hide forty.
-
-**The switcher's shape follows the count** (`switcherShape`, tested): under two workspaces
-nothing is drawn; two to five keep the chips he chose, **plus the selected one scrolled into
-view** — the active workspace is restored from `app_settings`, so the app could open already
-filtered by a chip off the right edge with every visible chip looking unselected; six and up
-become one menu; past eight options the menu gains a find box that folds Greek accents the
-same way the task search does («κηπος» finds «Κήπος»). `SideNav` gets the same
-scroll-into-view for the same failure in the vertical direction.
-
-**Counts everywhere.** «Κήπος (7)» now appears on every screen, not only in Browse, counted
-over live work in the whole workspace rather than over what is already narrowed. An empty
-category is dimmed but stays in the user's own order — a list that rearranges itself by how
-full each row is makes his own ordering unreliable.
-
-### Three behaviour changes worth naming
-
-1. **A task with no priority now counts as P3**, which is what its own row has always
-   printed. Today compared the raw value and Browse compared the defaulted one; only one of
-   them agreed with the badge beside it.
-2. **«Δικά μου» now applies in Browse**, where it had never been wired despite being the
-   same question.
-3. **The category menu's resting label is the axis** («Κατηγορία»), not «Όλα». Two closed
-   controls both reading «Όλα» say neither what they filter nor that they are idle. Browse
-   loses the total it used to print there; the per-category counts carry it instead.
-
-### One old bug fixed in passing, because the find box could not work without it
-
-A capturing `scroll` listener on `window` closed `CustomSelect`'s menu when you scrolled the
-menu's OWN list — scroll reaches capturing listeners even though it does not bubble. So
-reaching the bottom of a long list closed the thing you were reading. And a phone fires
-`resize` the instant the keyboard opens, which would have closed a searchable menu before a
-single character arrived; it re-measures instead.
-
-## Changed
-
-```
-new   frontend/src/utils/taskFilters.js          the rules, pure and tested
-new   frontend/src/hooks/useTaskFilters.js       the context
-new   frontend/src/components/TaskFilterProvider.jsx
-new   frontend/src/components/ActiveFilters.jsx  the row with the ×s
-new   frontend/scripts/task-filters.test.mjs     65 checks, wired into npm run check
-edit  FilterBar.jsx (six props → none), WorkspaceBar.jsx (three shapes), CustomSelect.jsx
-      (find box, dimmed options, the two listener fixes), EmptyState.jsx (an action button),
-      TodayView.jsx, CalendarView.jsx, BrowseView.jsx, UpcomingList.jsx, SideNav.jsx,
-      icons.jsx (FunnelIcon), App.jsx (mounts the provider), el.json + en.json (6 keys)
-```
-
-## Baselines, as the commands printed them
-
-```
-node scripts/task-filters.test.mjs   65 PASS, 0 FAIL — "All filter checks passed."
-npm run check                        ui-check: OK — 85 files, 49 tokens, 483 translation keys   (exit 0)
-npm run lint                         ✖ 12 problems (12 errors, 0 warnings)   — unchanged baseline
-npm run build                        ✓ built in 446ms
-pytest tests/ -q                     505 passed in 4.75s   (untouched; this is frontend-only)
-```
-
-`npm run check` does not compile JSX, so `npm run build` was run separately and on purpose:
-without it a broken component passes the gate and fails on his phone.
-
-## What a person has actually SEEN
-
-**Nothing.** Not one of these screens has been looked at in a browser, by anyone. The logic
-is covered by 65 pure-function checks against the real locale files — which is what catches
-the failure mode that matters for a chip, a MISSING TRANSLATION KEY, since i18next renders
-the key itself and the build stays green. That is not the same as seeing it.
-
-## What nobody has watched, and what would settle it
-
-| Not watched | What would settle it |
-|---|---|
-| The chip row itself: does it read as "filters", is the × big enough for a thumb | Turn on a category and a priority on Today, look at the row, tap one × |
-| «Κρυμμένες από τα φίλτρα: 12» + its button | Set P1 on a day with no P1 work; the old text would say «Τίποτα για σήμερα 🎉» |
-| The filters following you between screens | Set κήπος on Today, go to Ημερολόγιο and Όλα — the chip must still be there |
-| The stale-category fix | With κήπος on, switch workspace: the list must fill, not empty, and the chip must vanish |
-| The find box (needs 8+ categories or 6+ workspaces) | Nobody has an account that big — **this is the least proven part of the change** |
-| The auto-scroll to the selected chip | Needs 4-5 workspaces so the row actually overflows |
-| Greek accent folding in the find box | Type «κηπος» without the accent and see «Κήπος» |
-
-## Slice 3 — the room becomes a filter, and the top of the screen changes shape
-
-Live: `e4abf4f`, pushed 2026-09-12. Slices 1-2 were `e8cb35a`.
-
-### What was asked, and the two decisions were his
-
-He looked at what slices 1-2 had shipped and said what was wrong with it:
-
-> «ρε τα μαζεωες παρα πολυ κολλητα χωρις αποστασεις και δεν φαινονται καλα. δεν μου αρέσει
-> που ειναι έτσι εκει πάνω τα φιλτρ για τουε χωρους κανε 2 3 προτυπα με διαφορες ιδεες σε
-> html και να διαλεξω»
-
-Two separate complaints in one sentence — the SPACING (4px between pills, 26px of pill
-height: mine, and he was right) and the PLACE of the workspace controls. He asked for
-mockups rather than a proposal in prose, so three shapes were built as one page:
-claude.ai/code/artifact/3b3f20c3-e070-4336-bbdd-cc29edb1ee05 — the current top bar for
-comparison, plus Α (the room becomes the title), Β (one calm row) and Γ (a drawer), each
-labelled with how many pixels it costs before the first task.
-
-He chose **Α**, and then made the bigger decision himself:
-
-> «σκεφτομαι να ειναι by default παντα στο ολα και να κανεις επιλογη αν και μονο θελεις να
-> δεις μονο ενα χωρο αλλα μετά να μην μενει ετσι να γινεται δλδ μονο φιλτρο ουσιαστικα ο
-> χωρος. επισης οταν επιλεγη εναν χωρο να εχει και σαν περιγραμμα δημιουργικα και εξυπνα
-> το χρωμα του χωρου καπου· για το δευτερο κομματι σκεψου το εσυ σαν ειδικος»
-
-So: **the workspace stops being an address and becomes a filter** — it reverses his own
-earlier decision that it be remembered across devices, and DECISIONS.md carries both halves.
-The colour treatment he delegated; its reasoning is its own entry there.
-
-Asked whether he wanted the default workspace changed, he answered: «οχι ρε εσυ το ειπες μην
-αλλαζεις ονοματα απο χωρους συνεχισε μονο με τον κωδικα». **Nothing was renamed and no
-setting was written.**
-
-### The real account, read read-only before touching anything
-
-There is **no workspace called «Ακίνητα»** — that name was invented for the mockup, and it
-was nearly written into his live settings on the strength of it. What exists:
-
-| Room | Colour | Tasks | Categories |
+| # | What | Findings | Touches |
 |---|---|---|---|
-| Business | `#2563eb` | 212 | Hostaway *(locked)* |
-| Personal | `#16a34a` | 75 | none — **and this is the room shared with Evi** |
-| My App | **none** | 2 | Bugs, New Futures, Βελτιώσεις |
-| *unfiled* | — | 65 | — |
+| **1** | **The workspace gets its own screen** — a list showing faces + counts, and three tabs inside | 1, 2 | frontend only, no schema change |
+| 2 | Actions that do not frighten — ⋯ menus, our own confirm dialogs, fields that look like fields, an 8-colour palette | 3, 4, 5, 8 | frontend only, reaches other screens too |
+| 3 | Members and invites in the open — email + joined date on the row, pending invites beside the members, an invite dialog that says what it will do | 6 | frontend only, needs a second person to check |
+| 4 | Desktop gets its page — full-page Settings with a left nav from 1024px | 7 | frontend only, the largest slice |
 
-Two findings that changed the work: **My App has no colour at all**, which is why the colour
-guard needs no "no colour" branch (the token's neutral default takes over), and the shared
-room is **Personal**, not Business — so the handover checklist at the bottom of this file is
-about Personal.
+**Why 2 before 3**: slice 2 builds the PARTS — the ⋯ menu, the confirm dialog, the labelled
+field — that slice 3 then uses. Reversed, the members screen gets written twice.
 
-### What shipped
+## Not decided yet, and neither blocks slice 1
 
-- **`app_settings.active_workspace_id` is no longer read or written.** The room lives in
-  React state and every launch starts on «Όλα». The column stays in the database, like
-  `tasks.category`. `default_workspace_id` is a different setting and stays live.
-- **`WorkspaceBar.jsx` is deleted**, and with it `switcherShape()` and its six checks —
-  shipped that same morning. They chose between chips and a menu for a row that no longer
-  exists. `needsFind()` survived. The superseded reasoning is in DECISIONS_ARCHIVE.md.
-- **`RoomTitle.jsx`** is the app bar's title on a phone: plain text on «Όλα», a pill framed
-  in the room's colour otherwise, opening `OptionSheet` with a dot and a live count per
-  room. `OptionSheet` gained `swatch`, `hint` and `searchable` rather than a second sheet
-  being written.
-- **`FilterSheet.jsx`** holds all three filters as visible pills — no dropdown inside a
-  menu — at 44px rows with real section labels. **`FilterBar.jsx` is now one 36px line**: a
-  «Φίλτρα» button with a count, and the active pills at 8px apart and 32px tall.
-- **Browse gave up its own category and priority controls** and uses the same button. It
-  keeps sort, and on History what kind and how far back.
-- **`countByWorkspace`** in `utils/workspaces.js`, three checks, for the count in the picker.
-- **`categoryOptions()` / `priorityOptions()` and their five checks are gone**: they built
-  glued labels ("Κήπος (7)") for dropdowns that no longer exist.
-- **`--ws-color` + `.ws-frame` / `.ws-dot` / `.ws-rule`** in `index.css`, in both palettes.
+Two of the four closing questions went unanswered and are deliberately left open:
 
-**Before the first task on a phone: ~205px, now ~100px.**
+- **Does he use the desktop enough to justify slice 4?** Belongs to slice 4. If the answer
+  turns out to be "mostly phone", slice 4 is the one to drop, not to shrink.
+- **Do we go looking for a mail service?** Belongs to slice 3. Without it, the invite stays
+  link-only — which already works — and the email field stays out of the UI rather than
+  going in disabled.
 
-### Baselines, as the commands printed them
+## Slice 1 — what it is
 
-```
-node scripts/task-filters.test.mjs   49 PASS, 0 FAIL
-node scripts/workspaces.test.mjs     all passed (3 new)
-npm run check                        ui-check: OK — 86 files, 50 tokens, 486 translation keys   (exit 0)
-npm run lint                         ✖ 12 problems — unchanged baseline
-npm run build                        ✓ built in 434ms
-pytest tests/ -q                     505 passed in 5.14s   (untouched; frontend only)
-```
+**PLAN, not yet built.** `WorkspacesView.jsx` (323 lines) today renders every workspace, its
+categories, its members panel, its invite panel, its activity panel and the archive section
+in one scrolling column. It becomes two screens:
 
-One extra check worth repeating by hand: `grep -o "\.ws-frame{[^}]*}" dist/assets/*.css`
-prints the rule **twice**, once as a plain `var()` and once as the `color-mix`. Lightning
-CSS adds that fallback itself, so a browser too old for `color-mix` gets the raw colour
-rather than no border at all.
+- **The list.** One row per workspace: colour, name, a subtitle counting its categories and
+  saying whether it is the default, and an avatar stack of its members on the right —
+  **the faces move to where they answer the question without a tap**. Below it, «Νέος χώρος»
+  and an «Αρχειοθετημένοι» row carrying its count.
+- **The workspace.** Header with the colour, the name and a ⋯, then three tabs. Γενικά holds
+  the name, the colour and the default switch. Κατηγορίες holds the rows. Μέλη holds what
+  `MembersPanel` holds today, no longer collapsed inside a card.
 
-### What nobody has watched, and what would settle it
+What slice 1 does NOT do, on purpose: the ⋯ menu, the confirm dialogs, the colour palette
+and the invite dialog are slice 2 and 3. Slice 1 moves things; it does not restyle the
+controls.
+
+**The avatar stack costs a decision that has to be made honestly**: today `MembersPanel`
+fetches ONLY when opened, precisely so a list of workspaces does not become one members
+request per workspace on every visit to Settings. A list that shows faces without opening
+needs those members up front. Whichever way this goes — one batched read, or reusing what
+`useMembers` already holds — it must not become N requests, and the answer belongs in
+DECISIONS.md once it is made.
+
+## What would settle slice 1
+
+Nothing here is settled by a test. To be filled in as they happen:
 
 | Not watched | What would settle it |
 |---|---|
-| The room pill and its coloured frame | Pick Business from the title; the pill should frame in blue and the hairline under the bar go blue |
-| The colourless room | Pick «My App»: the frame must still appear, in neutral grey, and the dot be a hollow ring |
-| «Όλα» sitting in the title slot all day | Use it for a day. If the screen's name is missed, it becomes a small line above the room — 5 lines of change |
-| The filter sheet's spacing, which is the whole point of this slice | Open «Φίλτρα» and try to hit a pill with a thumb |
-| That a launch really starts clean | Pick a room, close the app completely, reopen: it must read «Όλα» |
-| «Καθάρισε τα φίλτρα» returning to «Όλα» | Set a room + a priority, then clear |
-| Where a new task lands now | Add one from «Όλα» and check it appears under Business |
-| The find box in the room picker | Needs 8+ rooms. He has 3 — **still the least proven part of the day** |
+| The list showing faces | Open Settings → Χώροι εργασίας. Business must show two avatars without any tap |
+| That it did not become N requests | Watch the network panel: opening the list must not fire one members call per workspace |
+| The three tabs | Open Business, move between Γενικά / Κατηγορίες / Μέλη |
+| That nothing was lost in the move | Every action that worked before must still work: rename, colour, add/delete category, remove member, invite, leave, archive, restore |
+| The Hostaway category still locked | It must still show 🔒 and offer no delete |
+
+## Where the numbers stood BEFORE this work, as the commands printed them
+
+```
+npm run check   → exit 0
+ui-check: OK — 86 files, 50 tokens, 486 translation keys
+
+npm run lint    → ✖ 12 problems (12 errors, 0 warnings)     (the standing baseline, unchanged)
+```
+
+Backend not run: this slice touches no Python. The last backend number on record is
+`505 passed in 4.79s`, from the handover below.
+
+## The mockups he approved
+
+Read before the code, and the reason the shape above is not a guess:
+claude.ai/code/artifact/32fde3e5-5b6a-4b2c-b5df-d518805a333f
+
+The example member in them is named «Μαρία Κ.» and is **not** a real person — the real
+second account is Evi, named in the handover below.
+
+---
+---
 
 ## Still open, deliberately
 

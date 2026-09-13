@@ -1,6 +1,22 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: Settings is rebuilt in four slices, and each slice is LOOKED AT before it is pushed
+The owner was shown eight findings on the Settings screen and, unlike 2026-09-12 where he was shown six and picked two, he took all eight: «ολα θα τα φτιαξουμε». On its own that would have been the largest unreviewable change this project has attempted — the previous UI passes each shipped a screen at a time for a reason. What makes it affordable is the second half of the same sentence, and it is his: «θα κανουμε πουσκ ενα ενα οχι ολα μαζι το 1 αν μας αρεσει πουσ αν οχι συνεχεια μεχρι να μας αρεσει και ουτο κααθεξεις». **Each slice is built, shown to him, iterated until he likes it, and only then pushed.** Nothing accumulates unseen.
+
+**What was rejected**: one redesign covering all eight findings behind a single push. It would have been faster to write and impossible to judge — and this project has been burned specifically by things that were built, tested, pushed, and never watched by a person (the current `PROJECT_STATUS.md` carries three separate "NOT SEEN BY ANYONE IN A BROWSER" entries). A slice that is looked at before it is pushed converts the whole piece of work from one act of faith into four small ones.
+
+**The order is 1 → 2 → 3 → 4** and is not arbitrary: slice 2 builds the parts (the ⋯ menu, our own confirm dialog, the labelled field) that slice 3 consumes. Reversed, the members screen would be written twice. Slice 4 (desktop) is last because it is the only one whose value depends on an unanswered question — whether he uses a desktop enough to justify it.
+
+### Decision: the member's role is a LABEL, and invite-by-email is not drawn at all
+Five platforms were read before the mockups were made (Notion, Slack, Linear, Trello, Todoist) and two of their recurring patterns — a role dropdown beside each member, and inviting somebody by typing their email — were **checked against `main.py` and `sharing.py` before being drawn, not after**.
+
+Neither can be built today. There are exactly two roles, `owner` and `member`, and **no route changes an existing member's role**: `PATCH /workspaces/{id}/members/me` carries only `notify_all`, and the rest of the surface is add-and-remove. A «Ρόλος ▾» control would therefore need a third role to be worth having AND a new endpoint to write it. And there is no mail-sending service anywhere in this app — the verification emails are sent by Supabase on its own behalf, not by us — so an email field would be a box that swallows what you type.
+
+So in the approved mockups the role renders as a **pill, not a menu**, and the email field appears **faded, behind a «δεν υπάρχει» badge**. This is the same rule the locked Hostaway category and the missing remove-the-owner button already follow: *a button that always fails is worse than no button*. Showing the email field greyed rather than omitting it is a deliberate half-step — it tells the owner what the gap is, without promising it.
+
+**Found in the same pass, and it goes the other way**: `GET /workspaces/{id}/members` already returns `email` and `joined_at` for every member and **nothing in the app displays either**, and `sharing.create_invite` already accepts a `role` argument the HTTP route does not expose. Two improvements that cost nothing in the database.
+
 ### Decision: the workspace is a FILTER, not an address — every launch starts on «Όλα»
 **This reverses a decision the owner made on 2026-09-01 and confirmed on 2026-09-11**, and it is his: «να ειναι by default παντα στο ολα και να κανεις επιλογη αν και μονο θελεις να δεις μονο ενα χωρο αλλα μετα να μην μενει ετσι να γινεται δλδ μονο φιλτρο ουσιαστικα ο χωρος».
 
