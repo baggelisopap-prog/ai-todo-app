@@ -455,7 +455,33 @@ Seven pushes, `f860456..64c806e`. Vercel and Render deploy themselves from `main
 | Read-retry on 5xx, «Ο διακομιστής ξυπνάει…» | live, unverified |
 | Activity log stops inventing assignments | live, unverified |
 
-## THE ONE THING WAITING ON THE OWNER'S HANDS
+## ~~THE ONE THING WAITING ON THE OWNER'S HANDS~~ — DONE 2026-09-13
+
+**CLOSED.** `docs/migrations/2026-09-12-lock-ai-snapshot-columns.sql` was run by the owner in
+the Supabase SQL Editor on 2026-09-13, and the confirmation was read back rather than
+assumed:
+
+```
+ai_suggested_category   is_nullable = NO
+ai_suggested_priority   is_nullable = NO
+```
+
+It took two passes, and the reason is worth keeping: the first run executed only the count
+block, because steps 2 and 3 are shipped commented out (deliberately — the ALTER must not
+run before the count returns 0). Supabase skipped them as text and the owner reasonably read
+`0 0 407` as success. **A migration whose later steps are commented out needs its
+confirmation read, not its exit assumed** — which is why step 3 exists in the file at all.
+
+The precondition was measured twice before the lock went on, independently: 407 tasks, 0
+nulls in either column, once by the agent read-only and once by the owner.
+
+**Verified after the lock, against the stricter schema**: `505 passed in 4.55s`, and
+`tests/test_task_insert_paths.py` — the tripwire that fails the moment a third
+task-creation path appears without these columns — `2 passed`.
+
+The original note follows.
+
+---
 
 `docs/migrations/2026-09-12-lock-ai-snapshot-columns.sql`, in the Supabase SQL Editor.
 

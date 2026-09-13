@@ -10,6 +10,21 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **The two AI-snapshot columns are locked in the database (2026-09-13).** The last thing
+  carried in the 2026-09-12 handover as waiting on the owner's hands, and it is now closed:
+  `ai_suggested_category` and `ai_suggested_priority` are `NOT NULL` in `tasks`. The code has
+  refused to build a TaskRecord without them since 2026-08 — a snapshot that silently becomes
+  a default is a guess wearing the clothes of a measurement — but the table allowed NULL the
+  whole time, because a Postgres CHECK passes on NULL. Since sharing, one bad row stopped
+  breaking one person's list and started breaking the whole team's, delayed and on somebody
+  else's phone; this converts that into an immediate local refusal.
+
+  **Read back, not assumed**: `is_nullable = NO` on both. It took two passes — the first run
+  executed only the count block, since the ALTERs ship commented out on purpose, so
+  `0 0 407` was a green precondition rather than a green result. Precondition measured twice
+  independently (407 tasks, 0 nulls). Afterwards `505 passed in 4.55s`, including the
+  `test_task_insert_paths.py` tripwire that fails the moment a third task-creation path
+  appears without these columns.
 - **On a wide screen Settings stopped being a phone in the middle of a monitor (2026-09-13).**
   Slice 4, the last of four. From 1024px up it is a page — nav column on the left, section on
   the right — instead of a 448px window capped at 85vh floating in a 1920px screen.
