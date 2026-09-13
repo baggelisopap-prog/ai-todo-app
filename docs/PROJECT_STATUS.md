@@ -10,6 +10,36 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **The red buttons went into a menu, and the browser stopped speaking for us (2026-09-13).**
+  Slice 2 of four. Nothing moved this time; the controls changed. The ✕ that sat two pixels
+  from a colleague's name — permanently armed, in a list scrolled with a thumb — is a ⋯
+  menu; `window.confirm` is gone from **7 of its 8 places**, replaced by a dialog with a
+  title, the consequence spelled out, and a button that names the action instead of saying
+  OK (Cancel takes the focus, because every one of these guards something destructive);
+  the OS colour dialog became **eight swatches**; and archiving moved into a bordered danger
+  block, where the SHAPE says "this one is different" before the colour does.
+
+  **The ⋯ menu was not written twice, and that is the part worth knowing.** `TaskMenu`
+  already had one, and its comments are a record of two rounds of bugs — a dropdown silently
+  clipped by the task row's `overflow-hidden`, then a menu opening off the bottom of the
+  screen. The mechanism is now `KebabMenu.jsx` and `TaskMenu` supplies only a list of items,
+  with **not one item changed**. Settings was exactly the "next time something upstream gets
+  an overflow rule" that comment predicted.
+
+  **The eighth `window.confirm` is deliberately still there**: deleting a task sits on four
+  call sites including the agent, and the browser's box BLOCKS, which the code around it was
+  written to expect. The owner asked what could break and chose to make that one its own
+  change. **It is the one remaining browser dialog in the app.**
+
+  **He looked at it and reported «ολα καλα»**, after being asked to check the task ⋯ menu
+  first — which is a real look by a real person, and more than slice 1 got. It is not an
+  itemised pass: no confirm dialog has been watched actually completing its action (only
+  cancelled), the task ⋯ has not been opened on the last row of a long list where it must
+  flip upwards, and the tab-height fix that came out of his own complaint («όλο το παράθυρο
+  είναι πιο μικρό, έτσι φαίνεται άσχημο») has not been seen by anyone. `npm run check` exit
+  0 (`92 files, 50 tokens, 516 translation keys`), lint at its 12-problem baseline with
+  **zero in any of the ten files touched**, `vite build` clean. Six rows of what would settle
+  each open item are in `CURRENT_TASK.md`. Reasoning in DECISIONS.md.
 - **A workspace stopped being a card that does six jobs and became a screen (2026-09-13).**
   Slice 1 of four in a Settings rebuild the owner approved off mockups. «Χώροι εργασίας» was
   one scrolling column in which every workspace drew its name, colour, categories, a

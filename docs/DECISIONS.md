@@ -1,6 +1,78 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: one ⋯ menu for the whole app, extracted rather than copied
+Settings needed the menu the task rows already had. Two roads: copy the pattern into a small
+Settings-only menu, or pull the mechanism out of `TaskMenu` into `KebabMenu` and have both
+use it. **Copying was rejected, and the file itself is the argument.** `TaskMenu`'s comments
+are a written record of two rounds of bugs that were not obvious and did not error: an
+absolutely-positioned dropdown that went silently short because the task row gained
+`overflow-hidden` to contain the swipe tray, and a menu that opened off the bottom of the
+screen on a row near the fold. A second implementation starts at the beginning of that list.
+And the comment predicted its own next victim — "what stops this recurring the next time
+something upstream gets an overflow rule" — which is precisely what Settings is: a modal
+body of fixed height that scrolls.
+
+**The cost was named to the owner before it was paid**, because the extraction touches the
+task row, which he uses all day: «ακουμπάει τη γραμμή της εργασίας». He was told what a
+failure would look like (the ⋯ not opening, or opening in the wrong place), that it is
+visible in one glance, and that he would be asked to take that glance before the push. He
+chose the shared menu on those terms. `TaskMenu` kept every one of its items; only the
+mechanism moved.
+
+`KebabMenu` adds one behaviour `TaskMenu` never needed: **Escape closes the menu, captured
+and stopped**. On a task row a menu is one tap from anywhere, so nobody reaches for Escape;
+inside a modal that key is already in the user's fingers, and without stopping the event it
+would close the whole Settings dialog with a menu still hanging over it.
+
+### Decision: seven of the eight window.confirm calls are replaced, and the eighth waits on purpose
+`window.confirm` is the browser's grey box. It cannot say what will happen (one line, no
+shape), it cannot name the action on its button (OK/Cancel makes you re-read the question to
+work out which is which), and it does not look like the app. Seven of its eight call sites
+are in Settings and were replaced.
+
+**The eighth — deleting a task — was deliberately left, and it is the owner's call.** He
+asked the question that decided it: «παίζει να χαλάσει κάτι στο πρόγραμμά μας;». It can. That
+one site is reached from four places at once (the task row, the swipe, the detail sheet, and
+the agent's delete proposal), and `window.confirm` **blocks** — the code around it returns a
+boolean synchronously and was written expecting exactly that. A dialog cannot block, so that
+path has to be rewritten, not swapped. Doing it inside a slice that also moves menus and
+colours would mean a regression on his daily path with four candidate causes.
+
+**The cost is admitted rather than hidden**: the app now has two confirmation idioms, which
+is the "second idiom" mistake this codebase keeps writing down. The difference is that here
+one of them is legacy with a scheduled end, not a new one being introduced — and the
+alternative was risking the hot path to avoid a temporary inconsistency in a dialog.
+
+**`useConfirm` exists so the call sites did not have to change shape.** `window.confirm`
+reads as one line at the top of a handler, where the decision belongs. The obvious React
+replacement scatters it into a piece of state, a callback, and the real work somewhere else —
+seven times over, seven chances to mis-wire. A promise does the blocking instead, so the line
+stays `if (!(await ask({...}))) return;`. The pending `resolve` is held in a ref and settled
+outside the state updater, because resolving a promise inside `setState` is a side effect in
+a place React deliberately runs twice in development.
+
+### Decision: the workspace colour becomes eight swatches, and an existing odd colour keeps its own
+`<input type="color">` opens the operating system's picker. It is the wrong instrument for
+the question: a workspace's colour is not an aesthetic choice with sixteen million answers,
+it is a LABEL that has to be told apart from the other five at a glance and stay readable in
+both themes. A spectrum lets you pick two indistinguishable blues, or a near-white that
+disappears on the light theme. The eight are the app's own hues — the four category colours
+already in `index.css` plus the priority and highlight ones — so nothing new entered the
+palette.
+
+They are **literal hex in `utils/palette.js`, not CSS variables**, because this is DATA: it
+is written into `workspaces.color` and sent to the server, and a `var(--…)` string in a
+database column is a colour nothing outside a browser can read. `utils/people.js` makes the
+same call for avatar colours.
+
+**A saved colour that is not one of the eight keeps its own swatch, at the front, already
+selected.** Every workspace and category in the live database was coloured through the old OS
+picker, so most are not on the list — and a palette showing nothing selected reads as "no
+colour set" and invites a change nobody asked for. The alternative, snapping existing rows to
+the nearest of the eight, would silently rewrite data the user chose.
+
+
 ### Decision: Settings is rebuilt in four slices, and each slice is LOOKED AT before it is pushed
 The owner was shown eight findings on the Settings screen and, unlike 2026-09-12 where he was shown six and picked two, he took all eight: «ολα θα τα φτιαξουμε». On its own that would have been the largest unreviewable change this project has attempted — the previous UI passes each shipped a screen at a time for a reason. What makes it affordable is the second half of the same sentence, and it is his: «θα κανουμε πουσκ ενα ενα οχι ολα μαζι το 1 αν μας αρεσει πουσ αν οχι συνεχεια μεχρι να μας αρεσει και ουτο κααθεξεις». **Each slice is built, shown to him, iterated until he likes it, and only then pushed.** Nothing accumulates unseen.
 

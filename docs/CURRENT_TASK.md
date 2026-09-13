@@ -1,12 +1,13 @@
-ACTIVE TASK — Settings rebuilt in four slices, pushed one at a time. Slice 1: the workspace gets its own screen
+ACTIVE TASK — Settings rebuilt in four slices, pushed one at a time. Slices 1 and 2 are live; slice 3 is next
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **This file was written BEFORE the code, at the owner's explicit request** — «εγραφη στα
 > ντοκς οι αποφασεις ωστε αν δεν τα τελιωσω σημερα να ξερω τι εχω κανει και που ειμαστε».
 >
-> **CORRECTED the same day**: it said "everything below the Slice 1 heading is a PLAN, not a
-> report. Nothing has been built yet." Slice 1 is now built, pushed (`db307da`) and live.
-> Slices 2–4 are still plans. The Slice 1 section below has been rewritten as a report.
+> **CORRECTED twice the same day**: it first said "everything below the Slice 1 heading is a
+> PLAN, not a report. Nothing has been built yet." Then it said slices 2–4 were still plans.
+> **Slices 1 (`db307da`) and 2 (`183f32a`, `4d98297`) are built, pushed and live**; slices 3
+> and 4 are still plans. Both slice sections below are reports.
 >
 > The previous task's "Still open, deliberately" and its HANDOVER section are CARRIED
 > FORWARD at the bottom of this file, unchanged. Nothing in them is closed: the handover
@@ -88,14 +89,14 @@ is worse than no button, the same rule the locked Hostaway category already foll
 | # | What | Findings | Touches |
 |---|---|---|---|
 | 1 | ~~The workspace gets its own screen~~ — **SHIPPED `db307da`, live** | 1, 2 | frontend only, no schema change |
-| **2** | **Actions that do not frighten** — ⋯ menus, our own confirm dialogs, fields that look like fields, an 8-colour palette | 3, 4, 5, 8 | frontend only, reaches other screens too |
-| 3 | Members and invites in the open — email + joined date on the row, pending invites beside the members, an invite dialog that says what it will do | 6 | frontend only, needs a second person to check |
+| 2 | ~~Actions that do not frighten~~ — **SHIPPED `183f32a`, live** | 3, 4, 5, 8 | frontend only, reached the task ⋯ menu too |
+| **3** | **Members and invites in the open** — email + joined date on the row, pending invites beside the members, an invite dialog that says what it will do | 6 | frontend only, needs a second person to check |
 | 4 | Desktop gets its page — full-page Settings with a left nav from 1024px | 7 | frontend only, the largest slice |
 
 **Why 2 before 3**: slice 2 builds the PARTS — the ⋯ menu, the confirm dialog, the labelled
 field — that slice 3 then uses. Reversed, the members screen gets written twice.
 
-## Not decided yet, and neither blocks slice 1
+## Not decided yet, and neither blocked slices 1 or 2
 
 Two of the four closing questions went unanswered and are deliberately left open:
 
@@ -194,8 +195,93 @@ vite dev        → all four changed modules transformed and served HTTP 200
                   (WorkspaceDetail, WorkspacesView, MembersPanel, SettingsModal)
 ```
 
+After slice 2:
+```
+npm run check   → exit 0
+ui-check: OK — 92 files, 50 tokens, 516 translation keys
+
+npm run lint    → ✖ 12 problems (12 errors, 0 warnings)     (still the standing baseline,
+                  and ZERO in any of the ten files slice 2 touched)
+
+vite build      → clean
+
+vite dev        → all eleven changed modules transformed and served HTTP 200
+```
+
 Backend not run: this slice touches no Python. The last backend number on record is
 `505 passed in 4.79s`, from the handover below.
+
+## Slice 2 — SHIPPED `183f32a` + `4d98297`, pushed to `main` and live
+
+Findings 3, 4, 5 and 8. Nothing moved this time; the controls changed.
+
+**The ⋯ menu was not written twice, and that was the decision worth making.**
+`TaskMenu` already had one, and its comments are a record of two rounds of bugs — an
+absolutely-positioned dropdown silently clipped by the task row's `overflow-hidden`, then a
+menu opening off the bottom of the screen. The mechanism is now `KebabMenu.jsx`; `TaskMenu`
+supplies only a list of items and **not one of its items changed**. Settings turned out to be
+exactly the "next time something upstream gets an overflow rule" that comment predicted: the
+modal body is a fixed-height scrolling box. One thing was added that the task row never
+needed — Escape closes the menu, captured and stopped, so it does not travel on and close
+the whole Settings modal with a menu still hanging over it.
+
+**`window.confirm` is gone from 7 of its 8 places**, all of them in Settings: workspace
+archive, category delete, member remove, leave, invite revoke, recurrence delete, delete
+account. Each now has a title, the old sentence as its body, and a button that names the
+action instead of saying OK. Cancel takes the focus, not the confirm button — every one of
+these guards something destructive and a focused confirm turns a stray Enter into a
+deletion.
+
+**The eighth is deliberately still there**, and the owner chose it after asking the right
+question — «παίζει να χαλάσει κάτι στο πρόγραμμά μας;». Deleting a task sits on four call
+sites including the agent, and `window.confirm` BLOCKS, which the code around it was written
+to expect. Converting it is its own change so that if it breaks, what broke it is known.
+
+**`useConfirm` keeps the call site's shape** — `if (!(await ask({...}))) return;` — because
+the alternative was seven handlers each split into a piece of state, a callback, and the
+real work somewhere else. The pending `resolve` lives in a ref and is settled outside the
+state updater: resolving a promise inside `setState` is a side effect in a place React runs
+twice in development.
+
+**Eight swatches replace the OS colour dialog** (`ColorSwatches.jsx` + `utils/palette.js`,
+split because a module exporting a component may export nothing else without tripping
+react-refresh). A colour already saved that is not one of the eight keeps its own swatch at
+the front, already selected — every workspace in the live database was coloured through the
+old picker, and a palette showing nothing selected reads as "no colour set" and invites a
+change nobody asked for.
+
+**Archiving became a bordered danger block** rather than a red word beside the name: the
+SHAPE says "this one is different" before the colour does, which is what keeps it legible to
+somebody who cannot tell red from grey — the same reasoning as the room pill's frame.
+
+**One thing came back from him and was fixed before the push** (`4d98297`): «όταν πατάς στο
+κατηγορίες, επειδή δεν έχει τίποτα, όλο το παράθυρο είναι πιο μικρό, έτσι φαίνεται άσχημο.
+Θέλω να είναι όπως όλα, για ομοιομορφία». The modal is sized by its content, so a shorter
+tab shrank the dialog and it jumped under the finger that had just tapped it. The panels now
+have a 340px floor — a floor, not a fixed height, so fifteen categories still grow it — and
+the empty categories panel took the centred shape `RecurrencesView` already uses.
+
+### What a person has actually SEEN of slice 2
+
+He was asked to check the task ⋯ menu FIRST, because it is the one control in this slice
+that was already working and therefore the only one that could have been broken. He came
+back with «ολα καλα» plus the tab-height complaint above, which is itself evidence he was
+inside the workspace screen moving between tabs.
+
+**What that does and does not establish**: it is a real look by a real person at the screens
+that changed, which slice 1 never got. It is NOT an itemised pass — he did not say which
+menu he opened, and the height fix that followed it has not been looked at by anyone at all.
+
+### Not confirmed for slice 2
+
+| Not confirmed | What would settle it |
+|---|---|
+| The 340px floor, and the new empty panel | Open a workspace and move Γενικά → Κατηγορίες → Μέλη. The window must not change size |
+| Any confirm dialog actually completing its action | Delete a category and answer the dialog. The category must go — the dialog was only ever cancelled during the look |
+| Escape closing a ⋯ menu without closing Settings | Open a category's ⋯, press Escape. The menu closes, the modal stays |
+| The task ⋯ menu in its harder positions | Open one on the LAST row of a long list: it must flip above the button, not open off the bottom |
+| A palette choice reaching the database | Pick a colour, close Settings, reopen. It must still be that colour |
+| The custom-colour swatch | Needs a workspace whose colour is not one of the eight — likely most of his |
 
 ## The mockups he approved
 
