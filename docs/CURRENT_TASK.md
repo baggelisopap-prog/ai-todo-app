@@ -1,4 +1,4 @@
-ACTIVE TASK — Settings rebuilt in four slices, pushed one at a time. Slices 1 and 2 are live; slice 3 is next
+ACTIVE TASK — Settings rebuilt in four slices, pushed one at a time. Slices 1–3 are live; only slice 4 (desktop) remains
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **This file was written BEFORE the code, at the owner's explicit request** — «εγραφη στα
@@ -6,8 +6,9 @@ _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" fi
 >
 > **CORRECTED twice the same day**: it first said "everything below the Slice 1 heading is a
 > PLAN, not a report. Nothing has been built yet." Then it said slices 2–4 were still plans.
-> **Slices 1 (`db307da`) and 2 (`183f32a`, `4d98297`) are built, pushed and live**; slices 3
-> and 4 are still plans. Both slice sections below are reports.
+> **Slices 1 (`db307da`), 2 (`183f32a`, `4d98297`, `b3e1a4a`) and 3 (`9145afb`) are built,
+> pushed and live**; only slice 4 is still a plan. The three slice sections below are
+> reports.
 >
 > The previous task's "Still open, deliberately" and its HANDOVER section are CARRIED
 > FORWARD at the bottom of this file, unchanged. Nothing in them is closed: the handover
@@ -90,8 +91,8 @@ is worse than no button, the same rule the locked Hostaway category already foll
 |---|---|---|---|
 | 1 | ~~The workspace gets its own screen~~ — **SHIPPED `db307da`, live** | 1, 2 | frontend only, no schema change |
 | 2 | ~~Actions that do not frighten~~ — **SHIPPED `183f32a`, live** | 3, 4, 5, 8 | frontend only, reached the task ⋯ menu too |
-| **3** | **Members and invites in the open** — email + joined date on the row, pending invites beside the members, an invite dialog that says what it will do | 6 | frontend only, needs a second person to check |
-| 4 | Desktop gets its page — full-page Settings with a left nav from 1024px | 7 | frontend only, the largest slice |
+| 3 | ~~Members and invites in the open~~ — **SHIPPED `9145afb`, live** | 6 | frontend only, needs a second person to check |
+| **4** | **Desktop gets its page** — full-page Settings with a left nav from 1024px | 7 | frontend only, the largest slice |
 
 **Why 2 before 3**: slice 2 builds the PARTS — the ⋯ menu, the confirm dialog, the labelled
 field — that slice 3 then uses. Reversed, the members screen gets written twice.
@@ -208,6 +209,17 @@ vite build      → clean
 vite dev        → all eleven changed modules transformed and served HTTP 200
 ```
 
+After slice 3:
+```
+npm run check   → exit 0
+ui-check: OK — 92 files, 50 tokens, 522 translation keys
+
+npm run lint    → ✖ 12 problems (12 errors, 0 warnings)     (the standing baseline, none in
+                  either file slice 3 touched)
+
+vite build      → clean
+```
+
 Backend not run: this slice touches no Python. The last backend number on record is
 `505 passed in 4.79s`, from the handover below.
 
@@ -294,6 +306,63 @@ menu he opened, and the height fix that followed it has not been looked at by an
 | A palette choice reaching the database | Pick a colour, close Settings, reopen. It must still be that colour |
 | The custom-colour swatch | Needs a workspace whose colour is not one of the eight — likely most of his |
 | The (!) disclosure on the danger block | Open Γενικά, tap the (!). The explanation opens and closes, and the block does not change size enough to move the button |
+
+## Slice 3 — SHIPPED `9145afb`, pushed to `main` and live
+
+Finding 6. Smaller than the other two, because slice 1 had already moved the members out of
+their disclosure and slice 2 had already built the dialog this one needed.
+
+**Two fields that have been arriving since sharing shipped and were never shown.**
+`GET /workspaces/{id}/members` returns `email` and `joined_at` on every row, and nothing in
+the app displayed either — noted as free during the research, now spent. They are the second
+line of a member row. The email is skipped when it is already the NAME: `personName` falls
+back to it for somebody who never set a display name, and a row printing the same address
+twice says nothing twice.
+
+**The role moved onto a pill.** It is a property of the person, not a description of them,
+and on the second line it was competing with the email for the same space. Both pills share
+a background and differ only by weight, so the WORD separates them — the row still reads for
+somebody who cannot tell two greys apart, the same rule the room pill's frame follows.
+
+**A live bug fixed in passing, and it was on the owner's own row.** `members.owner` was
+«· ιδιοκτήτης» — leading middle dot, lower case — while `members.member` was «Μέλος», and
+the code adds its own « · » before `members.you`, which was itself «· εσύ». So the owner
+looking at himself read **«· ιδιοκτήτης · · εσύ»**. The dots belonged to an older call site
+where a name came first. They are out of the keys now; the separator stays in the code,
+which is the only place that knows whether there is anything to separate. Both keys had
+exactly one call site, so nothing else moved.
+
+**Πρόσκληση asks before it mints.** Pressing it used to create a key on the spot — a working
+seven-day pass to the whole workspace, from a tap whose label said only «Πρόσκληση». It now
+opens a dialog saying what it is about to make: one use, seven days, revocable, shown once
+and never readable again. It reuses slice 2's `ConfirmDialog` with `danger: false`, which is
+the "why 2 before 3" ordering paying for itself exactly as predicted.
+
+**Deliberately NOT built, although the approved mockup showed it**: the greyed-out «ή με
+email» field. It earned its place in a mockup, where a faded control explains a gap. In the
+real app it is a permanently dead input, and this codebase already has the rule — a control
+that always fails is worse than no control, the same one the locked Hostaway category and
+the missing remove-the-owner button follow. The gap stays recorded in DECISIONS.md. **The
+owner was told this was a deviation from what he approved** and did not object.
+
+### What a person has actually SEEN of slice 3
+
+He was given three things to check — the colleague's email on her row, one middle dot rather
+than three on his own, and that Πρόσκληση opens a dialog he should then cancel — and came
+back with «ολα καλα». Same standing as slice 2: a real look, not an itemised report.
+
+**Most of this slice cannot be seen alone.** A solo workspace has one member, no email worth
+confirming, and no pending invitation.
+
+### Not confirmed for slice 3
+
+| Not confirmed | What would settle it |
+|---|---|
+| The second line on a REAL colleague's row | Open Business → Μέλη with Evi in it. Her email and «Μπήκε 12 Σεπ» must both be there |
+| A member with no display name | Their row must show the email ONCE, as the name, with no second line repeating it |
+| That the invite dialog still mints | Say yes to it. A link must appear, and the pending list must gain a row |
+| The pending row's new shape | Needs a live invitation in flight |
+| `joined_at` being present at all | It has never been rendered; if the server sends null for older rows the line simply will not draw, which is correct but untested |
 
 ## The mockups he approved
 

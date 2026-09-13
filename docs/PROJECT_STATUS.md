@@ -10,6 +10,31 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **The member rows say who these people are, and the invite says what it is about to make (2026-09-13).**
+  Slice 3 of four, and the smallest — slice 1 had already brought the members out of their
+  disclosure and slice 2 had already built the dialog this one needed. **`email` and
+  `joined_at` have been arriving on every member row since sharing shipped and nothing
+  displayed either**; they are the second line now, with the email skipped when it is
+  already the name. The role moved onto a pill, where it stops competing with the email for
+  the same space. And pressing Πρόσκληση no longer mints a seven-day pass to the whole
+  workspace on the spot: it asks first, and says what it is about to make.
+
+  **A live bug went with it, on the owner's own row**: `members.owner` carried a leading
+  middle dot inside the locale file while the code added its own before `members.you`, so
+  the owner looking at himself read «· ιδιοκτήτης · · εσύ». Left over from an older call
+  site where a name came first.
+
+  **Deliberately not built, though the approved mockup showed it**: the greyed-out «ή με
+  email» field. A faded control explains a gap in a mockup; in the real app it is a
+  permanently dead input, and the rule here is the one the locked Hostaway category already
+  follows. He was told it was a deviation and did not object.
+
+  He looked and said «ολα καλα». **Most of this slice cannot be checked alone** — a solo
+  workspace has one member, no email worth confirming and no pending invitation — so the
+  colleague's row, a member with no display name, and the dialog actually minting a link are
+  all unconfirmed. `npm run check` exit 0 (`92 files, 50 tokens, 522 translation keys`), lint
+  at its 12-problem baseline with none in either file touched, `vite build` clean.
+  **Only slice 4 remains: the full-page desktop Settings, which he chose to leave last.**
 - **The red buttons went into a menu, and the browser stopped speaking for us (2026-09-13).**
   Slice 2 of four. Nothing moved this time; the controls changed. The ✕ that sat two pixels
   from a colleague's name — permanently armed, in a list scrolled with a thumb — is a ⋯
