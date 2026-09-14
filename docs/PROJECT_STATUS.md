@@ -57,8 +57,11 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   cost two defects on sight, both from the two commits before it: a separator dot left
   orphaned beside the date once the flex slack moved between them, and «Αταξινόμητα» drawn as
   bare text while every filed task had a pill. Both fixed (`b7fa880`). The same screenshot
-  shows dead space at the bottom left of each card, which is a layout question rather than a
-  bug and is with him. **Still unseen: a phone, the dark theme, and most of the table** in
+  showed dead space at the bottom left of each card — a layout question rather than a bug —
+  and he chose to close it by moving the three controls onto the facts line as one group
+  (`7ab2d8a`), which is their **fourth** arrangement and loses a whole row per card. The
+  dates still align, because the control group is a fixed width. **Nobody has seen that
+  arrangement**: it shipped after the screenshot. **Still unseen: a phone, the dark theme, and most of the table** in
   `CURRENT_TASK.md`. The blast radius is every list in the app. Reasoning in DECISIONS.md.
 - **The two AI-snapshot columns are locked in the database (2026-09-13).** The last thing
   carried in the 2026-09-12 handover as waiting on the owner's hands, and it is now closed:

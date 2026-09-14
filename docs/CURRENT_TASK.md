@@ -82,15 +82,31 @@ cost 29px, less than the ⋯ cost on its own.**
 - **The workspace is a tinted pill** using the room's own colour, through a new `.ws-pill`
   that mixes the same 72% for its text as `.ws-frame` does for its border — so one room is
   literally one colour in the app bar and on every row.
-- ~~**A right-hand rail behind a dividing line**: ⋯, bell, calendar, stacked.~~
-  **CORRECTED the same day (`1cbee0f`)** — the three controls are now ONE LINE UNDER the
-  facts, pushed right. He did not like the column: «τα 3 στα δεξια κουδουνι ημερολογιο και
-  τελιτσες θελω να ειναι απο κατω τελικα, ετσι δεν φαινονται πολυ καλα». It was also the
-  wrong shape for the height, which he saw and the agent did not: **three controls stacked
-  are ~76px while the title and the line under it come to ~53px**, so the column was setting
-  every row's height and the text rode along in space it did not need. They are still
-  separated from the information — «να ξεχωρίζει απο τις πληρωφορίες» — but by having their
-  own line rather than by a vertical rule and a border.
+- **The three controls took THREE arrangements before one held**, and every move was his:
+  1. Interleaved among the facts — the starting point, and what he objected to:
+     «(ξεχωρίζει απο τις πληρωφορίες)».
+  2. **A stacked column on the right** behind a dividing line (`96007bc`). He did not like
+     how it looked — «τα 3 στα δεξια κουδουνι ημερολογιο και τελιτσες θελω να ειναι απο κατω
+     τελικα, ετσι δεν φαινονται πολυ καλα» — and it was also the wrong shape for the height:
+     **three controls stacked are ~76px while the title and the facts line come to ~53px**,
+     so the column was setting every row's height and the text rode along in space it did not
+     need.
+  3. **Their own line underneath** (`1cbee0f`). This is the one his screenshot killed: the
+     date sat hard right on the facts line and the controls hard right on the line below,
+     with **dead space between them**, which is what made the cards read as taller and emptier
+     than they were.
+  4. **On the facts line, as one group at the end after a gap** (`7ab2d8a`) — «παμε». No hole,
+     one row less per card, and the date stops flying to the screen edge because it now sits
+     beside the controls rather than half a screen from the room it shares a line with.
+
+  **The dates still line up**, which was the point of the earlier fix: the control group is
+  `flex-none` and always the same width, so every date still ends at the same x.
+  `KebabMenu`'s button went `p-1` → `p-0.5` to pay for the space — the hit area is untouched,
+  because `tap-44` draws it with a pseudo-element.
+
+  **What this gives up** is the separation the column bought. The difference from
+  arrangement 1, which he rejected, is that the three are now one group at the end after a
+  gap rather than interleaved with the facts.
 - **Gone from the row**: the description; the name beside the assignee's face (Avatar still
   carries it as `title` and `aria-label`). The ↻ is text rather than a button — the ⋯ menu
   opens the same editor, and a button inside a line that can be cut in half is a target that
@@ -132,12 +148,11 @@ first time any of this row has been seen running.
   is a pill now too, falling back to the neutral `--ws-color` default exactly as RoomTitle
   does for a colourless workspace.
 
-**What the screenshot ALSO shows, and is not a defect**: dead space at the bottom left of
-every card. The date is hard right on the middle line and the three controls are hard right
-on the line below, with nothing between them — so each card reads as taller and emptier than
-it needs to. That is a layout decision rather than a bug, it reverses the "controls go
-underneath" arrangement the owner asked for one commit earlier, and it is therefore his call.
-Put to him with a sketch; **unanswered at the time of writing.**
+**What the screenshot ALSO showed, and was not a defect**: dead space at the bottom left of
+every card, from the date sitting hard right on one line and the controls hard right on the
+next. A layout decision rather than a bug — and one that would reverse the arrangement he had
+asked for an hour earlier — so it went to him with a sketch instead of being changed quietly.
+**He chose the two-line card** («παμε»), shipped as `7ab2d8a`.
 
 **Still nobody's eyes on**: a phone (the screenshot is a desktop window), the dark theme, and
 everything in the table below that did not happen to be on that screen. This is the row every
@@ -154,6 +169,8 @@ What would settle each:
 | The pill on a colourless room | «My App» has no colour: it must fall back to neutral grey, not vanish |
 | The pill in dark mode | `color-mix` with `--text-primary` flips with the theme; nobody has seen it flip |
 | Swipe left and right | The swipe tray and the parked offset were not touched, but they were not tested either |
+| **The two-line card** | Shipped AFTER the only screenshot anybody has sent. Nobody has seen this arrangement at all |
+| Whether the category survives on a PHONE | The controls now share the facts line, so on ~271px the middle has roughly 40–90px. The category may truncate hard — the screenshot was a desktop window and does not answer this |
 | **The row's actual height** | **Unmeasured, deliberately.** Two numbers given to the owner in this task were wrong — 258px of width that was 222, and ~62px of height that the rail made ~78. No third estimate is being offered: open Σήμερα and count what fits |
 | The ⋯ on the last row of a long list | It must flip upward. Still unwatched from slice 2 |
 | «Λήφθηκε» actually appearing | Needs a real Hostaway task in the list |
