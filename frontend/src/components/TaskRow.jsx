@@ -394,6 +394,79 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
             <span className={`flex-none ${task.due_date ? DUE_TONE_CLASSES[tone] : 'text-[var(--text-muted)]'}`}>
               {task.due_date ? formatDate(task.due_date, task.due_time) : t('task.no_date')}
             </span>
+
+            {/* THE CONTROLS SHARE THE FACTS LINE — third arrangement, and his.
+                They were mixed in among wrapping chips, then a stacked column
+                on the right, then their own line underneath. The column was too
+                tall; the line underneath left a hole at the bottom left of every
+                card, which is what his screenshot showed: the date hard right on
+                one line, the controls hard right on the next, and nothing
+                between them.
+
+                On one line there is no hole and the card loses a row entirely.
+                The date stops flying to the screen edge too — it now sits beside
+                the controls, a sensible distance from what it belongs to.
+
+                THE DATES STILL LINE UP, which was the whole point of the
+                previous fix: this group is flex-none and always exactly the same
+                width, so every date ends at the same x.
+
+                What this gives up is the clean separation the column bought.
+                The difference from the FIRST arrangement, which he rejected, is
+                that these three are one group at the end after a gap, rather
+                than interleaved with the facts. */}
+            <span
+              data-no-toggle
+              onClick={(e) => e.stopPropagation()}
+              className="flex-none flex items-center gap-2 ml-1 -mr-0.5"
+            >
+              <button
+                type="button"
+                data-no-toggle
+                onClick={handleToggleNotify}
+                aria-pressed={notifyOn}
+                // Carries the reason, so hovering on a desktop and a screen
+                // reader anywhere both get it without having to tap and find out.
+                title={task.due_time ? undefined : t('task.no_time_for_reminder')}
+                aria-label={task.due_time ? t('task.notification_label') : t('task.no_time_for_reminder')}
+                className={`tap-40 p-0.5 rounded transition-colors ${
+                  notifyOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                }`}
+              >
+                {notifyOn ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
+              </button>
+
+              <button
+                type="button"
+                data-no-toggle
+                onClick={handleToggleCalendar}
+                aria-pressed={calendarOn}
+                title={task.due_date ? undefined : t('calendar.no_date_for_sync')}
+                aria-label={task.due_date ? t('calendar.sync_task_label') : t('calendar.no_date_for_sync')}
+                className={`tap-40 p-0.5 rounded transition-colors ${
+                  calendarOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                }`}
+              >
+                {calendarOn ? <CalendarFilledIcon className="w-4 h-4" /> : <CalendarIcon className="w-4 h-4" />}
+              </button>
+
+              <TaskMenu
+                isPending={isPending}
+                isCompleted={isCompleted}
+                isRejected={isRejected}
+                pendingAction={actions.pendingAction}
+                onApprove={actions.approve}
+                onUncomplete={actions.uncomplete}
+                onReject={actions.reject}
+                onUnreject={actions.unreject}
+                onEdit={() => onOpen(task.record_id)}
+                onReschedule={() => setIsReschedulingOpen(true)}
+                onRecurrence={() => recurrence.openEditor(task)}
+                isRecurring={Boolean(task.recurrence_rule_id)}
+                onDelete={handleDelete}
+                t={t}
+              />
+            </span>
           </div>
 
           {(actions.actionError || actions.deleteError) && (
@@ -404,74 +477,6 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
             </p>
           )}
 
-          {/* THE CONTROLS GO UNDER THE FACTS, NOT BESIDE THEM.
-              They were a stacked column on the right for one round, and the
-              owner did not like how it looked: «τα 3 στα δεξια κουδουνι
-              ημερολογιο και τελιτσες θελω να ειναι απο κατω τελικα, ετσι δεν
-              φαινονται πολυ καλα».
-
-              It also turned out to be the wrong shape for the height. Three
-              20-24px controls stacked are ~76px tall, while the title and the
-              line under it come to ~53px — so the COLUMN was setting the row's
-              height and the text was riding along in space it did not need.
-              Side by side they are one 28px line, and the row is driven by its
-              content again.
-
-              They are still separated from the information: their own line,
-              pushed to the right, is the separation — «να ξεχωρίζει απο τις
-              πληρωφορίες» — without spending a vertical rule on it. */}
-          <div
-            data-no-toggle
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center justify-end gap-3 -mr-1 -mt-0.5"
-          >
-            <button
-              type="button"
-              data-no-toggle
-              onClick={handleToggleNotify}
-              aria-pressed={notifyOn}
-              // Carries the reason, so hovering on a desktop and a screen reader
-              // anywhere both get it without having to tap and find out.
-              title={task.due_time ? undefined : t('task.no_time_for_reminder')}
-              aria-label={task.due_time ? t('task.notification_label') : t('task.no_time_for_reminder')}
-              className={`tap-40 p-1 rounded transition-colors ${
-                notifyOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-              }`}
-            >
-              {notifyOn ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
-            </button>
-
-            <button
-              type="button"
-              data-no-toggle
-              onClick={handleToggleCalendar}
-              aria-pressed={calendarOn}
-              title={task.due_date ? undefined : t('calendar.no_date_for_sync')}
-              aria-label={task.due_date ? t('calendar.sync_task_label') : t('calendar.no_date_for_sync')}
-              className={`tap-40 p-1 rounded transition-colors ${
-                calendarOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-              }`}
-            >
-              {calendarOn ? <CalendarFilledIcon className="w-4 h-4" /> : <CalendarIcon className="w-4 h-4" />}
-            </button>
-
-            <TaskMenu
-              isPending={isPending}
-              isCompleted={isCompleted}
-              isRejected={isRejected}
-              pendingAction={actions.pendingAction}
-              onApprove={actions.approve}
-              onUncomplete={actions.uncomplete}
-              onReject={actions.reject}
-              onUnreject={actions.unreject}
-              onEdit={() => onOpen(task.record_id)}
-              onReschedule={() => setIsReschedulingOpen(true)}
-              onRecurrence={() => recurrence.openEditor(task)}
-              isRecurring={Boolean(task.recurrence_rule_id)}
-              onDelete={handleDelete}
-              t={t}
-            />
-          </div>
         </div>
       </div>
       </article>

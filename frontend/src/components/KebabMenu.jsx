@@ -121,7 +121,12 @@ function KebabMenu({ items, ariaLabel, buttonClassName = '' }) {
         onClick={(e) => { e.stopPropagation(); setIsOpen((v) => !v); }}
         aria-label={ariaLabel}
         aria-expanded={isOpen}
-        className={`tap-44 p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors flex-shrink-0 ${buttonClassName}`}
+        // p-0.5, not p-1: on a task row this button now shares one line with
+        // the bell, the calendar, the date and the room, and four pixels of
+        // padding are four pixels the category name does not get. The HIT AREA
+        // is unchanged — tap-44 draws it with a pseudo-element, so shrinking
+        // the visible box does not shrink the target.
+        className={`tap-44 p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors flex-shrink-0 ${buttonClassName}`}
       >
         <DotsIcon />
       </button>
