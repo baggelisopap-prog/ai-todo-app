@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { formatDate, roundToNearestHalfHour } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import {
-  describeRecurrence,
-  describeRecurrencePattern,
   dueTone,
   DUE_TONE_CLASSES,
   priorityLabel,
@@ -15,7 +13,7 @@ import { useSwipeRow } from '../hooks/useSwipeRow';
 import { useRecurrence } from '../hooks/useRecurrence';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useMembers } from '../hooks/useMembers';
-import { describePlacement } from '../utils/workspaces';
+import { placementParts } from '../utils/workspaces';
 import Avatar from './Avatar';
 import TaskMenu from './TaskMenu';
 import QuickReschedule from './QuickReschedule';
@@ -25,9 +23,21 @@ import {
   CalendarFilledIcon,
   BellFilledIcon,
   BellOutlineIcon,
-  ChecklistIcon,
   TrashIcon,
 } from './TaskIcons';
+
+// The priority, as the THICKNESS of the completion circle's ring.
+//
+// The owner asked for priority to stop being a lettered badge and become only
+// the circle — «το p1 p2 p3 να ειναι μονο στο χρωμα απο το κυκλακι» — and then,
+// seeing it, that the circles stay open: «οι κυκλοι να ειναι ανοιχτη οχι
+// γεματοι». Thickness is what makes that safe. The comment this file used to
+// carry said "Priority is text as well as colour", and it was right about the
+// reason: roughly one man in twelve cannot separate red from amber, and colour
+// alone would have made P1 and P2 the same circle. A ring that is visibly
+// heavier does not depend on hue at all, and it costs no width, which a letter
+// did.
+const PRIORITY_RING = { P1: '4px', P2: '2.5px', P3: '1.5px' };
 
 // Two 70px buttons. Named because the row's parked offset has to match the
 // tray's real width exactly, or the last button is clipped.
@@ -101,7 +111,6 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
     await actions.remove();
   }
 
-  const showDescription = task.description && task.description !== task.task_name;
   const progress = checklistProgress(task.checklist);
   const tone = dueTone(task);
 
@@ -130,21 +139,13 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
   const { isShared, personFor } = useMembers();
   const isSharedRoom = isShared(task.workspace_id);
   const assignee = isSharedRoom ? personFor(task.workspace_id, task.assigned_to) : null;
-  const assigneeFullName = assignee
-    ? (assignee.display_name || assignee.email || assignee.user_id)
-    : null;
-  const assigneeLabel = assigneeFullName
-    ? assigneeFullName.trim().split(/\s+/)[0]
-    : t('members.former_member');
+  // The NAME beside the face is gone with the old meta line — Avatar already
+  // carries it as its title and aria-label, so a screen reader and a hover both
+  // still get it, and the row gets back the width it cost.
 
+  // Still needed for the ⋯ menu's "Repeat" entry, which is now the only way in
+  // from a row — the badge that used to be a button is plain text in `middle`.
   const recurrence = useRecurrence();
-  const rule = recurrence.ruleFor(task);
-  const recurrenceBadge = rule
-    ? t('recurrence.badge_with_pattern', { pattern: describeRecurrencePattern(rule, t) })
-    : t('recurrence.badge');
-  const recurrenceTitle = rule
-    ? t('recurrence.badge_aria', { summary: describeRecurrence(rule, t) })
-    : t('recurrence.badge');
 
   // Both are ALWAYS drawn and always tappable. An earlier pass hid them
   // whenever they were off, which removed the one-tap toggle from the list and
@@ -179,9 +180,13 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
     actions.setCalendarSync(!task.calendar_sync_enabled);
   }
 
+  // p-4 is gone from here on purpose: the padding now belongs to the two
+  // columns inside, because the right-hand rail needs its dividing line to run
+  // the full height of the row and a padded parent would inset it.
   const rowClasses = [
     'bg-[var(--bg-card)] border border-[var(--border-subtle)]',
-    'rounded-lg p-4 shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]',
+    'rounded-lg overflow-hidden flex items-stretch',
+    'shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]',
     'transition-shadow cursor-pointer',
     isSelected ? 'ring-2 ring-[var(--border-focus)]/20' : '',
     isRejected ? 'opacity-60' : isCompleted ? 'opacity-70' : '',
@@ -195,6 +200,33 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
     if (e.target.closest('[data-no-toggle]')) return;
     onOpen(task.record_id);
   }
+
+  const { workspace, categoryName } = placementParts(task, workspaces, categories);
+
+  // The middle of the meta line: everything that is true of this task and is
+  // NOT its room or its date. It is one joined string on purpose — it is the
+  // only part allowed to truncate, and three separate elements could each be
+  // half-cut instead of the sentence ending cleanly in an ellipsis.
+  //
+  // «Λήφθηκε» stayed after the owner asked for it back («το ληφθηκε αστο στα
+  // hostaway το θελω μου αρέσει τελικα»); it is the one fact a Hostaway task
+  // carries that its due date does not.
+  //
+  // The ↻ is text here rather than the button it used to be. Nothing was lost:
+  // the ⋯ menu opens the same rule editor, and a button inside a line that can
+  // be cut in half is a target that sometimes is not there.
+  const middle = [
+    categoryName,
+    showCreated && (task.created_at || task.created_time)
+      ? t('browse.created_on', { date: formatDate((task.created_at || task.created_time).slice(0, 10)) })
+      : null,
+    progress ? `${progress.done}/${progress.total}` : null,
+    task.recurrence_rule_id ? '↻' : null,
+    task.category === 'Hostaway' && task.hostaway_created_at
+      ? t('task.received_at', { time: roundToNearestHalfHour(task.hostaway_created_at) })
+      : null,
+    isPending ? t('task.pending') : null,
+  ].filter(Boolean).join(' · ');
 
   // How far the row is displaced: following the finger mid-swipe, or parked
   // open over the tray.
@@ -264,200 +296,111 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
           transition: swipe.isSwiping ? 'none' : 'transform 150ms ease-out',
         }}
       >
-      <div className="flex items-start gap-3">
+      {/* THE LEFT COLUMN: the circle, the title, and one line under it.
+          Everything the row SAYS lives here; the right column is only controls.
+          That separation is the owner's — «να ξεχωρίζει απο τις πληρωφορίες» —
+          and the dividing line between them is what makes it visible. */}
+      <div className="flex-1 min-w-0 flex items-start gap-2 py-[9px] pl-[10px] pr-1.5">
         <button
           type="button"
           data-no-toggle
           onClick={(e) => { e.stopPropagation(); actions.toggleComplete(variant); }}
-          className={`tap-44 w-5 h-5 mt-0.5 rounded-full flex-shrink-0 flex items-center justify-center transition-all
+          style={
+            isCompleted
+              ? undefined
+              : {
+                  borderWidth: PRIORITY_RING[task.priority] || PRIORITY_RING.P3,
+                  borderColor: priorityColor(task.priority),
+                }
+          }
+          className={`tap-44 w-[18px] h-[18px] mt-[3px] rounded-full flex-shrink-0 flex items-center justify-center border-solid transition-all
             ${isCompleted
               ? 'bg-[var(--success)] border-2 border-[var(--success)]'
-              : 'border-2 border-[var(--border-medium)] hover:border-[var(--text-secondary)]'}`}
+              : 'hover:opacity-70'}`}
           aria-label={
             variant === 'inbox'
               ? t('actions.approve')
-              : (isCompleted ? t('task.mark_incomplete') : t('task.mark_complete'))
+              : `${isCompleted ? t('task.mark_incomplete') : t('task.mark_complete')} — ${t('task.priority_aria', { priority: priorityLabel(task.priority) })}`
           }
         >
           {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
         </button>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-bold leading-none tracking-wide flex-shrink-0 text-[var(--text-inverse)]"
-              style={{ backgroundColor: priorityColor(task.priority) }}
-              aria-label={t('task.priority_aria', { priority: task.priority })}
-            >
-              {priorityLabel(task.priority)}
-            </span>
-            <h3 className={`text-base font-medium break-words ${isCompleted ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h3 className={`flex-1 min-w-0 truncate text-[14px] leading-[1.32] font-medium ${isCompleted ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
               {task.task_name}
             </h3>
+
+            {/* Beside the title rather than down in the line below, which is
+                where it used to be: that line can no longer wrap, so a face in
+                it was one more thing competing for the width the date needs.
+                Drawn only in a room with somebody else in it — on a solo
+                account your own initials on every row are decoration. */}
+            {isSharedRoom && task.assigned_to && (
+              <Avatar
+                member={assignee}
+                userId={task.assigned_to}
+                size="xs"
+                unknownLabel={t('members.former_member')}
+              />
+            )}
           </div>
 
-          {showDescription && (
-            <p className="text-sm text-[var(--text-secondary)] mt-1 truncate">
-              {task.description}
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs">
-            {task.due_date && (
-              <span className={`flex items-center gap-1 ${DUE_TONE_CLASSES[tone]}`}>
-                <CalendarIcon className="w-3 h-3" />
-                {formatDate(task.due_date, task.due_time)}
-              </span>
-            )}
-
-            {/* Only while the list is ordered by creation date, and this is a
-                fix rather than an extra: the row shows the DUE date, so a list
-                sorted by CREATION date looked shuffled and there was no way to
-                tell a working sort from a broken one. Now the value being
-                sorted is on screen. Muted, and absent the rest of the time —
-                every row carrying a second date permanently would cost more
-                than it explains. */}
-            {showCreated && (task.created_at || task.created_time) && (
-              <span className="text-[var(--text-muted)]">
-                {t('browse.created_on', {
-                  date: formatDate((task.created_at || task.created_time).slice(0, 10)),
-                })}
-              </span>
-            )}
-
-            {task.recurrence_rule_id && (
-              <button
-                type="button"
-                data-no-toggle
-                onClick={(e) => { e.stopPropagation(); recurrence.openEditor(task); }}
-                title={recurrenceTitle}
-                aria-label={recurrenceTitle}
-                className="tap-40 flex items-center gap-1 px-1.5 py-0.5 -my-0.5 rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+          {/* ONE LINE, AND THE ORDER IS THE GUARANTEE.
+              The workspace pill and the date are flex-none — they never shrink,
+              so "which room" and "when" are on screen whatever else is. Only the
+              middle takes flex-1 and truncates, and only when it genuinely does
+              not fit. The owner asked for this after seeing an earlier draft cut
+              the date off: «κατω θελω σιγουρα να βλεπω ημερομηνια ωρα και χωρο
+              κατηγορια». Something must give when four things share ~271px on a
+              phone; the category is the one that, cut, still leaves its first
+              letters AND the room's colour beside it. */}
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden text-[11px] leading-[1.3]">
+            {workspace ? (
+              <span
+                className="ws-pill flex-none inline-flex items-center gap-1 max-w-[45%] rounded-full pl-1.5 pr-2 py-px font-semibold"
+                style={workspace.color ? { '--ws-color': workspace.color } : undefined}
               >
-                <span aria-hidden="true">↻</span>
-                {recurrenceBadge}
-              </button>
-            )}
-
-            {/* The old four-word category chip stood here and was removed on
-                2026-09-02. It printed "Personal" — the AI's word for the dying
-                `category` column — in the same meta line where the placement
-                chip below prints "Personal" the WORKSPACE. The owner dictated a
-                task while standing in one workspace, saw that chip, and
-                reasonably concluded it had been filed in another; it had in
-                fact been filed nowhere. The word is still in the database and
-                still written by the extractor. It is simply no longer shown. */}
-
-            {/* Only for a task that is actually filed. describePlacement still
-                returns the "Unfiled" word for an unknown workspace — that is
-                its own guard against printing undefined — but showing that
-                chip on every row of an app where nobody has made a workspace
-                yet is noise on every line. */}
-            {task.workspace_id && (
-              <span className="flex items-center gap-1 text-[var(--text-muted)] min-w-0">
-                <span
-                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                  style={{
-                    backgroundColor:
-                      workspaces.find((w) => w.record_id === task.workspace_id)?.color
-                      || 'var(--text-muted)',
-                  }}
-                />
-                <span className="truncate">
-                  {describePlacement(task, workspaces, categories, t)}
-                </span>
+                <span className="ws-dot w-1.5 h-1.5 rounded-full flex-shrink-0" aria-hidden="true" />
+                <span className="truncate">{workspace.name}</span>
               </span>
+            ) : (
+              <span className="flex-none text-[var(--text-muted)]">{t('workspace.unfiled')}</span>
             )}
 
-            {/* Who is holding this. Beside the placement chip on purpose: WHERE
-                it lives and WHO has it are the two facts a shared list is
-                scanned for, and separating them makes the eye travel twice.
-
-                Drawn only in a workspace with somebody else in it. On a solo
-                account the answer is always "you", and your own initials
-                stamped on all three hundred rows is decoration that costs a
-                line of width on a phone.
-
-                NOTHING IS DRAWN WHEN NOBODY HOLDS IT, which is the same choice
-                Trello makes and it is information rather than an omission: in a
-                shared room an unassigned task is nobody's work until somebody
-                takes it — the identical rule the agent follows when it answers
-                "τι έχω σήμερα". */}
-            {isSharedRoom && task.assigned_to && (
-              <span className="flex items-center gap-1 min-w-0">
-                <Avatar
-                  member={assignee}
-                  userId={task.assigned_to}
-                  size="xs"
-                  unknownLabel={t('members.former_member')}
-                />
-                <span className="truncate text-[var(--text-secondary)]">
-                  {assigneeLabel}
-                </span>
-              </span>
+            {middle && (
+              <>
+                <span className="flex-1 min-w-0 truncate text-[var(--text-secondary)]">{middle}</span>
+                <span className="flex-none text-[var(--text-muted)]" aria-hidden="true">·</span>
+              </>
             )}
 
-            {progress && (
-              <span className="flex items-center gap-1 text-[var(--text-secondary)] tabular-nums">
-                <ChecklistIcon className="w-3 h-3" />
-                {progress.done}/{progress.total}
-              </span>
-            )}
-
-            {task.category === 'Hostaway' && task.hostaway_created_at && (
-              <span className="text-[var(--text-muted)]">
-                {t('task.received_at', { time: roundToNearestHalfHour(task.hostaway_created_at) })}
-              </span>
-            )}
-
-            {isPending && (
-              <span className="text-[var(--priority-p2)] font-medium">{t('task.pending')}</span>
-            )}
-
-            <button
-              type="button"
-              data-no-toggle
-              onClick={handleToggleNotify}
-              aria-pressed={notifyOn}
-              // Carries the reason, so hovering on a desktop and a screen
-              // reader anywhere both get it without having to tap and find out.
-              title={task.due_time ? undefined : t('task.no_time_for_reminder')}
-              aria-label={task.due_time ? t('task.notification_label') : t('task.no_time_for_reminder')}
-              className={`tap-40 p-1 -m-1 rounded transition-colors ${
-                notifyOn
-                  ? 'text-[var(--brand-primary)]'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-              }`}
-            >
-              {notifyOn ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
-            </button>
-
-            <button
-              type="button"
-              data-no-toggle
-              onClick={handleToggleCalendar}
-              aria-pressed={calendarOn}
-              title={task.due_date ? undefined : t('calendar.no_date_for_sync')}
-              aria-label={task.due_date ? t('calendar.sync_task_label') : t('calendar.no_date_for_sync')}
-              className={`tap-40 p-1 -m-1 rounded transition-colors ${
-                calendarOn
-                  ? 'text-[var(--brand-primary)]'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-              }`}
-            >
-              {calendarOn ? <CalendarFilledIcon className="w-4 h-4" /> : <CalendarIcon className="w-4 h-4" />}
-            </button>
+            <span className={`flex-none ${task.due_date ? DUE_TONE_CLASSES[tone] : 'text-[var(--text-muted)]'}`}>
+              {task.due_date ? formatDate(task.due_date, task.due_time) : t('task.no_date')}
+            </span>
           </div>
 
           {(actions.actionError || actions.deleteError) && (
-            <div className="mt-2 text-xs text-[var(--danger)]">
+            <p className="mt-1 text-[11px] text-[var(--danger)]">
               {actions.actionError
                 ? `${t('errors.failed_update')}: ${actions.actionError}`
                 : `${t('errors.failed_delete')}: ${actions.deleteError}`}
-            </div>
+            </p>
           )}
         </div>
+      </div>
 
+      {/* THE RIGHT COLUMN: three controls, stacked, behind a dividing line.
+          They used to sit at the end of the line of facts, mixed in among them,
+          so one horizontal line was half information and half buttons and the
+          eye had to sort them. The ⋯ alone cost 40px of width out on its own;
+          all three together now cost 29. */}
+      <div
+        data-no-toggle
+        onClick={(e) => e.stopPropagation()}
+        className="flex-none flex flex-col items-center justify-center gap-1 px-1.5 border-l border-[var(--border-subtle)]"
+      >
         <TaskMenu
           isPending={isPending}
           isCompleted={isCompleted}
@@ -474,6 +417,36 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
           onDelete={handleDelete}
           t={t}
         />
+
+        <button
+          type="button"
+          data-no-toggle
+          onClick={handleToggleNotify}
+          aria-pressed={notifyOn}
+          // Carries the reason, so hovering on a desktop and a screen reader
+          // anywhere both get it without having to tap and find out.
+          title={task.due_time ? undefined : t('task.no_time_for_reminder')}
+          aria-label={task.due_time ? t('task.notification_label') : t('task.no_time_for_reminder')}
+          className={`tap-40 p-0.5 rounded transition-colors ${
+            notifyOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+          }`}
+        >
+          {notifyOn ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
+        </button>
+
+        <button
+          type="button"
+          data-no-toggle
+          onClick={handleToggleCalendar}
+          aria-pressed={calendarOn}
+          title={task.due_date ? undefined : t('calendar.no_date_for_sync')}
+          aria-label={task.due_date ? t('calendar.sync_task_label') : t('calendar.no_date_for_sync')}
+          className={`tap-40 p-0.5 rounded transition-colors ${
+            calendarOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+          }`}
+        >
+          {calendarOn ? <CalendarFilledIcon className="w-4 h-4" /> : <CalendarIcon className="w-4 h-4" />}
+        </button>
       </div>
       </article>
 

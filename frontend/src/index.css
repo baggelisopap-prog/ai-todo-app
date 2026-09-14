@@ -267,6 +267,26 @@ body {
   background-color: color-mix(in srgb, var(--ws-color) 72%, var(--text-primary));
 }
 
+/* The workspace as a small tinted pill on a task row.
+ *
+ * Same problem as .ws-frame and the same guard: --ws-color is whatever hex the
+ * user picked from the palette, and it has to stay legible on both themes
+ * without anybody choosing two values. The TEXT reuses .ws-frame's exact mix
+ * (72% hue, 28% text colour) so the pill and the room title in the app bar are
+ * literally the same colour for the same room. The FILL is the opposite move —
+ * 14% of the hue into the card's own background — which tints the pill enough
+ * to read as "that room" while keeping the text on it at full contrast.
+ *
+ * The declarations underneath are the fallback, not decoration: a browser
+ * without color-mix drops both mixed lines and is left with a neutral grey
+ * pill, which is legible rather than broken. */
+.ws-pill {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+  background-color: color-mix(in srgb, var(--ws-color) 14%, var(--bg-card));
+  color: color-mix(in srgb, var(--ws-color) 72%, var(--text-primary));
+}
+
 .tap-44,
 .tap-40 {
   position: relative;

@@ -91,6 +91,28 @@ export function describePlacement(task, workspaces, categories, t) {
 }
 
 /**
+ * The same two facts as describePlacement, but NOT joined into a sentence.
+ *
+ * A task row draws them differently now: the workspace is a tinted pill in its
+ * own colour, and the category is plain text beside it that may be truncated
+ * when the line is full. One string cannot express that — the row needs to know
+ * where the workspace ends, and it needs the colour, which the sentence throws
+ * away.
+ *
+ * describePlacement stays as it is and keeps its callers: a sentence is still
+ * the right shape everywhere the placement is READ rather than scanned.
+ *
+ * Returns `{ workspace, categoryName }`; `workspace` is the row object (so the
+ * caller gets its colour) or null when the task is unfiled.
+ */
+export function placementParts(task, workspaces, categories) {
+  const workspace = (workspaces || []).find((w) => w.record_id === task?.workspace_id) || null;
+  if (!workspace) return { workspace: null, categoryName: null };
+  const category = (categories || []).find((c) => c.record_id === task?.category_id);
+  return { workspace, categoryName: category ? category.name : null };
+}
+
+/**
  * Where a newly created item goes: after the highest position, not after the
  * count. Deleting the middle of a list leaves gaps, so a count-based answer
  * would collide with an existing row and make the order arbitrary.
