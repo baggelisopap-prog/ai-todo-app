@@ -26,18 +26,24 @@ import {
   TrashIcon,
 } from './TaskIcons';
 
-// The priority, as the THICKNESS of the completion circle's ring.
+// The priority is the COLOUR of the completion circle's ring, and nothing else.
 //
-// The owner asked for priority to stop being a lettered badge and become only
-// the circle — «το p1 p2 p3 να ειναι μονο στο χρωμα απο το κυκλακι» — and then,
-// seeing it, that the circles stay open: «οι κυκλοι να ειναι ανοιχτη οχι
-// γεματοι». Thickness is what makes that safe. The comment this file used to
-// carry said "Priority is text as well as colour", and it was right about the
-// reason: roughly one man in twelve cannot separate red from amber, and colour
-// alone would have made P1 and P2 the same circle. A ring that is visibly
-// heavier does not depend on hue at all, and it costs no width, which a letter
-// did.
-const PRIORITY_RING = { P1: '4px', P2: '2.5px', P3: '1.5px' };
+// Three passes to get here, and the last one is the owner's and final. It was a
+// lettered badge; he asked for the circle alone («το p1 p2 p3 να ειναι μονο στο
+// χρωμα απο το κυκλακι»), then for the circles to stay open («οι κυκλοι να
+// ειναι ανοιχτη οχι γεματοι»), then for them to stop varying: «τα κυκλάκια να
+// είναι το ίδιο μεγεθος, στα κοκκινα ειναι ποιο χοντρα». They were the same
+// 18px across, but a 4px ring leaves a smaller hole and reads as a heavier
+// object — he was describing what he saw, and he was right about it.
+//
+// WHAT THAT COSTS, WRITTEN DOWN RATHER THAN ARGUED AGAIN. This file once said
+// "Priority is text as well as colour", and the reason was real: roughly one man
+// in twelve cannot separate red from amber, so P1 and P2 are now the same circle
+// for them. Two intermediate answers were offered and declined — a letter on P1
+// only, and the ring thickness above. The screen-reader path is still covered,
+// because the circle's aria-label names the priority out loud. The colour-blind
+// case is not, and that is a known, accepted trade-off rather than an oversight.
+const RING_WIDTH = '2px';
 
 // Two 70px buttons. Named because the row's parked offset has to match the
 // tray's real width exactly, or the last button is clipped.
@@ -307,10 +313,7 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
           style={
             isCompleted
               ? undefined
-              : {
-                  borderWidth: PRIORITY_RING[task.priority] || PRIORITY_RING.P3,
-                  borderColor: priorityColor(task.priority),
-                }
+              : { borderWidth: RING_WIDTH, borderColor: priorityColor(task.priority) }
           }
           className={`tap-44 w-[18px] h-[18px] mt-[3px] rounded-full flex-shrink-0 flex items-center justify-center border-solid transition-all
             ${isCompleted
@@ -368,11 +371,18 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
               <span className="flex-none text-[var(--text-muted)]">{t('workspace.unfiled')}</span>
             )}
 
+            {/* ALWAYS RENDERED, even when there is nothing to put in it.
+                An empty middle used to be skipped, and then nothing pushed the
+                date away from the pill — so a task with no category showed its
+                date halfway along the line while the one under it showed it at
+                the far right. Reading down a list, the dates wandered. The
+                owner: «να ειναι παντα στην ιδια σειρα, γτ τωρα η ημερομηνια και
+                η ωρα σε καπια δεν ειναι στο ιδιο σημειο». This span takes the
+                slack in every row, so every date ends at the same edge and they
+                read as a column. */}
+            <span className="flex-1 min-w-0 truncate text-[var(--text-secondary)]">{middle}</span>
             {middle && (
-              <>
-                <span className="flex-1 min-w-0 truncate text-[var(--text-secondary)]">{middle}</span>
-                <span className="flex-none text-[var(--text-muted)]" aria-hidden="true">·</span>
-              </>
+              <span className="flex-none text-[var(--text-muted)]" aria-hidden="true">·</span>
             )}
 
             <span className={`flex-none ${task.due_date ? DUE_TONE_CLASSES[tone] : 'text-[var(--text-muted)]'}`}>
