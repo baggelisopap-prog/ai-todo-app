@@ -115,9 +115,34 @@ vite dev        → TaskRow.jsx and utils/workspaces.js transformed and served H
 
 Backend untouched: no Python in this change.
 
-## NOBODY HAS OPENED THIS IN A BROWSER
+## A PERSON HAS NOW LOOKED — and it cost two defects on sight
 
-**This is the row every list in the app draws**, so the blast radius is the whole product.
+**CORRECTED**: this section was headed "NOBODY HAS OPENED THIS IN A BROWSER" and that stopped
+being true on 2026-09-14, when the owner sent a screenshot of his real Σήμερα list. It is the
+first time any of this row has been seen running.
+
+**Two defects in the first look, both introduced by the two commits before it** (`b7fa880`):
+
+- **An orphan « · »**. A separator sat between the middle of the facts line and the date.
+  Once the flex slack moved between them the two can be half a screen apart, so the dot
+  rendered as a mark glued to the left of the date with empty space on its other side.
+  Removed — the gap separates them.
+- **Two shapes for one fact**. «Αταξινόμητα» was bare text while every filed task had a
+  pill, so a list containing both showed the same kind of information two different ways. It
+  is a pill now too, falling back to the neutral `--ws-color` default exactly as RoomTitle
+  does for a colourless workspace.
+
+**What the screenshot ALSO shows, and is not a defect**: dead space at the bottom left of
+every card. The date is hard right on the middle line and the three controls are hard right
+on the line below, with nothing between them — so each card reads as taller and emptier than
+it needs to. That is a layout decision rather than a bug, it reverses the "controls go
+underneath" arrangement the owner asked for one commit earlier, and it is therefore his call.
+Put to him with a sketch; **unanswered at the time of writing.**
+
+**Still nobody's eyes on**: a phone (the screenshot is a desktop window), the dark theme, and
+everything in the table below that did not happen to be on that screen. This is the row every
+list in the app draws, so the blast radius is the whole product.
+
 What would settle each:
 
 | Not watched | What would settle it |

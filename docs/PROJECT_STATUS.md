@@ -52,9 +52,14 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   pick the type sizes himself. `npm run check` exit 0 (`92 files, 50 tokens, 526 translation
   keys`), lint at its 12-problem baseline with none in the three files touched, `vite build`
   clean with `.ws-pill`, `color-mix`, `width:18px` and `line-height:1.32` read back out of the
-  built CSS. **NOBODY HAS OPENED IT IN A BROWSER, and the blast radius is every list in the
-  app** — ten rows of what would settle each check are in `CURRENT_TASK.md`. Reasoning in
-  DECISIONS.md.
+  built CSS. **CORRECTED 2026-09-14: somebody has now looked.** The owner sent a screenshot
+  of his real Σήμερα list — the first time any of this row had been seen running — and it
+  cost two defects on sight, both from the two commits before it: a separator dot left
+  orphaned beside the date once the flex slack moved between them, and «Αταξινόμητα» drawn as
+  bare text while every filed task had a pill. Both fixed (`b7fa880`). The same screenshot
+  shows dead space at the bottom left of each card, which is a layout question rather than a
+  bug and is with him. **Still unseen: a phone, the dark theme, and most of the table** in
+  `CURRENT_TASK.md`. The blast radius is every list in the app. Reasoning in DECISIONS.md.
 - **The two AI-snapshot columns are locked in the database (2026-09-13).** The last thing
   carried in the 2026-09-12 handover as waiting on the owner's hands, and it is now closed:
   `ai_suggested_category` and `ai_suggested_priority` are `NOT NULL` in `tasks`. The code has
