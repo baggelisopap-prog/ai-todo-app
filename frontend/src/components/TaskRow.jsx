@@ -359,17 +359,20 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
               phone; the category is the one that, cut, still leaves its first
               letters AND the room's colour beside it. */}
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden text-[11px] leading-[1.3]">
-            {workspace ? (
-              <span
-                className="ws-pill flex-none inline-flex items-center gap-1 max-w-[45%] rounded-full pl-1.5 pr-2 py-px font-semibold"
-                style={workspace.color ? { '--ws-color': workspace.color } : undefined}
-              >
-                <span className="ws-dot w-1.5 h-1.5 rounded-full flex-shrink-0" aria-hidden="true" />
-                <span className="truncate">{workspace.name}</span>
-              </span>
-            ) : (
-              <span className="flex-none text-[var(--text-muted)]">{t('workspace.unfiled')}</span>
-            )}
+            {/* ALWAYS a pill, including «Αταξινόμητα».
+                It used to be bare text in that one case, so a list mixing filed
+                and unfiled tasks showed two different shapes for the same fact
+                and the eye had to work out they were the same kind of thing.
+                An unfiled task simply sets no --ws-color, and the token's own
+                neutral default takes over — which is the same thing RoomTitle
+                does for a workspace with no colour of its own. */}
+            <span
+              className="ws-pill flex-none inline-flex items-center gap-1 max-w-[45%] rounded-full pl-1.5 pr-2 py-px font-semibold"
+              style={workspace?.color ? { '--ws-color': workspace.color } : undefined}
+            >
+              <span className="ws-dot w-1.5 h-1.5 rounded-full flex-shrink-0" aria-hidden="true" />
+              <span className="truncate">{workspace ? workspace.name : t('workspace.unfiled')}</span>
+            </span>
 
             {/* ALWAYS RENDERED, even when there is nothing to put in it.
                 An empty middle used to be skipped, and then nothing pushed the
@@ -379,11 +382,14 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
                 owner: «να ειναι παντα στην ιδια σειρα, γτ τωρα η ημερομηνια και
                 η ωρα σε καπια δεν ειναι στο ιδιο σημειο». This span takes the
                 slack in every row, so every date ends at the same edge and they
-                read as a column. */}
+                read as a column.
+
+                There was a « · » between this and the date for one commit. Once
+                the slack sits between them they can be half a screen apart, and
+                a separator with nothing on one side of it is just a mark stuck
+                to the date — visible in the owner's screenshot as an orphan dot.
+                The gap separates them; nothing else has to. */}
             <span className="flex-1 min-w-0 truncate text-[var(--text-secondary)]">{middle}</span>
-            {middle && (
-              <span className="flex-none text-[var(--text-muted)]" aria-hidden="true">·</span>
-            )}
 
             <span className={`flex-none ${task.due_date ? DUE_TONE_CLASSES[tone] : 'text-[var(--text-muted)]'}`}>
               {task.due_date ? formatDate(task.due_date, task.due_time) : t('task.no_date')}
