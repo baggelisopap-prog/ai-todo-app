@@ -58,9 +58,27 @@ cost 29px, less than the ⋯ cost on its own.**
   «Σε αναμονή», and the creation date when Browse is sorted by it — takes `flex-1` and
   truncates. Four things cannot always share 271px; the category is the one that, cut, still
   leaves its first letters AND the room's colour beside it.
-- **The priority is the ring's thickness**: P1 4px, P2 2.5px, P3 1.5px, all open, none
-  filled — his correction, «οι κυκλοι να ειναι ανοιχτη οχι γεματοι». Completion still wins
-  the circle: a done task is filled green whatever its priority.
+- ~~**The priority is the ring's thickness**: P1 4px, P2 2.5px, P3 1.5px.~~ **CORRECTED
+  (`5bf2b56`)** — every ring is **2px** and the priority is its **colour, nothing else**.
+  Three passes: a lettered badge, then thickness, then uniform. His last word:
+  «τα κυκλάκια να είναι το ίδιο μεγεθος, στα κοκκινα ειναι ποιο χοντρα». They WERE all 18px
+  across, but a 4px ring leaves a smaller hole and reads as a heavier object — he was
+  describing what he saw, and he was right about it. Completion still wins the circle: a done
+  task is filled green whatever its priority.
+
+  **The cost is recorded, not argued again.** About one man in twelve cannot separate red
+  from amber, so P1 and P2 are now the same circle for them. Two middle answers were offered
+  and declined — a letter on P1 only, and the thickness above. The screen-reader path is
+  covered (the circle's `aria-label` names the priority); the colour-blind case is a known,
+  **accepted** trade-off, and this is the third time it has been raised.
+
+- **A real bug found by him on screen, and fixed (`5bf2b56`)**: «να ειναι παντα στην ιδια
+  σειρα, γτ τωρα η ημερομηνια και η ωρα σε καπια δεν ειναι στο ιδιο σημειο». The middle of
+  the facts line was rendered only when it had something in it — so a task with **no
+  category** had nothing pushing its date away from the pill, and showed it halfway along the
+  line while the row under it showed it at the far right. Reading down a list, the dates
+  wandered. The span is now always present and takes the slack in every row, so every date
+  ends at the same edge and they read as a column.
 - **The workspace is a tinted pill** using the room's own colour, through a new `.ws-pill`
   that mixes the same 72% for its text as `.ws-frame` does for its border — so one room is
   literally one colour in the app bar and on every row.
@@ -106,7 +124,8 @@ What would settle each:
 |---|---|
 | That it renders at all | Open Σήμερα. Eight-ish tasks should fit where five did |
 | The truncation guarantee | A task in a category with a long name: the name must cut, the room pill and the date must not |
-| The three ring thicknesses | Put a P1, a P2 and a P3 side by side. If 4px vs 2.5px is not obvious at arm's length, the numbers move |
+| That the dates really line up | Scroll a list with a mix: some tasks with a category, some without. Every date must end at the same edge |
+| Whether colour alone separates P1 from P2 | Put a P1 and a P2 side by side. This is the one place the design knowingly has no second channel |
 | The pill on a colourless room | «My App» has no colour: it must fall back to neutral grey, not vanish |
 | The pill in dark mode | `color-mix` with `--text-primary` flips with the theme; nobody has seen it flip |
 | Swipe left and right | The swipe tray and the parked offset were not touched, but they were not tested either |

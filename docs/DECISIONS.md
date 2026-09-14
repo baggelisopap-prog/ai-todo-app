@@ -1,17 +1,25 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
-### Decision: priority is the THICKNESS of the completion ring, not a lettered badge
+### Decision: priority is the COLOUR of the completion ring, and nothing else
 **This reverses a decision written into TaskRow.jsx** — "Priority is text as well as colour" —
 and the owner asked for it twice: first «το p1 p2 p3 να ειναι μονο στο χρωμα απο το κυκλακι»,
 then, seeing the first draft, «οι κυκλοι να ειναι ανοιχτη οχι γεματοι».
 
-**The old comment was right about the reason and wrong about the only remedy.** Roughly one man
-in twelve cannot separate red from amber, so priority carried by hue ALONE makes P1 and P2 the
-same circle — which is why a letter was there. But a letter is not the only second channel.
-The ring's thickness (P1 4px, P2 2.5px, P3 1.5px, all open) is a second channel that **does not
-depend on hue at all**, and unlike the badge it costs no horizontal width — on a row where
-width was the whole problem, that is the difference between the two answers.
+**CORRECTED the same day.** This entry first said the answer was the ring's THICKNESS — P1
+4px, P2 2.5px, P3 1.5px — on the argument that thickness is a second channel that does not
+depend on hue and costs no width, which a letter did. It did not survive being looked at: the
+circles were all 18px across, but a 4px ring leaves a smaller hole and reads as a heavier,
+bigger object, and the owner said so plainly: «τα κυκλάκια να είναι το ίδιο μεγεθος, στα
+κοκκινα ειναι ποιο χοντρα». Every ring is 2px now.
+
+**So the cost the old comment warned about is now real, and it is accepted rather than
+solved.** Roughly one man in twelve cannot separate red from amber, so P1 and P2 are the same
+circle for them. Three answers were put to the owner across three rounds — a letter on every
+priority, a letter on P1 only, and the thickness — and he declined all three. The
+screen-reader path is covered: the circle's `aria-label` names the priority out loud. The
+colour-blind case is not covered, it is known, and it is written here so that the next person
+to find it knows it was a decision rather than an oversight.
 
 **Completion still wins the circle**: a done task is filled green whatever its priority was.
 One shape cannot carry two states at once, and "is this done" is the question the circle is

@@ -30,12 +30,21 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   mockup cut the date off — four things cannot always share 271px, and the category is the one
   that, cut, still leaves its first letters and the room's colour beside it.
 
-  **Priority became the thickness of the completion ring** — P1 4px, P2 2.5px, P3 1.5px, all
-  open, none filled — replacing the lettered badge. The comment this reverses said "Priority is
-  text as well as colour" and was right about the reason: about one man in twelve cannot
-  separate red from amber. Thickness does not depend on hue and costs no width, which a letter
-  did. The description and the assignee's printed name left the row; the ↻ became text, with
-  the ⋯ menu still opening the same editor.
+  **Priority became the colour of the completion ring and nothing else**, replacing the
+  lettered badge — over three passes, because the middle answer did not survive contact with
+  the screen. Thickness (P1 4px, P2 2.5px) was tried and rejected by the owner: the circles
+  were all 18px across, but a heavy ring leaves a smaller hole and reads as a bigger object.
+  **The comment this reverses said "Priority is text as well as colour" and it was right
+  about the reason** — about one man in twelve cannot separate red from amber, so P1 and P2
+  are now the same circle for them. Two middle answers were offered and declined; the
+  screen-reader path is covered by the circle's aria-label, the colour-blind case is a known
+  and accepted trade-off. The description and the assignee's printed name left the row; the ↻
+  became text, with the ⋯ menu still opening the same editor.
+
+  **One real bug came out of him looking at it**: the middle of the facts line was rendered
+  only when it had content, so a task with no category had nothing pushing its date rightward
+  and showed it halfway along while the row beneath showed it at the far edge. Dates wandered
+  down the list. Fixed by always rendering the span that takes the slack.
 
   **The first measurement given to the owner was wrong** — 258px quoted from memory against
   222px in the code — and he had already seen the problem with his eyes before either number
