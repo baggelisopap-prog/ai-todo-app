@@ -13,10 +13,16 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 - **The task row stopped sprawling, and now says which room and when no matter what (2026-09-13).**
   The row every list in the app draws. On a 360px phone it was spending **138px on chrome and
   leaving 222px for content** — 38% of the screen saying nothing, with **40px going to the ⋯
-  on its own**. It is now 271px of content at ~62px tall instead of ~96px: about eight tasks
-  fit a phone screen where five did. The ⋯ moved into a right-hand rail beside the bell and
-  the calendar, behind a dividing line, and **all three together cost 29px — less than the ⋯
-  cost alone**.
+  on its own**. It is now 271px of content, and the ⋯ shares one line under the facts
+  with the bell and the calendar instead of sitting out on its own.
+
+  **That line started as a stacked column on the right and was corrected within the hour**
+  (`1cbee0f`): the owner did not like how it looked, and it was also the wrong shape — three
+  controls stacked are ~76px tall against ~53px for the title and the line of facts, so the
+  column was setting the row's height on its own. **No height figure is quoted here on
+  purpose**: two were given in this task and both were wrong (258px of width that was 222,
+  ~62px of height the rail made ~78). The width numbers are read from the source; the height
+  needs somebody to open the app.
 
   **The order of the one remaining line is a guarantee, not a layout.** The workspace pill and
   the date never shrink; only the middle (category, checklist, ↻, «Λήφθηκε», the creation date
