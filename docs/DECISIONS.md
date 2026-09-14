@@ -1,6 +1,61 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: priority is the THICKNESS of the completion ring, not a lettered badge
+**This reverses a decision written into TaskRow.jsx** — "Priority is text as well as colour" —
+and the owner asked for it twice: first «το p1 p2 p3 να ειναι μονο στο χρωμα απο το κυκλακι»,
+then, seeing the first draft, «οι κυκλοι να ειναι ανοιχτη οχι γεματοι».
+
+**The old comment was right about the reason and wrong about the only remedy.** Roughly one man
+in twelve cannot separate red from amber, so priority carried by hue ALONE makes P1 and P2 the
+same circle — which is why a letter was there. But a letter is not the only second channel.
+The ring's thickness (P1 4px, P2 2.5px, P3 1.5px, all open) is a second channel that **does not
+depend on hue at all**, and unlike the badge it costs no horizontal width — on a row where
+width was the whole problem, that is the difference between the two answers.
+
+**Completion still wins the circle**: a done task is filled green whatever its priority was.
+One shape cannot carry two states at once, and "is this done" is the question the circle is
+tapped to answer.
+
+**What was rejected**: keeping a letter only on P1. It would have worked, and it would have put
+a permanent badge back on the row for the sake of one priority in three.
+
+### Decision: on a task row, the room and the date never shrink — only the category does
+A phone row has about 271px for its line of facts and four things want to be on it: which room,
+which category, anything extra the task carries, and when it is due. They do not always fit.
+
+An earlier draft ordered them room → category → date, so **the date was the first thing cut**.
+The owner caught it and said what he actually needed: «κατω θελω σιγουρα να βλεπω ημερομηνια
+ωρα και χωρο κατηγορια». So the layout was rewritten as a priority, not a sequence: the
+workspace pill and the date are `flex-none` and can never shrink; only the middle takes
+`flex-1` and truncates.
+
+**Why the category is the one that gives.** Cut, it still leaves its first letters AND the
+room's colour sitting next to it, so the reader loses a word rather than a fact. A truncated
+date is a wrong answer; a truncated room is an unanswerable one.
+
+The middle is built as ONE joined string rather than three elements for the same reason —
+three separately-truncating spans can each end mid-word, where one sentence ends cleanly in a
+single ellipsis.
+
+### Decision: a workspace's colour is mixed, never used raw, and the mix is shared
+`.ws-pill` (the room on a task row) reuses `.ws-frame`'s exact formula for its text —
+`color-mix(in srgb, var(--ws-color) 72%, var(--text-primary))` — and tints its background with
+14% of the same hue. Two consequences, and the first is the point:
+
+- **One room is literally one colour** in the app bar's room title and on every task row,
+  because both read the same mix of the same variable rather than each picking something that
+  looks close.
+- **It survives any hex the user picks.** `--ws-color` comes from an eight-colour palette now,
+  but the column has held arbitrary values since workspaces shipped; pale yellow on white and
+  navy on the dark theme are both invisible raw, and mixing in the TEXT colour — which flips
+  with the theme — fixes both with one declaration.
+
+The unmixed neutral declarations sit above the mixed ones as a fallback, not as decoration: a
+browser without `color-mix` drops the two mixed lines and is left with a grey pill, which is
+legible rather than broken. Same pattern `.ws-frame` established.
+
+
 ### Decision: Settings stays a trip you come back from, not a place in the daily sidebar
 The owner asked it himself, looking at the finished desktop shape: «σκεφτομαι μηπως ολα αυτα
 των ρυθμισεων να ειναι στα αριστερα σαν τα υπολοιπα σαν dashboard η δεν ειναι καλη ιδεα;».

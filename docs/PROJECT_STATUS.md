@@ -10,6 +10,36 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **The task row stopped sprawling, and now says which room and when no matter what (2026-09-13).**
+  The row every list in the app draws. On a 360px phone it was spending **138px on chrome and
+  leaving 222px for content** — 38% of the screen saying nothing, with **40px going to the ⋯
+  on its own**. It is now 271px of content at ~62px tall instead of ~96px: about eight tasks
+  fit a phone screen where five did. The ⋯ moved into a right-hand rail beside the bell and
+  the calendar, behind a dividing line, and **all three together cost 29px — less than the ⋯
+  cost alone**.
+
+  **The order of the one remaining line is a guarantee, not a layout.** The workspace pill and
+  the date never shrink; only the middle (category, checklist, ↻, «Λήφθηκε», the creation date
+  when Browse is sorted by it) truncates. The owner asked for exactly that after seeing a
+  mockup cut the date off — four things cannot always share 271px, and the category is the one
+  that, cut, still leaves its first letters and the room's colour beside it.
+
+  **Priority became the thickness of the completion ring** — P1 4px, P2 2.5px, P3 1.5px, all
+  open, none filled — replacing the lettered badge. The comment this reverses said "Priority is
+  text as well as colour" and was right about the reason: about one man in twelve cannot
+  separate red from amber. Thickness does not depend on hue and costs no width, which a letter
+  did. The description and the assignee's printed name left the row; the ↻ became text, with
+  the ⋯ menu still opening the same editor.
+
+  **The first measurement given to the owner was wrong** — 258px quoted from memory against
+  222px in the code — and he had already seen the problem with his eyes before either number
+  existed. Chosen across four rounds of mockups, including a live density switcher he used to
+  pick the type sizes himself. `npm run check` exit 0 (`92 files, 50 tokens, 526 translation
+  keys`), lint at its 12-problem baseline with none in the three files touched, `vite build`
+  clean with `.ws-pill`, `color-mix`, `width:18px` and `line-height:1.32` read back out of the
+  built CSS. **NOBODY HAS OPENED IT IN A BROWSER, and the blast radius is every list in the
+  app** — ten rows of what would settle each check are in `CURRENT_TASK.md`. Reasoning in
+  DECISIONS.md.
 - **The two AI-snapshot columns are locked in the database (2026-09-13).** The last thing
   carried in the 2026-09-12 handover as waiting on the owner's hands, and it is now closed:
   `ai_suggested_category` and `ai_suggested_priority` are `NOT NULL` in `tasks`. The code has
