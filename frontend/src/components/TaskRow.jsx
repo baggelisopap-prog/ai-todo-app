@@ -180,12 +180,14 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
     actions.setCalendarSync(!task.calendar_sync_enabled);
   }
 
-  // p-4 is gone from here on purpose: the padding now belongs to the two
-  // columns inside, because the right-hand rail needs its dividing line to run
-  // the full height of the row and a padded parent would inset it.
+  // No p-4: the padding belongs to the block inside, which is the only child.
+  //
+  // CORRECTED: this briefly said the padding belonged to "the two columns
+  // inside, because the right-hand rail needs its dividing line to run the full
+  // height of the row". There is no rail any more — see the controls row below.
   const rowClasses = [
     'bg-[var(--bg-card)] border border-[var(--border-subtle)]',
-    'rounded-lg overflow-hidden flex items-stretch',
+    'rounded-lg',
     'shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]',
     'transition-shadow cursor-pointer',
     isSelected ? 'ring-2 ring-[var(--border-focus)]/20' : '',
@@ -296,11 +298,8 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
           transition: swipe.isSwiping ? 'none' : 'transform 150ms ease-out',
         }}
       >
-      {/* THE LEFT COLUMN: the circle, the title, and one line under it.
-          Everything the row SAYS lives here; the right column is only controls.
-          That separation is the owner's — «να ξεχωρίζει απο τις πληρωφορίες» —
-          and the dividing line between them is what makes it visible. */}
-      <div className="flex-1 min-w-0 flex items-start gap-2 py-[9px] pl-[10px] pr-1.5">
+      {/* The circle, the title, the line of facts, and the controls under them. */}
+      <div className="flex items-start gap-2 py-[9px] px-2.5">
         <button
           type="button"
           data-no-toggle
@@ -388,65 +387,76 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
                 : `${t('errors.failed_delete')}: ${actions.deleteError}`}
             </p>
           )}
+
+          {/* THE CONTROLS GO UNDER THE FACTS, NOT BESIDE THEM.
+              They were a stacked column on the right for one round, and the
+              owner did not like how it looked: «τα 3 στα δεξια κουδουνι
+              ημερολογιο και τελιτσες θελω να ειναι απο κατω τελικα, ετσι δεν
+              φαινονται πολυ καλα».
+
+              It also turned out to be the wrong shape for the height. Three
+              20-24px controls stacked are ~76px tall, while the title and the
+              line under it come to ~53px — so the COLUMN was setting the row's
+              height and the text was riding along in space it did not need.
+              Side by side they are one 28px line, and the row is driven by its
+              content again.
+
+              They are still separated from the information: their own line,
+              pushed to the right, is the separation — «να ξεχωρίζει απο τις
+              πληρωφορίες» — without spending a vertical rule on it. */}
+          <div
+            data-no-toggle
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center justify-end gap-3 -mr-1 -mt-0.5"
+          >
+            <button
+              type="button"
+              data-no-toggle
+              onClick={handleToggleNotify}
+              aria-pressed={notifyOn}
+              // Carries the reason, so hovering on a desktop and a screen reader
+              // anywhere both get it without having to tap and find out.
+              title={task.due_time ? undefined : t('task.no_time_for_reminder')}
+              aria-label={task.due_time ? t('task.notification_label') : t('task.no_time_for_reminder')}
+              className={`tap-40 p-1 rounded transition-colors ${
+                notifyOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+              }`}
+            >
+              {notifyOn ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
+            </button>
+
+            <button
+              type="button"
+              data-no-toggle
+              onClick={handleToggleCalendar}
+              aria-pressed={calendarOn}
+              title={task.due_date ? undefined : t('calendar.no_date_for_sync')}
+              aria-label={task.due_date ? t('calendar.sync_task_label') : t('calendar.no_date_for_sync')}
+              className={`tap-40 p-1 rounded transition-colors ${
+                calendarOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+              }`}
+            >
+              {calendarOn ? <CalendarFilledIcon className="w-4 h-4" /> : <CalendarIcon className="w-4 h-4" />}
+            </button>
+
+            <TaskMenu
+              isPending={isPending}
+              isCompleted={isCompleted}
+              isRejected={isRejected}
+              pendingAction={actions.pendingAction}
+              onApprove={actions.approve}
+              onUncomplete={actions.uncomplete}
+              onReject={actions.reject}
+              onUnreject={actions.unreject}
+              onEdit={() => onOpen(task.record_id)}
+              onReschedule={() => setIsReschedulingOpen(true)}
+              onRecurrence={() => recurrence.openEditor(task)}
+              isRecurring={Boolean(task.recurrence_rule_id)}
+              onDelete={handleDelete}
+              t={t}
+            />
+          </div>
         </div>
-      </div>
-
-      {/* THE RIGHT COLUMN: three controls, stacked, behind a dividing line.
-          They used to sit at the end of the line of facts, mixed in among them,
-          so one horizontal line was half information and half buttons and the
-          eye had to sort them. The ⋯ alone cost 40px of width out on its own;
-          all three together now cost 29. */}
-      <div
-        data-no-toggle
-        onClick={(e) => e.stopPropagation()}
-        className="flex-none flex flex-col items-center justify-center gap-1 px-1.5 border-l border-[var(--border-subtle)]"
-      >
-        <TaskMenu
-          isPending={isPending}
-          isCompleted={isCompleted}
-          isRejected={isRejected}
-          pendingAction={actions.pendingAction}
-          onApprove={actions.approve}
-          onUncomplete={actions.uncomplete}
-          onReject={actions.reject}
-          onUnreject={actions.unreject}
-          onEdit={() => onOpen(task.record_id)}
-          onReschedule={() => setIsReschedulingOpen(true)}
-          onRecurrence={() => recurrence.openEditor(task)}
-          isRecurring={Boolean(task.recurrence_rule_id)}
-          onDelete={handleDelete}
-          t={t}
-        />
-
-        <button
-          type="button"
-          data-no-toggle
-          onClick={handleToggleNotify}
-          aria-pressed={notifyOn}
-          // Carries the reason, so hovering on a desktop and a screen reader
-          // anywhere both get it without having to tap and find out.
-          title={task.due_time ? undefined : t('task.no_time_for_reminder')}
-          aria-label={task.due_time ? t('task.notification_label') : t('task.no_time_for_reminder')}
-          className={`tap-40 p-0.5 rounded transition-colors ${
-            notifyOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-          }`}
-        >
-          {notifyOn ? <BellFilledIcon className="w-4 h-4" /> : <BellOutlineIcon className="w-4 h-4" />}
-        </button>
-
-        <button
-          type="button"
-          data-no-toggle
-          onClick={handleToggleCalendar}
-          aria-pressed={calendarOn}
-          title={task.due_date ? undefined : t('calendar.no_date_for_sync')}
-          aria-label={task.due_date ? t('calendar.sync_task_label') : t('calendar.no_date_for_sync')}
-          className={`tap-40 p-0.5 rounded transition-colors ${
-            calendarOn ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-          }`}
-        >
-          {calendarOn ? <CalendarFilledIcon className="w-4 h-4" /> : <CalendarIcon className="w-4 h-4" />}
-        </button>
       </div>
       </article>
 
