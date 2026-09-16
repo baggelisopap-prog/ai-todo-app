@@ -1,6 +1,55 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: the row's three controls sit ON the facts line, and the separation he asked for was traded for a whole row
+The bell, the calendar and the ⋯ took **four** arrangements in one day and every move was the
+owner's, which is why this is written down: the shipped answer reverses something he himself
+asked for an hour earlier, and without the sequence it looks like a mistake somebody should
+undo.
+
+1. **Interleaved among the facts.** Rejected on sight, and the objection is the requirement
+   everything after it had to satisfy: «καμπανακια και ημερολογια μου αρεσουν εκει απλα να
+   ειναι δεξια το ενα κατω απο το αλλο να (ξεχωρίζει απο τις πληρωφορίες)».
+2. **A stacked column on the right**, behind a dividing line (`96007bc`). It satisfied the
+   requirement and was the wrong SHAPE: three controls stacked are ~76px tall against ~53px
+   for the title and the facts line, so the column — not the text — was setting every row's
+   height. He saw it before the measurement existed: «τα 3 στα δεξια κουδουνι ημερολογιο και
+   τελιτσες θελω να ειναι απο κατω τελικα, ετσι δεν φαινονται πολυ καλα».
+3. **Their own line underneath** (`1cbee0f`). Shorter, and it left a hole: the date hard right
+   on the facts line, the controls hard right on the line below, dead space between them. That
+   is what his screenshot showed, and it is why the cards read as taller and emptier than the
+   pixels said they were.
+4. **On the facts line, as one group at the end after a gap** (`7ab2d8a`) — «παμε».
+
+**Why 4 and not a fix to 3.** The hole is not a bug with a local repair; it is what a
+two-column layout does when both columns are right-aligned and one of them is short. Filling
+it means giving the controls a row they do not need. Removing the row removes the hole and
+buys a whole line back on every card in every list in the app.
+
+**What this gives up, stated plainly because it was his own requirement:** the clean separation
+from the information that arrangement 1 was rejected for not having. The difference is that
+the three are now ONE group at the end after a gap, rather than interleaved with the facts —
+a weaker separation, deliberately accepted for the density. Rejected alternative: keep
+arrangement 3 and close the hole by centring or left-aligning the controls — it keeps the
+extra row, which was the actual cost.
+
+**The dates still line up, and that is load-bearing, not incidental.** The control group is
+`flex-none` at a fixed width, so every date still ends at the same x — which is exactly what
+the fix one commit earlier (`5bf2b56`) had been for. An arrangement that made the dates wander
+again would have undone it.
+
+**One mechanical detail worth keeping:** `KebabMenu`'s button went `p-1` → `p-0.5` to pay for
+the space. **The hit area did not change** — `tap-44` draws the 44px target with a
+pseudo-element, so shrinking the visible box does not shrink what a thumb can hit. Anyone
+tempted to put the padding back to make it "easier to tap" would be trading the category's
+width for nothing.
+
+**Not verified by anybody's eyes.** This shipped AFTER the only screenshot that exists, so no
+one has seen arrangement 4 at all — not on a phone, not in the dark theme. The open question
+it creates is on a phone specifically: with the controls on the facts line, the middle (the
+category) is left roughly 40–90px and may truncate hard. Settled by opening Σήμερα on a phone
+and looking; not by another estimate.
+
 ### Decision: priority is the COLOUR of the completion ring, and nothing else
 **This reverses a decision written into TaskRow.jsx** — "Priority is text as well as colour" —
 and the owner asked for it twice: first «το p1 p2 p3 να ειναι μονο στο χρωμα απο το κυκλακι»,
