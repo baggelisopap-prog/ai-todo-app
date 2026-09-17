@@ -15,6 +15,8 @@ import {
   KIND_DELETED,
   KIND_MISSED,
   KIND_REJECTED,
+  RANGE_TODAY,
+  RANGE_YESTERDAY,
   RANGE_WEEK,
   RANGE_MONTH,
   RANGE_YEAR,
@@ -128,7 +130,12 @@ function BrowseView({
     { value: KIND_REJECTED, label: `${t('browse.kind_rejected')} (${historyCounts[KIND_REJECTED]})` },
   ];
 
+  // Nearest first, because "where did that just go" is the question that
+  // brings people here. ONE week-sized option and never two: «Αυτή την
+  // εβδομάδα» was built and removed on sight — see taskHistory.js.
   const rangeOptions = [
+    { value: RANGE_TODAY, label: t('browse.range_today') },
+    { value: RANGE_YESTERDAY, label: t('browse.range_yesterday') },
     { value: RANGE_WEEK, label: t('browse.range_week') },
     { value: RANGE_MONTH, label: t('browse.range_month') },
     { value: RANGE_YEAR, label: t('browse.range_year') },

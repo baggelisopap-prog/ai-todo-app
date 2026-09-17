@@ -42,6 +42,26 @@ function timeOfDay(at) {
 }
 
 /**
+ * "14 Σεπ 14:32" — the event's own date AND hour.
+ *
+ * It used to be the hour alone, on the grounds that the day heading above
+ * carried the date. True while you are reading top-down, and useless the
+ * moment you are not: a row scrolled away from its heading said «Διαγράφηκε
+ * 14:32» about no particular day. The owner asked for the date outright («να
+ * έχει και ημερομηνία δημιουργίας και ημερομηνία διαγραφής»). Repeating the
+ * heading is the price, and it is worth it — the line has to be true on its
+ * own.
+ *
+ * toLocalISODate rather than toISOString: the latter is UTC and would print
+ * the previous day for anything after 21:00 Athens time.
+ */
+function stampOf(at) {
+  if (at === null) return '';
+  const date = new Date(at);
+  return `${formatDate(toLocalISODate(date))} ${timeOfDay(at)}`;
+}
+
+/**
  * "Σήμερα" / "Χθες" / "1 Σεπ 2026", or the undated heading.
  *
  * Today and yesterday get names because those are the two the eye looks for
@@ -80,19 +100,38 @@ function eventLine({ kind, at, exact, task }, t) {
   }
 
   if (!exact) {
-    const label = kind === KIND_COMPLETED ? t('browse.event_completed', { time: '' }) : t('browse.event_deleted', { time: '' });
+    const label = kind === KIND_COMPLETED ? t('browse.event_completed', { when: '' }) : t('browse.event_deleted', { when: '' });
     return `${label.trim()} · ${t('browse.event_undated')}`;
   }
 
   if (kind === KIND_COMPLETED) {
-    const line = t('browse.event_completed', { time: timeOfDay(at) });
+    const line = t('browse.event_completed', { when: stampOf(at) });
     // completed_source is why this column exists: a task once closed itself six
     // seconds after being created and nothing could say what had done it.
     const sourceKey = SOURCE_KEYS[task.completed_source];
     return sourceKey ? `${line} · ${t(sourceKey)}` : line;
   }
 
-  return t('browse.event_deleted', { time: timeOfDay(at) });
+  return t('browse.event_deleted', { when: stampOf(at) });
+}
+
+/**
+ * The row's whole life on ONE line: «Μπήκε 3 Σεπ → Διαγράφηκε 14 Σεπ 14:32».
+ *
+ * These were two stacked lines, and the owner's word for the result was
+ * «χάος» — one date sat in a heading somewhere above, the other in small text
+ * underneath, and nothing put them next to each other. Reading them as a span
+ * is the question people actually bring to this screen: how long did this
+ * thing live before it ended.
+ *
+ * A row with no creation stamp keeps the event alone rather than printing an
+ * arrow that starts nowhere.
+ */
+function lifeLine(row, t) {
+  const event = eventLine(row, t);
+  const created = row.task.created_at || row.task.created_time;
+  if (!created) return event;
+  return `${t('browse.created_on', { date: formatDate(created.slice(0, 10)) })} → ${event}`;
 }
 
 /**
@@ -140,7 +179,6 @@ function HistoryRow({ row, onAct, isBusy }) {
   const { t } = useTranslation();
   const { kind, task } = row;
   const style = KIND_STYLES[kind];
-  const created = task.created_at || task.created_time;
   const action = ACTIONS[kind];
 
   return (
@@ -155,15 +193,10 @@ function HistoryRow({ row, onAct, isBusy }) {
 
       <div className="min-w-0 flex-1">
         <p className="text-sm text-[var(--text-primary)] truncate">{task.task_name}</p>
-        <p className="text-xs text-[var(--text-secondary)] mt-0.5">{eventLine(row, t)}</p>
-        {/* "When did this go in" — the third thing the History tab was asked
-            for, and the one that had no field on the frontend until
-            created_at was surfaced. */}
-        {created && (
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-            {t('browse.created_on', { date: formatDate(created.slice(0, 10)) })}
-          </p>
-        )}
+        {/* Both dates, in one line — see lifeLine. "When did this go in" was
+            the third thing the History tab was asked for, and it had no field
+            on the frontend until created_at was surfaced. */}
+        <p className="text-xs text-[var(--text-secondary)] mt-0.5">{lifeLine(row, t)}</p>
       </div>
 
       {action && (

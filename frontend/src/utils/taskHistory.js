@@ -19,6 +19,18 @@ export const KIND_DELETED = 'deleted';
 export const KIND_MISSED = 'missed';
 export const KIND_REJECTED = 'rejected';
 
+// The ranges the «Πότε» menu offers, nearest first.
+//
+// «Αυτή την εβδομάδα» was built, shown to the owner, and REMOVED on sight —
+// «7 ημέρες να δείχνει, καλύτερα είναι». Recorded rather than quietly undone,
+// because the rule it leaves behind is the useful part: the menu carries ONE
+// week-sized option, never both. They read as the same thing and are not — on
+// a Friday "the last seven days" reaches back to the previous Saturday, while
+// "this week" starts on Monday and is three days — and two controls 30px apart
+// meaning almost-but-not-quite the same thing is the confusion this whole
+// change exists to remove. He picked which one; the rule is what matters.
+export const RANGE_TODAY = 'today';
+export const RANGE_YESTERDAY = 'yesterday';
 export const RANGE_WEEK = '7';
 export const RANGE_MONTH = '30';
 export const RANGE_YEAR = 'year';
@@ -83,33 +95,62 @@ export function isHistoryTask(task) {
   return historyEntry(task) !== null;
 }
 
-/**
- * The oldest instant a range admits, or null for "everything".
- *
- * Counted in whole local days including today, so "7 μέρες" on a Friday means
- * Saturday-through-Friday rather than "168 hours ago", which would cut this
- * morning's own entries out of a range the user reads as "this week".
- */
-export function rangeStart(range, now = new Date()) {
-  if (range === RANGE_ALL) return null;
-  if (range === RANGE_YEAR) return new Date(now.getFullYear(), 0, 1).getTime();
+/** Local midnight at the start of `date`'s day. */
+function startOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
-  const days = range === RANGE_WEEK ? 7 : 30;
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - (days - 1));
-  return start.getTime();
+/**
+ * The window a range admits: `{ since, until }` in milliseconds, either end
+ * null for "no edge on this side". `until` is EXCLUSIVE.
+ *
+ * This replaced a `rangeStart` that returned one number, and the reason is
+ * «Χθες»: every other range means "since X" and runs to now, but yesterday also
+ * has to mean "before today" — without the upper edge it would simply be
+ * «Σήμερα» with more rows in it. One range needing two edges makes two edges
+ * the shape of the function, rather than a special case bolted onto the caller.
+ *
+ * Counted in whole LOCAL days, never in hours: "24 hours ago" would cut this
+ * morning's own entries out of a range the reader calls "today", and "7 μέρες"
+ * means seven whole days INCLUDING today rather than 168 hours back.
+ */
+export function rangeBounds(range, now = new Date()) {
+  const today = startOfDay(now);
+
+  if (range === RANGE_TODAY) return { since: today.getTime(), until: null };
+
+  if (range === RANGE_YESTERDAY) {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return { since: yesterday.getTime(), until: today.getTime() };
+  }
+
+  if (range === RANGE_WEEK || range === RANGE_MONTH) {
+    const days = range === RANGE_WEEK ? 7 : 30;
+    const start = new Date(today);
+    start.setDate(start.getDate() - (days - 1));
+    return { since: start.getTime(), until: null };
+  }
+
+  if (range === RANGE_YEAR) {
+    return { since: new Date(now.getFullYear(), 0, 1).getTime(), until: null };
+  }
+
+  return { since: null, until: null };
 }
 
 /**
  * The history entries matching a kind and a date range, newest first.
  *
- * An entry with no date at all cannot honestly answer "in the last 7 days",
- * so it is excluded from every range except "Όλα" rather than being assumed
- * recent — the same principle as not backfilling the timestamps.
+ * An entry with no date at all cannot honestly answer "was this yesterday", so
+ * it is excluded from every bounded range rather than being assumed recent —
+ * the same principle as not backfilling the timestamps.
  */
 export function selectHistory(tasks, { kind = 'all', range = RANGE_ALL, now = new Date() } = {}) {
-  const since = rangeStart(range, now);
+  const { since, until } = rangeBounds(range, now);
+  const bounded = since !== null || until !== null;
   const rows = [];
 
   for (const task of tasks || []) {
@@ -118,7 +159,11 @@ export function selectHistory(tasks, { kind = 'all', range = RANGE_ALL, now = ne
     if (kind !== 'all' && entry.kind !== kind) continue;
 
     const at = millis(entry.at);
-    if (since !== null && (at === null || at < since)) continue;
+    // An undated entry is excluded from every bounded range — it cannot
+    // honestly answer "was this yesterday" — but is kept under «Όλο το αρχείο».
+    if (bounded && at === null) continue;
+    if (since !== null && at < since) continue;
+    if (until !== null && at >= until) continue;
 
     rows.push({ ...entry, task, at, day: at === null ? null : toLocalISODate(new Date(at)) });
   }

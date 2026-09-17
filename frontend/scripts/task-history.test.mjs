@@ -13,12 +13,15 @@ import {
   selectHistory,
   groupHistoryByDay,
   countByKind,
-  rangeStart,
+  rangeBounds,
   KIND_COMPLETED,
   KIND_DELETED,
   KIND_MISSED,
   KIND_REJECTED,
+  RANGE_TODAY,
+  RANGE_YESTERDAY,
   RANGE_WEEK,
+  RANGE_MONTH,
   RANGE_ALL,
 } from '../src/utils/taskHistory.js';
 
@@ -131,27 +134,76 @@ check(
 );
 
 // --- Filtering by range ---------------------------------------------------
-// "7 days" counts whole local days INCLUDING today, so this morning's entries
-// are in a range the user reads as "this week".
-check(
-  'the week range starts 6 days before today, at midnight',
-  new Date(rangeStart(RANGE_WEEK, NOW)).getDate(),
-  29
-);
+// NOW is Friday 4 September 2026, so "7 μέρες" reaches back to Saturday 29
+// AUGUST — across a month boundary, which is where an off-by-one shows up.
+
+// Σήμερα — one open-ended edge, at this morning's midnight.
+check('today starts at midnight this morning',
+  new Date(rangeBounds(RANGE_TODAY, NOW).since).getDate(), 4);
+check('today has no upper edge', rangeBounds(RANGE_TODAY, NOW).until, null);
+
+// Χθες — THE ONLY RANGE WITH TWO EDGES, and the reason rangeStart became
+// rangeBounds. Every other range means "since X"; this one also means "before
+// today", or it would just be "today" with more rows.
+const yesterdayBounds = rangeBounds(RANGE_YESTERDAY, NOW);
+check('yesterday starts at midnight yesterday',
+  new Date(yesterdayBounds.since).getDate(), 3);
+check('yesterday ends at midnight this morning',
+  new Date(yesterdayBounds.until).getDate(), 4);
+
+const acrossDays = [
+  task('today_row', { deleted_at: '2026-09-04T09:00:00+03:00' }),
+  task('yesterday_row', { deleted_at: '2026-09-03T23:30:00+03:00' }),
+  task('two_days_ago', { deleted_at: '2026-09-02T09:00:00+03:00' }),
+];
+check('today shows only today',
+  selectHistory(acrossDays, { range: RANGE_TODAY, now: NOW }).map((r) => r.task.record_id),
+  ['today_row']);
+check('yesterday excludes today AND the day before',
+  selectHistory(acrossDays, { range: RANGE_YESTERDAY, now: NOW }).map((r) => r.task.record_id),
+  ['yesterday_row']);
+
+// 7 μέρες — seven WHOLE days including today, so the window opens at midnight
+// six days back rather than 168 hours ago. Counting in hours would push this
+// morning's own entries out of a range the reader calls "the last week".
+//
+// «Αυτή την εβδομάδα» (from Monday) was built instead of this, shown to the
+// owner, and removed on sight: «7 ημέρες να δείχνει, καλύτερα είναι». The rule
+// that survives is in taskHistory.js — ONE week-sized option, never both.
+check('the week range opens six days back, at midnight',
+  new Date(rangeBounds(RANGE_WEEK, NOW).since).getDate(), 29);
+check('the week range has no upper edge', rangeBounds(RANGE_WEEK, NOW).until, null);
+
+const straddling = [
+  task('six_days_ago', { deleted_at: '2026-08-29T08:00:00+03:00' }),
+  task('seven_days_ago', { deleted_at: '2026-08-28T20:00:00+03:00' }),
+];
+check('the week keeps the sixth day back and drops the seventh',
+  selectHistory(straddling, { range: RANGE_WEEK, now: NOW }).map((r) => r.task.record_id),
+  ['six_days_ago']);
+
+// Something recorded a minute ago is in "the last 7 days" — the case an
+// hours-based window silently drops on the morning after a late-night entry.
+check('the week includes this morning',
+  selectHistory([task('this_morning', { deleted_at: '2026-09-04T07:30:00+03:00' })],
+    { range: RANGE_WEEK, now: NOW }).length,
+  1);
+
 const old = [
   task('recent', { deleted_at: '2026-09-02T09:00:00+03:00' }),
   task('ancient', { deleted_at: '2026-06-01T09:00:00+03:00' }),
 ];
 check(
-  'the week range excludes the old one',
-  selectHistory(old, { range: RANGE_WEEK, now: NOW }).map((r) => r.task.record_id),
+  'the 30-day range excludes the old one',
+  selectHistory(old, { range: RANGE_MONTH, now: NOW }).map((r) => r.task.record_id),
   ['recent']
 );
 check('all keeps both', selectHistory(old, { range: RANGE_ALL, now: NOW }).length, 2);
+check('all has neither edge', rangeBounds(RANGE_ALL, NOW), { since: null, until: null });
 
-// An undated row cannot honestly answer "in the last 7 days".
+// An undated row cannot honestly answer "was this yesterday".
 const undated = [task('nodate', { is_rejected: true })];
-check('an undated row is excluded from a range', selectHistory(undated, { range: RANGE_WEEK, now: NOW }).length, 0);
+check('an undated row is excluded from a range', selectHistory(undated, { range: RANGE_MONTH, now: NOW }).length, 0);
 check('an undated row appears under all', selectHistory(undated, { range: RANGE_ALL, now: NOW }).length, 1);
 
 // --- Undated rows sort last, never above a dated one ----------------------
