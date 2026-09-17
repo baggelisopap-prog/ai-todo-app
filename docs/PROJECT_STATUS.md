@@ -11,6 +11,65 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **The microphone stopped lying, and the AI stopped being asked to guess (2026-09-17, `0775d81`).**
+  The owner recorded a task **with a YouTube video playing**. The microphone gave nothing, the
+  screen showed a normal recording the whole time, and on stop the model returned a task
+  matching **neither what he said nor the video** — most likely assembled out of the quoted
+  examples in the extraction instruction («3 bugs in the app by Friday», «στις 7»), which are
+  the only task-shaped text in the whole prompt. That reading was his, and it is the only
+  candidate material there is.
+
+  **The reason this is code and not a better prompt is the part worth keeping.** A model
+  cannot catch this: it receives a sound file, and a file that captured nothing **sounds to it
+  exactly like a file that ends** — the information "something is missing here" never reaches
+  it. And completing an unfinished utterance is the thing these models are built to do, so an
+  instruction not to is a probability, not a rule. So the line was drawn:
+
+  > **the code decides whether a recording is COMPLETE; the AI only ever decides what a
+  > complete recording MEANS.**
+
+  Two gates, in `frontend/src/utils/recordingGate.js`. Both are **proofs, not estimates** —
+  neither contains a threshold anybody chose, so neither can refuse a good recording:
+
+  | Gate | Answers | Catches |
+  |---|---|---|
+  | **Did the user end it?** | every path that stops the recorder now says why, at the moment it does it — never inferred | the 30-second cap, an incoming call, the screen locking, another app taking the microphone |
+  | **Did any sound arrive?** | `getByteTimeDomainData` centres silence on exactly 128, so digital silence is exactly **0** deviation | **his case** — stop pressed perfectly normally, recording simply empty |
+
+  **The old guard could not see this at all.** It was `blob.size < 1000` — and an encoder
+  writes frames whether or not anything was said, so **silence is the same size as speech**.
+  It stays, for the tap that never became a recording.
+
+  **A live level meter** is the third piece and arguably the most useful: a microphone that is
+  running but hearing nothing **looked exactly like a working one**, which is how a silent
+  recording got sent in the first place.
+
+  **Also fixed, as the net underneath**: when extraction found nothing the app showed a green
+  «Προστέθηκαν 0 εργασίες» and jumped to the Inbox — so "I heard nothing" and "I added your
+  tasks" looked identical, and the Inbox it landed on had nothing new in it. Now a neutral
+  «Δεν βρέθηκε κάποια εργασία σε αυτό.» and no tab change.
+
+  Baselines, as the commands printed them on 2026-09-17:
+  ```
+  npm run check  → exit 0
+                   ui-check: OK — 93 files, 50 tokens, 531 translation keys   (was 92 / 526)
+  npm run lint   → ✖ 12 problems (12 errors, 0 warnings)   — the standing baseline, restored
+                   after an eslint-disable of the agent's own added a 13th
+  vite build     → clean, ✓ built in 325ms
+  pytest tests/  → 522 passed   (backend untouched; no Python in this change)
+  ```
+  **13 tests on the rule, and half of them check that it does NOT refuse**: a one-word task
+  («ψώνια»), a quiet but real recording, the faintest possible non-zero sample. The owner
+  named that risk himself — length is not a proxy for completeness, and a safety rule that
+  eats real work stops being used.
+
+  **NOT VERIFIED BY A PERSON, and it cannot be from a keyboard.** Only the rule has tests. The
+  level metering, the interruption listeners and the meter itself need a **real microphone on
+  a real phone**. What would settle it: play a video, press record — the bar must stay still
+  and the app must say «δεν ακούστηκε τίποτα»; then say «ψώνια» normally — the bar must move
+  and a task must come out. Also unwatched: the 30-second cap message, and what an incoming
+  call does mid-recording.
+
 - **A deleted task stopped ringing, and stopped coming back (2026-09-16, `a2a83a0`).**
   The owner was reminded about a task he did not recognise — because he had **deleted** it.
   On 2026-09-04 delete stopped removing the row and started stamping `deleted_at`, so that
