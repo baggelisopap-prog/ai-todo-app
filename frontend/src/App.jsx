@@ -294,6 +294,16 @@ function App() {
   useEffect(() => () => clearTimeout(newTaskTimer.current), []);
 
   function handleTasksAdded(newTasks) {
+    // ZERO IS NOT A SUCCESS. Extraction can legitimately come back with nothing,
+    // and until 2026-09-17 that showed a green «Προστέθηκαν 0 εργασίες» and
+    // jumped to the Inbox — so "I heard nothing" and "I added your tasks" looked
+    // identical, and the Inbox you landed on had nothing new in it. This is the
+    // net underneath the recording gate (utils/recordingGate.js), which is what
+    // stops an empty recording being sent in the first place.
+    if (!newTasks?.length) {
+      setToast({ message: t('toast.added_none'), variant: 'neutral' });
+      return;
+    }
     setTasks((current) => [...newTasks, ...current]);
     const count = newTasks.length;
     setToast({

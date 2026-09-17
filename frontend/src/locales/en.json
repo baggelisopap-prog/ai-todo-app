@@ -132,6 +132,10 @@
     "label": "Voice",
     "processing": "Extracting...",
     "too_short": "Recording too short. Hold longer.",
+    "silent": "Nothing was heard — the microphone gave no sound. Check whether another app is using it.",
+    "timed_out": "The 30-second limit cut the recording off. It was not sent — please say it more briefly.",
+    "interrupted": "The recording was interrupted and was not sent. Please try again.",
+    "level": "Microphone level",
     "permission_denied": "Microphone access denied or not available.",
     "error_title": "Voice error"
   },
@@ -248,6 +252,7 @@
   "toast": {
     "added_one": "Added 1 task",
     "added_many": "Added {{count}} tasks",
+    "added_none": "No task was found in that.",
     "approved": "Approved",
     "completed": "Completed",
     "uncompleted": "Marked incomplete",
