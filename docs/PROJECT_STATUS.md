@@ -11,6 +11,49 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **History says when a task arrived and when it left, on one line (2026-09-17, `549f892`).**
+  The owner's verdict on the screen was **«τώρα είναι χάος»**, and the cause was that neither
+  date was where you could see it. The event line printed an **hour with no day** —
+  «Διαγράφηκε 14:32» — on the grounds that the day heading above carried the date. True while
+  you read top-down; useless for a row scrolled away from its heading. The creation date sat
+  on a second line underneath. Two dates, never next to each other.
+
+  Now one line: **«Μπήκε 3 Σεπ → Διαγράφηκε 14 Σεπ 14:32»** — the span the thing lived,
+  readable without the heading above it, and one row shorter.
+
+  **«Πότε» gains the near end it was missing**: Σήμερα · Χθες · 7 μέρες · 30 μέρες · Φέτος ·
+  Όλο το αρχείο. `rangeStart` became `rangeBounds` and **«Χθες» is why**: every other range
+  means "since X and up to now", but yesterday must also mean **before today**, or it is
+  «Σήμερα» with more rows in it.
+
+  **«Αυτή την εβδομάδα» was built in place of «7 μέρες», shown to him, and removed on sight**
+  — «7 ημερες να δειχνει καλυτερα ειναι». Reverted fully. **The rule the code comments keep is
+  not the reversal but what it settled**: the menu carries ONE week-sized option and never
+  two. On a Friday "the last seven days" reaches back to the previous Saturday while "this
+  week" is three days, and two controls 30px apart meaning almost-but-not-quite the same thing
+  is the confusion this change exists to remove.
+
+  A third control was designed and **parked by his call** — a switch for which date «Πότε»
+  means, the event or the creation. See BACKLOG.md, which also records the signal that should
+  un-park it.
+
+  Baselines, as the commands printed them on 2026-09-17:
+  ```
+  node scripts/task-history.test.mjs → all passed, 39 checks (11 new)
+  npm run check  → exit 0
+                   ui-check: OK — 93 files, 50 tokens, 533 translation keys
+  npm run lint   → ✖ 12 problems (12 errors, 0 warnings)   (the standing baseline)
+  vite build     → clean
+  ```
+  The tests hold the two things that look right until they are not: **«Χθες» excludes today
+  AND the day before**, and **«7 μέρες» is seven whole days INCLUDING today** rather than 168
+  hours — an hours-based window silently drops an entry made this morning.
+
+  **NOT VERIFIED BY A PERSON: nobody has opened the screen.** The event date now **repeats**
+  between the day heading and every row beneath it — deliberate, because the line has to stand
+  alone, but it is the first thing to judge on a phone. Also unwatched: whether «Σήμερα» and
+  «Χθες» are usually empty in practice, which would make them two taps that lead nowhere.
+
 - **The microphone stopped lying, and the AI stopped being asked to guess (2026-09-17, `0775d81`).**
   The owner recorded a task **with a YouTube video playing**. The microphone gave nothing, the
   screen showed a normal recording the whole time, and on stop the model returned a task
