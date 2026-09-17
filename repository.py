@@ -5,6 +5,12 @@ from typing import Optional
 from dotenv import load_dotenv
 from supabase import create_client
 from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings, RecurrenceRule, Workspace, WorkspaceMember, Category
+# The two predicates that answer "does this task still count". Imported rather
+# than re-implemented: the three queries below each used to carry their own
+# hand-written version, written before deleted_at existed, and that is exactly
+# how a deleted task kept its reminder. agent_tools imports nothing from this
+# project (stdlib only), so this direction cannot cycle.
+from agent_tools import is_open_task, is_disposed_of
 
 # Set up module-level logging
 logger = logging.getLogger(__name__)
@@ -783,7 +789,12 @@ def get_tasks_due_for_notification(
             continue
         if task.notification_sent:
             continue
-        if not (task.approval_status and not task.is_completed and not task.is_rejected):
+        # is_open_task, NOT a hand-written repeat of it. This line used to read
+        # `task.approval_status and not task.is_completed and not task.is_rejected`
+        # and therefore did not know about deleted_at, cancelled_at or
+        # missed_at — a deleted task got its advance reminder anyway (fixed
+        # 2026-09-16, reported by the owner, who did not recognise the task).
+        if not is_open_task(task):
             continue
         if not task.due_date or not task.due_time:
             continue
@@ -843,10 +854,16 @@ def get_active_hostaway_tasks(
         return []
 
     all_tasks = tasks if tasks is not None else get_tasks_for_user(user_id)
+    # is_disposed_of rather than is_open_task, deliberately: a guest message
+    # arrives from the webhook UNAPPROVED and escalating it while it sits in the
+    # Inbox is the whole point, so this query must not adopt the approval
+    # clause. It must adopt the dead-row clauses — until 2026-09-16 it checked
+    # only is_completed/is_rejected, so a DELETED guest task went on escalating,
+    # and this is the one notification with no cap on how often it re-sends.
     return [
         t for t in all_tasks
         if t.category_id == system_category.record_id
-        and not t.is_completed and not t.is_rejected
+        and not is_disposed_of(t) and not t.is_completed
     ]
 
 
@@ -895,6 +912,17 @@ def get_open_tasks_for_conversation(user_id: str, conversation_id: str) -> list[
             .eq("hostaway_conversation_id", conversation_id)
             .eq("is_completed", False)
             .eq("is_rejected", False)
+            # Dead rows excluded in the query for the same reason as
+            # get_tasks_needing_calendar_push above; the definition is
+            # agent_tools.is_disposed_of. Until 2026-09-16 a DELETED task still
+            # counted as this conversation's open task, so the next guest
+            # message was threaded onto a row no screen shows — the message did
+            # not arrive anywhere. Falling through to [] is the right answer:
+            # the caller then creates a new task, which is what the user who
+            # deleted the old one would expect.
+            .is_("deleted_at", "null")
+            .is_("cancelled_at", "null")
+            .is_("missed_at", "null")
             .order("created_at", desc=True)
             .execute()
         )
@@ -1014,10 +1042,11 @@ def get_tasks_for_date(
     `tasks` list to avoid a second table scan.
     """
     all_tasks = tasks if tasks is not None else get_tasks_for_user(user_id)
-    return [
-        t for t in all_tasks
-        if t.approval_status and not t.is_completed and not t.is_rejected and t.due_date == date_str
-    ]
+    # is_open_task, NOT a hand-written repeat of it — see the same correction in
+    # get_tasks_due_for_notification. A deleted task used to be counted in the
+    # morning summary, and in `before_first_task` mode a deleted early task also
+    # dragged the summary itself to the wrong hour (fixed 2026-09-16).
+    return [t for t in all_tasks if is_open_task(t) and t.due_date == date_str]
 
 
 def get_first_task_datetime_today(
@@ -1113,12 +1142,27 @@ def get_tasks_needing_calendar_push(user_id: str) -> list[dict]:
     settings = get_app_settings(user_id)
     sync_all = settings.calendar_sync_all_enabled
 
+    # The three dead-row columns are excluded IN THE QUERY, not by is_disposed_of:
+    # this function returns raw rows rather than TaskRecords, and keeping the
+    # filter DB-side means they are never fetched. The definition it mirrors
+    # lives in agent_tools.is_disposed_of — if a fifth such column is ever
+    # added, it is added there AND here.
+    #
+    # Without them (until 2026-09-16) a deleted task came back: stamping
+    # deleted_at is a real change, so the updated_at trigger fired, so the task
+    # read as "changed since its last calendar push". The push then PUT to the
+    # Google event delete_task had just removed, got a 404, and
+    # sync_task_to_google_calendar's explicit 404 branch CREATED A NEW EVENT —
+    # which Google then reminded the owner about.
     query = (
         supabase.table("tasks")
         .select("*")
         .eq("user_id", user_id)
         .eq("is_rejected", False)
         .eq("is_completed", False)
+        .is_("deleted_at", "null")
+        .is_("cancelled_at", "null")
+        .is_("missed_at", "null")
         .not_.is_("due_date", "null")
     )
     if not sync_all:

@@ -10,6 +10,10 @@ from pywebpush import webpush, WebPushException
 from models import Category, RecurrenceRule, SingleTask, TaskList, TaskRecord, Workspace
 from ai_engine import extract_tasks, extract_tasks_from_audio, extract_tasks_from_image
 from repository import AirtableTaskRepository
+# "Is this row a record rather than work" — the same predicate the notification
+# queries read. See its docstring in agent_tools; agent_tools imports nothing
+# from this project, so this direction cannot cycle.
+from agent_tools import is_disposed_of
 import google_calendar
 import hostaway_integration
 import hostaway_threading
@@ -167,7 +171,13 @@ def push_task_to_calendar_now(user_id: str, task: TaskRecord) -> None:
     behaviour. This may only ever be faster, never less reliable.
     """
     try:
-        if not task.due_date or task.is_completed or task.is_rejected:
+        # is_disposed_of, not a hand-written repeat: this used to read
+        # `task.is_completed or task.is_rejected` and so did not know about
+        # deleted_at, cancelled_at or missed_at. The docstring above promises
+        # this can never push something the scheduler would refuse to push, and
+        # the scheduler's queue learned those three columns on 2026-09-16 —
+        # without this line that promise would have gone stale the same day.
+        if not task.due_date or task.is_completed or is_disposed_of(task):
             return
         if not repository.get_google_calendar_connection(user_id):
             return

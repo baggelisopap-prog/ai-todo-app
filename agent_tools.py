@@ -29,22 +29,47 @@ HISTORY_MAX_REFS = 5
 PRIORITY_ORDER = {"P1": 0, "P2": 1, "P3": 2}
 
 
+def is_disposed_of(t) -> bool:
+    """SINGLE SOURCE OF TRUTH for 'this row is a record, not work'.
+
+    is_rejected is a suggestion the user turned down. missed_at is a recurrence
+    occurrence that outlived its grace and closed itself. cancelled_at is one
+    the user deliberately deleted. deleted_at is an ordinary task the user
+    deleted (2026-09-04: deletes stopped removing the row). All four are kept
+    so "was Monday's check done?" has an answer, but none is work anybody can
+    still do — not even with include_completed, which widens the window to
+    FINISHED work, not to discarded work.
+
+    Split out of is_open_task on 2026-09-16 because one caller needs these four
+    columns WITHOUT the approval clause: a guest message escalates precisely
+    while it is still unapproved, so get_active_hostaway_tasks must be able to
+    ask "is this row dead?" without also asking "has it been approved?".
+    """
+    return bool(t.is_rejected or t.missed_at or t.cancelled_at or t.deleted_at)
+
+
 def is_open_task(t, include_completed: bool = False) -> bool:
     """SINGLE SOURCE OF TRUTH for 'counts as an open task'.
     Any change to the pending-approval policy happens HERE and nowhere else."""
-    # missed_at is a recurrence occurrence that outlived its grace and closed
-    # itself. cancelled_at is one the user deliberately deleted. deleted_at is
-    # an ordinary task the user deleted (2026-09-04: deletes stopped removing
-    # the row). All three are kept as a record — "was Monday's check done?"
-    # must have an answer — but none is work anybody can still do, so none is
-    # open, not even with include_completed.
+    # CORRECTED 2026-09-16. This comment used to assert that "this function is
+    # what the agent, the day view, the escalation query and the reminders all
+    # read". IT WAS NOT TRUE OF THE LAST TWO and had never been: the three
+    # queries behind the notification scheduler each hand-filtered on
+    # approval_status / is_completed / is_rejected — the only three states that
+    # existed when they were written — so a task the user had DELETED still got
+    # its advance reminder, still counted in the daily summary, and (worst,
+    # because nothing caps that one) went on escalating as a guest message
+    # forever. The owner was reminded about a deleted task on 2026-09-16 and
+    # did not recognise it, which is how this was found.
     #
-    # deleted_at belongs HERE and nowhere else. This function is what the agent,
-    # the day view, the escalation query and the reminders all read, so adding
-    # the clause here is what keeps a deleted task from being answered about,
-    # notified about, or escalated. Anything that filters tasks by hand instead
-    # of calling this is a bug waiting for the next state to be added.
-    if t.is_rejected or t.missed_at or t.cancelled_at or t.deleted_at or not t.approval_status:
+    # It is true now. repository.get_tasks_due_for_notification and
+    # repository.get_tasks_for_date call this function;
+    # repository.get_active_hostaway_tasks calls is_disposed_of above, because
+    # it must keep escalating UNAPPROVED guest messages. The standing warning
+    # survives unchanged, having now cost something: anything that filters
+    # tasks by hand instead of calling one of these two is a bug waiting for
+    # the next state to be added.
+    if is_disposed_of(t) or not t.approval_status:
         return False
     if not include_completed and t.is_completed:
         return False

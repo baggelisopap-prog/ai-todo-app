@@ -22,6 +22,10 @@ class _FakeQuery:
         self.sink["order"] = (col, desc)
         return self
 
+    def is_(self, col, val):
+        self.sink.setdefault("is_", []).append((col, val))
+        return self
+
     def execute(self):
         return type("R", (), {"data": self.rows})()
 
@@ -63,6 +67,13 @@ def test_lookup_filters_by_user_conversation_and_open_state(monkeypatch):
     assert ("hostaway_conversation_id", "47342748") in fake.calls["eq"]
     assert ("is_completed", False) in fake.calls["eq"]
     assert ("is_rejected", False) in fake.calls["eq"]
+    # Added 2026-09-16 with the dead-row exclusion. A DELETED task used to count
+    # as this conversation's open task, so the next guest message was threaded
+    # onto a row no screen shows and never arrived anywhere. See
+    # tests/test_deleted_tasks_stay_gone.py for the whole family.
+    assert ("deleted_at", "null") in fake.calls["is_"]
+    assert ("cancelled_at", "null") in fake.calls["is_"]
+    assert ("missed_at", "null") in fake.calls["is_"]
     assert len(tasks) == 1
     assert tasks[0].hostaway_conversation_id == "47342748"
 
