@@ -11,6 +11,53 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **A deleted task stopped ringing, and stopped coming back (2026-09-16, `a2a83a0`).**
+  The owner was reminded about a task he did not recognise — because he had **deleted** it.
+  On 2026-09-04 delete stopped removing the row and started stamping `deleted_at`, so that
+  Browse's History tab has something to show and Restore has something to clear. **Every
+  screen learned about that column. The scheduler never did**, and neither did the calendar
+  push. Five queries each hand-filtered on the three states that existed when they were
+  written (`approval_status` / `is_completed` / `is_rejected`):
+
+  | Where | What it did |
+  |---|---|
+  | Advance reminder | reminded about deleted tasks — **this is the one he received**; fires once, because `notification_sent` stops it |
+  | Daily summary | counted them; and in `before_first_task` mode a deleted early task dragged **the summary itself** to the wrong hour |
+  | Hostaway escalation | re-sent for as long as the task stayed "open" — **nothing caps that one** |
+  | Calendar push queue | stamping `deleted_at` bumps `updated_at`, so the task read as "changed since its last push"; the PUT 404'd and `sync_task_to_google_calendar`'s explicit 404 branch **created a new event**, which Google then reminded him about |
+  | Conversation lookup | a deleted guest task still counted as that conversation's open task, so the **next guest message was threaded onto a row no screen shows** and arrived nowhere |
+
+  **The comment that was supposed to prevent this had been asserting it was already true.**
+  `agent_tools.is_open_task` carries the right definition and said of itself that "the
+  escalation query and the reminders all read" it. That was never true of either — it is read
+  only by the agent. It is true now, and the comment says what it used to claim, what that
+  cost, and from when. See DECISIONS.md for why one caller deliberately does **not** read all
+  of it.
+
+  **No frontend change, and that is the point**: `frontend/src/utils/taskDisplay.js:154` has
+  carried this exact four-column predicate all along, which is precisely why the task was
+  invisible on screen while still notifying. The list was right; the alarm clock was wrong.
+
+  Baselines, as the commands printed them on 2026-09-16:
+  ```
+  pytest tests/ -q   → 522 passed in 6.79s      (was 505; the new tests reproduced the bug
+                                                 first — 7 failed, 2 passed, then 5 failed,
+                                                 3 passed for the second pair)
+  npm run check      → exit 0
+                       ui-check: OK — 92 files, 50 tokens, 526 translation keys
+                       (frontend untouched; re-run to confirm nothing moved)
+  ```
+  The PostgREST filter was **read out of the library rather than assumed** —
+  `deleted_at=is.null&cancelled_at=is.null` — because two of the five fixes live inside a
+  database query, where a test double can only witness that the query *asked* for a filter.
+
+  **NOT VERIFIED BY A PERSON.** Nobody has watched any of this against live data. What would
+  settle each: delete a timed task and confirm no push arrives ~15 minutes before it was due;
+  delete a task that had a Google Calendar event and confirm the event does **not** reappear
+  within ~2 minutes (the re-creation is the one that repeats, so it is the one worth
+  watching); delete a Hostaway guest task and confirm the phone stops; then send a new message
+  on that same conversation and confirm a **new** task appears rather than nothing.
+
 - **The task row stopped sprawling, and now says which room and when no matter what (2026-09-13).**
   The row every list in the app draws. On a 360px phone it was spending **138px on chrome and
   leaving 222px for content** — 38% of the screen saying nothing, with **40px going to the ⋯
