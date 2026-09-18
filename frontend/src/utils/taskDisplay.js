@@ -153,3 +153,52 @@ export function checklistProgress(checklist) {
 export function isVisibleTask(task) {
   return !task.is_rejected && !task.missed_at && !task.cancelled_at && !task.deleted_at;
 }
+
+/**
+ * Is this task closed by somebody else and still waiting for MY OK.
+ *
+ * A completion used to be one fact for everybody: the task left every list the
+ * instant anybody ticked it. In a shared room that means a colleague can finish
+ * your work and it disappears from your day with nothing to see and nobody
+ * named — which is the complaint that started this, from the other side: the
+ * owner closed a task a colleague had created and nothing recorded that he had.
+ *
+ * WHO IS OWED THE NEWS: the creator and the assignee, minus whoever did the
+ * closing. Both, not one — I make a task, hand it to Maria, Nikos closes it,
+ * and Maria and I are owed it independently. That is also why the acknowledgement
+ * is a LIST on the row rather than a flag; see models.TaskRecord.
+ *
+ * `completed_by` being empty is the clause that protects every task already in
+ * the database. Every completion before 2026-09-17 carries null there, as does
+ * every one the Hostaway reply poller makes on its own — no human pressed
+ * anything, so there is nobody to hand it back to. If null ever read as a
+ * handover, several hundred finished tasks would land back on a list at once.
+ *
+ * A missing `myId` is the same answer for a different reason: it arrives with
+ * the members of the first shared room, so this is the moment before that lands
+ * and the safe reading is "nothing is waiting for you" — the list then behaves
+ * exactly as it did before today until the id shows up.
+ */
+export function awaitsMyAcknowledgement(task, myId) {
+  if (!task || !task.is_completed || !myId) return false;
+  if (!task.completed_by || task.completed_by === myId) return false;
+
+  const isParty = task.assigned_to === myId || task.created_by === myId;
+  if (!isParty) return false;
+
+  return !(task.completion_seen_by || []).includes(myId);
+}
+
+/**
+ * What the lists ask instead of `!task.is_completed`.
+ *
+ * Six screens hid a completed task with that one expression — Today, the
+ * Calendar, Upcoming, the Inbox, Browse and the filter provider. The rule now
+ * has a second half, so it lives here rather than being pasted a seventh time,
+ * for the same reason isVisibleTask above does: the next screen somebody writes
+ * would forget it.
+ */
+export function isClosedForMe(task, myId) {
+  if (!task || !task.is_completed) return false;
+  return !awaitsMyAcknowledgement(task, myId);
+}

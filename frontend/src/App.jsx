@@ -381,6 +381,24 @@ function App() {
     );
   }
 
+  /**
+   * Somebody pressed OK on a task a colleague had closed.
+   *
+   * The server returns the whole task with the acknowledgement on it, so this
+   * folds the object in rather than stamping a field by hand the way
+   * handleTaskDeleted does — there is no round trip to save here, and a
+   * hand-written `completion_seen_by` would be this file's own second opinion
+   * about a column the backend owns.
+   *
+   * The row leaves the live lists on the next render because they ask
+   * isClosedForMe rather than !is_completed. Nothing else has to happen.
+   */
+  function handleCompletionAcknowledged(task) {
+    setTasks((current) =>
+      current.map((existing) => (existing.record_id === task.record_id ? task : existing))
+    );
+  }
+
   function handleTaskRestored(recordId) {
     setTasks((prev) =>
       prev.map((task) =>
@@ -439,6 +457,7 @@ function App() {
     onTaskUpdate: handleUpdateTask,
     onTaskDeleted: handleTaskDeleted,
     onTaskRestored: handleTaskRestored,
+    onTaskAcknowledged: handleCompletionAcknowledged,
     onShowToast: handleShowToast,
   };
 

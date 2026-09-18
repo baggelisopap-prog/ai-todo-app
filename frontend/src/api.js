@@ -325,6 +325,26 @@ export async function restoreTask(recordId) {
 }
 
 /**
+ * POST /tasks/{record_id}/acknowledge-completion — "I have seen that somebody
+ * else closed this."
+ *
+ * A task a colleague finished stays on its creator's and its assignee's lists,
+ * struck through, until they press OK; this is that press, and the returned
+ * task carries the acknowledgement so the row can leave without a refetch.
+ *
+ * Its own endpoint rather than a field on updateTask: the only value written is
+ * the caller's own id, added by the server, and nothing in a request body can
+ * reach somebody else's entry.
+ *
+ * 404 means the task is no longer visible to this user — deleted, or a room
+ * they have left. The caller treats that as "it is gone, stop showing it"
+ * rather than as an error to retry.
+ */
+export async function acknowledgeTaskCompletion(recordId) {
+  return request(`/tasks/${recordId}/acknowledge-completion`, { method: 'POST' });
+}
+
+/**
  * POST /push/subscribe — registers this browser's push subscription with the backend.
  * Returns { status, record_id }.
  */

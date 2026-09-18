@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { formatDate, roundToNearestHalfHour } from '../utils/formatDate';
+import { formatDate, roundToNearestHalfHour, formatStamp } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
 import {
   dueTone,
   DUE_TONE_CLASSES,
   priorityLabel,
   checklistProgress,
+  awaitsMyAcknowledgement,
 } from '../utils/taskDisplay';
+import { effectiveAssignee } from '../utils/assignment';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { useSwipeRow } from '../hooks/useSwipeRow';
 import { useRecurrence } from '../hooks/useRecurrence';
@@ -80,9 +82,9 @@ const TRAY_WIDTH_PX = 140;
  * - **Tapping opens a reading view, not a form.** That is the sheet's job; this
  *   component only reports the tap.
  */
-function TaskRow({ task, variant = 'default', showCreated = false, isSelected, isNew = false, onOpen, onUpdate, onTaskDeleted, onShowToast }) {
+function TaskRow({ task, variant = 'default', showCreated = false, isSelected, isNew = false, onOpen, onUpdate, onTaskDeleted, onShowToast, onAcknowledged }) {
   const { t } = useTranslation();
-  const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast });
+  const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onAcknowledged });
   const { isPending, isCompleted, isRejected } = actions;
 
   const [isTrayOpen, setIsTrayOpen] = useState(false);
@@ -142,9 +144,21 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
   // "Μαρία Παπαδοπούλου" would push the row to wrap. The full name is on the
   // avatar's title and accessible name, where a hover or a screen reader finds
   // it — the same bargain the recurrence badge already makes.
-  const { isShared, personFor } = useMembers();
+  const { isShared, personFor, myId } = useMembers();
   const isSharedRoom = isShared(task.workspace_id);
-  const assignee = isSharedRoom ? personFor(task.workspace_id, task.assigned_to) : null;
+  // effectiveAssignee, not task.assigned_to: whoever made a task is responsible
+  // for it until they hand it on — the owner's rule, and the one the reminder
+  // loop and the agent have always used. The face was the last place still
+  // showing an untaken task as belonging to nobody. See utils/assignment.js.
+  const responsibleId = effectiveAssignee(task);
+  const assignee = isSharedRoom ? personFor(task.workspace_id, responsibleId) : null;
+
+  // A task somebody else closed, still waiting for this person's OK. The row
+  // stays struck through until they give it, which is the whole point: before
+  // 2026-09-17 a colleague finishing your work simply removed it from your day
+  // with nothing to see and nobody named.
+  const handover = awaitsMyAcknowledgement(task, myId);
+  const closedBy = handover ? personFor(task.workspace_id, task.completed_by) : null;
   // The NAME beside the face is gone with the old meta line — Avatar already
   // carries it as its title and aria-label, so a screen reader and a hover both
   // still get it, and the row gets back the width it cost.
@@ -339,10 +353,10 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
                 it was one more thing competing for the width the date needs.
                 Drawn only in a room with somebody else in it — on a solo
                 account your own initials on every row are decoration. */}
-            {isSharedRoom && task.assigned_to && (
+            {isSharedRoom && responsibleId && (
               <Avatar
                 member={assignee}
-                userId={task.assigned_to}
+                userId={responsibleId}
                 size="xs"
                 unknownLabel={t('members.former_member')}
               />
@@ -468,6 +482,44 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
               />
             </span>
           </div>
+
+          {/* THE HANDOVER STRIP. Drawn only for the person who is owed the
+              news — the creator or the assignee, never the colleague who did
+              the closing, for whom the task left every list the moment they
+              ticked it.
+
+              It sits INSIDE the row rather than being a dialog on top of the
+              app, which was the alternative and was rejected with the owner:
+              a popup that is dismissed in a hurry is gone, and what it was
+              telling you is gone with it. Here the task is simply still there,
+              struck through, until it is acknowledged — so missing it costs
+              nothing and reading it later still works.
+
+              data-no-toggle and stopPropagation so pressing OK does not also
+              open the task sheet, the same guard the controls line uses. */}
+          {handover && (
+            <div
+              data-no-toggle
+              onClick={(e) => e.stopPropagation()}
+              className="mt-1 flex items-center gap-2 rounded-md bg-[var(--bg-hover)] pl-2 pr-1 py-1"
+            >
+              <span className="flex-1 min-w-0 truncate text-[11px] leading-[1.3] text-[var(--text-secondary)]">
+                {t('handover.closed_by', {
+                  name: closedBy?.display_name || t('members.former_member'),
+                  when: formatStamp(task.completed_at),
+                })}
+              </span>
+              <button
+                type="button"
+                data-no-toggle
+                onClick={actions.acknowledge}
+                disabled={actions.isAcknowledging}
+                className="tap-40 flex-none px-2.5 py-0.5 rounded text-[11px] font-semibold text-white bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-60"
+              >
+                {t('handover.ok')}
+              </button>
+            </div>
+          )}
 
           {(actions.actionError || actions.deleteError) && (
             <p className="mt-1 text-[11px] text-[var(--danger)]">

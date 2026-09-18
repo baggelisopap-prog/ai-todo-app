@@ -144,7 +144,7 @@ function isTaskDraggable(task) {
   return !task.is_completed && isVisibleTask(task);
 }
 
-export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskCreated }) {
+export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskCreated, onTaskAcknowledged }) {
   const { t } = useTranslation();
 
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'monthly' | 'weekly'
@@ -521,6 +521,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
                   onUpdate={onTaskUpdate}
                   onTaskDeleted={handleWeeklyTaskDeleted}
                   onShowToast={onShowToast}
+                  onAcknowledged={onTaskAcknowledged}
                 />
               </div>
             )}
@@ -537,6 +538,7 @@ export function CalendarView({ tasks, expandedTaskId, onToggleExpand, onTaskUpda
             onTaskUpdate={onTaskUpdate}
             onTaskDeleted={onTaskDeleted}
             onShowToast={onShowToast}
+            onTaskAcknowledged={onTaskAcknowledged}
             onMakeTask={handleMakeTask}
             onDismissEvent={handleDismissEvent}
             onClose={() => handleSelectDate(null)}
@@ -658,7 +660,7 @@ function MonthlyGrid({
   );
 }
 
-function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onMakeTask, onDismissEvent, onClose, t }) {
+function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskAcknowledged, onMakeTask, onDismissEvent, onClose, t }) {
   useModalBehavior(onClose);
   const dayLabel = formatSelectedDayLabel(date);
   // Combined so the header count is never misleadingly "(0)" on a day that
@@ -712,6 +714,7 @@ function DayDetailModal({ date, tasks, events = [], expandedTaskId, onToggleExpa
                         onUpdate={onTaskUpdate}
                         onTaskDeleted={onTaskDeleted}
                         onShowToast={onShowToast}
+                        onAcknowledged={onTaskAcknowledged}
                       />
                     </div>
                   </div>

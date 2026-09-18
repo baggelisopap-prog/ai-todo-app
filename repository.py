@@ -256,6 +256,19 @@ class AirtableTaskRepository:
             # sees the task itself, and workspace_activity already names who
             # did what in the room.
             created_by=row.get("user_id"),
+            # The handover pair (2026-09-17). row.get for completed_by — NULL is
+            # a real value here meaning "no human closed this", which is what
+            # every task finished before the column existed carries and what
+            # keeps them all behaving exactly as they did.
+            #
+            # _get with a list default for the other one, because NULL there is
+            # NOT a real value: the screen calls .includes() on it, and a None
+            # crossing the wire as `null` would be a TypeError in the browser on
+            # every completed task in the database. Same reason `_get` exists.
+            completed_at=row.get("completed_at"),
+            completed_source=row.get("completed_source"),
+            completed_by=row.get("completed_by"),
+            completion_seen_by=_get(row, "completion_seen_by", []),
         )
 
     def save_task(self, user_id: str, task: TaskRecord) -> TaskRecord:
@@ -401,6 +414,67 @@ class AirtableTaskRepository:
             )
 
         logger.info(f"Successfully updated task in Supabase. ID: {record_id}")
+        return self._supabase_row_to_task(response.data[0])
+
+    def acknowledge_completion(self, user_id: str, record_id: str) -> TaskRecord:
+        """
+        Adds the caller to completion_seen_by — "I have seen that somebody else
+        closed this" — which is what lets the row finally leave their list.
+
+        Read-modify-write, and the read is narrowed by scope_to_visible, which
+        is the ONLY permission question this path has. Nothing else guards it
+        because nothing else needs to: the value written is the caller's own id,
+        supplied here and not reachable from any request body, into a column
+        that means nothing but "this person has read this".
+
+        The list is sent whole rather than appended to in SQL. Two people can be
+        owed the same handover (the creator and the assignee), so if they press
+        OK in the same second the later write can overwrite the earlier one and
+        one of them keeps the row. That is the benign end of this trade — the
+        task stays on one list until one more tap — and the alternative is a
+        Postgres function for a two-person business. Worth revisiting only if
+        this ever stops being a handful of people.
+
+        A visible-to-nobody match raises rather than returning quietly, for the
+        reason update_task learned on 2026-09-11: PostgREST answers zero rows
+        with 200 and an empty list, so the silent version of this is an OK
+        button that does nothing, forever, with no error anywhere.
+        """
+        existing = (
+            scope_to_visible(
+                supabase.table("tasks").select("id, completion_seen_by").eq("id", record_id),
+                user_id,
+            )
+            .limit(1)
+            .execute()
+        )
+        rows = existing.data or []
+        if not rows:
+            raise ValueError(
+                f"Task {record_id} was not acknowledged: no row matching it is "
+                f"visible to user {user_id}. It may have been deleted in the meantime."
+            )
+
+        # `or []` rather than a default: the column is NULL on every row written
+        # before it existed, and NULL is not iterable.
+        seen = list(rows[0].get("completion_seen_by") or [])
+        if user_id not in seen:
+            seen.append(user_id)
+
+        response = (
+            scope_to_visible(
+                supabase.table("tasks").update({"completion_seen_by": seen}).eq("id", record_id),
+                user_id,
+            )
+            .execute()
+        )
+        if not response.data:
+            raise ValueError(
+                f"Task {record_id} was not acknowledged: the row vanished between "
+                f"reading it and writing it back."
+            )
+
+        logger.info(f"[handover] {user_id} acknowledged the completion of task {record_id}")
         return self._supabase_row_to_task(response.data[0])
 
     def soft_delete_task(self, user_id: str, record_id: str, deleted_at: str) -> bool:

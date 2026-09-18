@@ -79,6 +79,31 @@ export function formatDate(dateStr, timeStr) {
 }
 
 /**
+ * A timestamp as "14 Σεπ 14:32" — the event's own date AND hour.
+ *
+ * Lived inside HistoryList as `stampOf` until 2026-09-17, when the handover
+ * strip on a task row needed the same sentence. Moved rather than copied: two
+ * screens printing the same instant two ways is how «Διαγράφηκε 14:32» came to
+ * mean no particular day, which is the bug this format already exists to fix.
+ *
+ * The date is repeated even where a day heading is directly above, because a
+ * row scrolled away from its heading has to be true on its own — the owner
+ * asked for it outright («να έχει και ημερομηνία δημιουργίας και ημερομηνία
+ * διαγραφής»).
+ *
+ * toLocalISODate rather than toISOString: the latter is UTC and would print the
+ * previous day for anything after 21:00 Athens time.
+ */
+export function formatStamp(at) {
+  if (!at) return '';
+  const date = new Date(at);
+  const time = date.toLocaleTimeString(uiLocale(), {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  return `${formatDate(toLocalISODate(date))} ${time}`;
+}
+
+/**
  * Rounds an ISO timestamp to the nearest half-hour for display purposes
  * (e.g. 14:12 -> 14:00, 14:18 -> 14:30). Display-only — never use this to
  * derive a value that gets written back to the backend.

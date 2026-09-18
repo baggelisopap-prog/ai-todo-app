@@ -45,3 +45,29 @@ export function filterTasksByAssignment(tasks, mode, myId) {
     (task) => task.assigned_to === myId || (!task.assigned_to && task.created_by === myId)
   );
 }
+
+/**
+ * Who the screen should name as responsible for a task.
+ *
+ * The owner's rule, in his own words on 2026-09-17: whoever makes a task is the
+ * one it is assigned to, unless they send it to somebody else.
+ *
+ * That was ALREADY TRUE of everything in the system that acts on it — the
+ * filter above, and repository.get_owned_or_assigned_tasks behind it, both
+ * count a task you made and nobody took as yours, which is why the reminders,
+ * the daily summary and the agent's «τι έχω σήμερα» have always treated the
+ * creator as the person on the hook. The one place it was not true was the
+ * picture: an unassigned task drew no face, so a room full of untaken work
+ * looked like it belonged to nobody.
+ *
+ * SO THIS IS A DISPLAY RULE AND NOTHING ELSE. It deliberately does not write
+ * `assigned_to`. Actually putting the creator in that column would have to pass
+ * sharing.validate_assignment, which requires the person to be a member of the
+ * task's workspace and refuses outright for a task in no workspace at all —
+ * every personal task in the app. A migration and a new failure mode, to say on
+ * screen something the database can already work out.
+ */
+export function effectiveAssignee(task) {
+  if (!task) return null;
+  return task.assigned_to || task.created_by || null;
+}

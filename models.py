@@ -181,6 +181,54 @@ class TaskRecord(SingleTask):
     # for the same reason it drops created_at.
     created_by: Optional[str] = None
 
+    # WHEN IT WAS CLOSED. The column has existed since 2026-08-13; this model
+    # field was added on 2026-09-17, and its absence was a live bug rather than
+    # a deliberate omission. utils/taskHistory.js has read `task.completed_at`
+    # since 2026-09-04 both to place a finished task on the History timeline and
+    # to decide whether that date is exact — and response_model=TaskRecord was
+    # quietly stripping it, so every completed task fell to the fallback branch
+    # and was dated by its CREATION time under the flag that means "completed
+    # before this column existed". Nothing raised; the dates were merely wrong.
+    #
+    completed_at: Optional[str] = None
+
+    # WHAT KIND OF THING CLOSED IT — "ui" / "agent" / "hostaway_reply". Same
+    # column since 2026-08-13, same omission, same screen: HistoryList renders
+    # «Ολοκληρώθηκε 14 Σεπ 14:32 · από το AI» by looking this up, and the lookup
+    # has been undefined on every row since it was written, so the suffix has
+    # never appeared once.
+    #
+    # It is NOT made redundant by completed_by below. This says what channel the
+    # write came through; that says which person. A task closed by the Hostaway
+    # poller has a source and no person, which is exactly the distinction the
+    # forensic question needed.
+    completed_source: Optional[str] = None
+
+    # Handover (2026-09-17). WHO CLOSED IT, as distinct from completed_source,
+    # which says what KIND of thing did — ui / agent / hostaway_reply. The
+    # source was enough while a task had one person; in a shared room the
+    # question people ask is "who closed MY task", and nothing could answer it.
+    #
+    # NULL means no human pressed anything: the Hostaway reply poller closes a
+    # task through its own repository call, and a missed occurrence closes
+    # itself. It is also what every task completed before this column existed
+    # carries — which is precisely why NULL has to mean "hand this back to
+    # nobody", or several hundred finished tasks would reappear on a list.
+    completed_by: Optional[str] = None
+
+    # WHO HAS SINCE PRESSED OK on that completion. A task closed by somebody
+    # else stays on the other party's list, struck through, until they
+    # acknowledge it — the parties being the creator and the assignee, minus
+    # whoever did the closing.
+    #
+    # A list rather than a boolean because there can be two of them: I create a
+    # task, hand it to Maria, Nikos closes it, and both Maria and I are owed the
+    # news independently. One flag would let whoever read it first clear it for
+    # the other — the same shape as tasks.notification_sent, whose single
+    # boolean is documented in repository.get_all_tasks as one of the three ways
+    # reminders broke when sharing arrived.
+    completion_seen_by: list[str] = Field(default_factory=list)
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str

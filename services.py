@@ -593,8 +593,12 @@ class TaskService:
         the first statement on purpose: below it sit a calendar call and a
         completion stamp, and neither should run for somebody who may not touch
         this task.
+
+        ITS ANSWER IS KEPT rather than thrown away. The gate already read the
+        row's workspace to decide, and the room's log needs exactly that —
+        discarding it meant a second round trip for a column we had in hand.
         """
-        access.require_write(user_id, record_id)
+        gate_row = access.require_write(user_id, record_id)
 
         # Handing work to somebody. `in updates` rather than a truth test: an
         # explicit null is how a client puts work back on the pile, and it must
@@ -638,11 +642,37 @@ class TaskService:
                 {
                     "completed_at": datetime.now(ZoneInfo("Europe/Athens")).isoformat(),
                     "completed_source": completed_source,
+                    # WHO, as distinct from the channel above. The source column
+                    # answered "what kind of thing closed this" and was enough
+                    # while a task had one person; in a shared room the question
+                    # people actually ask is "who closed MY task", and until
+                    # 2026-09-17 nothing anywhere could answer it.
+                    #
+                    # Set on the agent path too: telling the agent to close a
+                    # task IS closing it, and the person is the same person.
+                    # Only the machine paths leave this NULL — the Hostaway
+                    # reply poller writes its completion straight through the
+                    # repository, and a missed occurrence closes itself. NULL
+                    # therefore reads as "nobody to hand this back to", which is
+                    # what keeps every task completed before today behaving
+                    # exactly as it did.
+                    "completed_by": user_id,
+                    # Nobody has accepted a completion at the moment it happens.
+                    # Cleared here as well as on reopen because this column is
+                    # written from two places, and a completion that inherited
+                    # an old acknowledgement would be a notice that silently
+                    # reaches nobody.
+                    "completion_seen_by": [],
                 }
                 if updates["is_completed"]
                 # Re-opening clears it. A task that is open again must not keep
-                # claiming it was closed, and by whom.
-                else {"completed_at": None, "completed_source": None}
+                # claiming it was closed, by whom, or that anybody accepted it.
+                else {
+                    "completed_at": None,
+                    "completed_source": None,
+                    "completed_by": None,
+                    "completion_seen_by": [],
+                }
             )
             updates = {**updates, **stamp}
 
@@ -660,6 +690,28 @@ class TaskService:
                 task_id=record_id,
                 task_name=updated_task.task_name,
                 details={"assigned_to": updates["assigned_to"]},
+            )
+
+        # Closing and reopening are events in the room, and until 2026-09-17
+        # they were the ones the log did not have. That is not a cosmetic gap:
+        # the 2026-09-11 decision let a member edit anything in a shared
+        # workspace SPECIFICALLY because the log would say who did what, and
+        # the one act that ends a task went unrecorded — which is how the owner
+        # closed a colleague's task and no screen in the app could say so.
+        #
+        # Reopening gets its own verb rather than being the absence of one.
+        # Without it the log would show the same task completed twice and never
+        # say it came back.
+        #
+        # Workspace off the gate's row, which was read before the write; asking
+        # the updated task would be the same answer through a second object.
+        if "is_completed" in updates and gate_row.get("workspace_id"):
+            repository.log_workspace_activity(
+                workspace_id=gate_row["workspace_id"],
+                actor_user_id=user_id,
+                action="task_completed" if updates["is_completed"] else "task_reopened",
+                task_id=record_id,
+                task_name=updated_task.task_name,
             )
 
         if "is_completed" in updates:
@@ -684,6 +736,27 @@ class TaskService:
             push_task_to_calendar_now(user_id, updated_task)
 
         return updated_task
+
+    def acknowledge_completion(self, user_id: str, record_id: str) -> TaskRecord:
+        """
+        "I have seen that somebody else closed this." Adds the caller to the
+        task's completion_seen_by, which is what finally lets the row leave
+        their list.
+
+        NO access.require_write, and that is deliberate rather than forgotten.
+        Every other write here changes the task for everybody, so it has to ask
+        who may do that. This one writes a single entry — the caller's own id,
+        which the repository supplies itself and no request body can influence
+        — into a column that means nothing except "this person has read this".
+        The only question worth asking is whether they can SEE the task, and
+        the repository's own scope_to_visible asks exactly that.
+
+        Running it through the write gate would have been the stricter-looking
+        choice and the wrong one: it would let a member dismiss a notice by
+        acknowledging on somebody ELSE's behalf only if the gate were widened,
+        and refuse an acknowledgement on an unfiled task shared with nobody.
+        """
+        return self.repository.acknowledge_completion(user_id, record_id)
 
     def delete_task(self, user_id: str, record_id: str) -> str:
         """

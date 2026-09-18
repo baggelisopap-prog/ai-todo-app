@@ -591,7 +591,13 @@
     "workspace_archived": "{{actor}}: αρχειοθέτησε τον χώρο",
     "workspace_restored": "{{actor}}: επανέφερε τον χώρο",
     "task_assigned": "{{actor}}: ανέθεσε «{{task}}» στον/στην {{member}}",
-    "task_unassigned": "{{actor}}: έβγαλε τον υπεύθυνο από «{{task}}»"
+    "task_unassigned": "{{actor}}: έβγαλε τον υπεύθυνο από «{{task}}»",
+    "task_completed": "{{actor}}: ολοκλήρωσε «{{task}}»",
+    "task_reopened": "{{actor}}: ξανάνοιξε «{{task}}»"
+  },
+  "handover": {
+    "closed_by": "Ο/Η {{name}} το ολοκλήρωσε · {{when}}",
+    "ok": "ΟΚ"
   },
   "color": {
     "purple": "Μοβ",

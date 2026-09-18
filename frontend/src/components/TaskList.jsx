@@ -8,7 +8,7 @@ import SwipeHint from './SwipeHint';
 // nulls, where no check could see it.
 import { sortTasks, sortsByCreation } from '../utils/sortTasks';
 
-function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskId, newTaskIds = [], onToggleExpand, onUpdateTask, onTaskDeleted, onShowToast }) {
+function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskId, newTaskIds = [], onToggleExpand, onUpdateTask, onTaskDeleted, onShowToast, onTaskAcknowledged }) {
   const { t } = useTranslation();
   // One hint for the whole app, not one per list — several TaskLists are on
   // screen at once in Today, and three identical hints stacked down the page
@@ -42,6 +42,7 @@ function TaskList({ tasks, sortBy = 'newest', variant = 'default', expandedTaskI
             onUpdate={onUpdateTask}
             onTaskDeleted={onTaskDeleted}
             onShowToast={onShowToast}
+            onAcknowledged={onTaskAcknowledged}
           />
         </li>
       ))}

@@ -4,7 +4,7 @@ import { TaskFilterContext } from '../hooks/useTaskFilters';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useMembers } from '../hooks/useMembers';
 import { UNFILED } from '../utils/workspaces';
-import { isVisibleTask } from '../utils/taskDisplay';
+import { isVisibleTask, isClosedForMe } from '../utils/taskDisplay';
 import {
   EMPTY_STORED,
   resolveFilters,
@@ -106,9 +106,13 @@ export function TaskFilterProvider({ tasks, children }) {
   // deleted tasks are excluded because a number promising seven things to do
   // and delivering two finished ones is worse than no number.
   const counts = useMemo(() => {
-    const live = (tasks || []).filter((task) => isVisibleTask(task) && !task.is_completed);
+    // isClosedForMe rather than !is_completed, and it has to match Browse's
+    // liveTasks exactly — the number beside a category and the list it opens
+    // are the same claim made twice, and this file exists because they had
+    // already drifted apart once.
+    const live = (tasks || []).filter((task) => isVisibleTask(task) && !isClosedForMe(task, myId));
     return countByCategory(live, categories);
-  }, [tasks, categories]);
+  }, [tasks, categories, myId]);
 
   const value = useMemo(() => ({
     filters,

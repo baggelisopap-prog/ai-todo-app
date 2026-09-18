@@ -9,7 +9,8 @@ import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEve
 import { openEventInGoogle } from '../utils/openEventInGoogle';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
-import { isVisibleTask } from '../utils/taskDisplay';
+import { isVisibleTask, isClosedForMe } from '../utils/taskDisplay';
+import { useMembers } from '../hooks/useMembers';
 
 /**
  * The three piles this screen shows, from one list of tasks.
@@ -19,9 +20,13 @@ import { isVisibleTask } from '../utils/taskDisplay';
  * is the filter hiding". Without the second number an empty day says "Τίποτα
  * για σήμερα 🎉" while the work sits behind a forgotten P1.
  */
-function splitByDay(list, today) {
+function splitByDay(list, today, myId) {
+  // isClosedForMe rather than !is_completed: a task a colleague closed stays on
+  // this screen, struck through, until its creator or its assignee presses OK.
+  // Every other completion — mine, and every one made before 2026-09-17 —
+  // answers exactly as !is_completed did.
   const open = list.filter(
-    (task) => task.approval_status && !task.is_completed && isVisibleTask(task)
+    (task) => task.approval_status && !isClosedForMe(task, myId) && isVisibleTask(task)
   );
   return {
     today: open.filter((task) => task.due_date === today),
@@ -34,12 +39,15 @@ function splitByDay(list, today) {
 
 const countAll = (piles) => piles.today.length + piles.overdue.length + piles.pending.length;
 
-function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
+function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskAcknowledged }) {
   const { t } = useTranslation();
   // One shared copy for every screen, so choosing κήπος here is still κήπος in
   // the Calendar. It used to be three useStates per screen, which is why it
   // was not.
   const { apply, activeCount, clearAll } = useTaskFilters();
+  // Needed for the handover rule below: who "I" am decides whether a task a
+  // colleague closed is still waiting for my OK.
+  const { myId } = useMembers();
   const [overdueExpanded, setOverdueExpanded] = useState(true);
   const [todayEvents, setTodayEvents] = useState([]);
   const { settings } = useAppSettings();
@@ -90,7 +98,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   // The category, priority and assignment filters in one call — the chain used
   // to be spelled out here, and it had already drifted from Browse's copy of
   // it over what a task with no priority counts as. See utils/taskFilters.js.
-  const piles = splitByDay(apply(tasks), today);
+  const piles = splitByDay(apply(tasks), today, myId);
   const todayTasks = piles.today;
   const overdueTasks = piles.overdue;
   const pendingTodayTasks = piles.pending;
@@ -98,7 +106,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const isEmpty = countAll(piles) === 0;
   // Only asked when the screen is empty AND something is filtered, so the cost
   // is a second pass over the list in the one case that needs an explanation.
-  const hiddenByFilters = isEmpty && activeCount > 0 ? countAll(splitByDay(tasks, today)) : 0;
+  const hiddenByFilters = isEmpty && activeCount > 0 ? countAll(splitByDay(tasks, today, myId)) : 0;
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6">
@@ -175,6 +183,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
                 expandedTaskId={expandedTaskId}
                 onToggleExpand={onToggleExpand}
                 onUpdateTask={onTaskUpdate}
+                onTaskAcknowledged={onTaskAcknowledged}
                 onTaskDeleted={onTaskDeleted}
                 onShowToast={onShowToast}
               />
@@ -193,6 +202,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
                 expandedTaskId={expandedTaskId}
                 onToggleExpand={onToggleExpand}
                 onUpdateTask={onTaskUpdate}
+                onTaskAcknowledged={onTaskAcknowledged}
                 onTaskDeleted={onTaskDeleted}
                 onShowToast={onShowToast}
               />
@@ -224,6 +234,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
                   expandedTaskId={expandedTaskId}
                   onToggleExpand={onToggleExpand}
                   onUpdateTask={onTaskUpdate}
+                  onTaskAcknowledged={onTaskAcknowledged}
                   onTaskDeleted={onTaskDeleted}
                   onShowToast={onShowToast}
                 />

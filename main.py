@@ -821,6 +821,34 @@ def restore_task(record_id: str, user_id: str = Depends(get_current_user_id)):
             detail=f"Failed to restore task: {str(e)}"
         )
 
+@app.post("/tasks/{record_id}/acknowledge-completion", response_model=TaskRecord, status_code=status.HTTP_200_OK)
+def acknowledge_task_completion(record_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    "I have seen that somebody else closed this." The OK on a task that a
+    colleague finished, which is what finally lets it leave this person's list.
+
+    Its own door rather than a field on PATCH /tasks/{id}, for the same reason
+    restore has one: through the generic edit path any caller could clear
+    somebody ELSE's entry as a side effect of renaming a task. Here the only
+    value written is the caller's own id, and the request body cannot reach it.
+
+    404 rather than 403 for a task the caller cannot see. The write gate's
+    refusals are a 403 because they mean "this exists and is not yours to
+    change"; this one means "there is no such task for you", which is a
+    different fact. It also matters mechanically — the phone retries a 500,
+    and this button would then retry forever against a task that is gone.
+    """
+    try:
+        return service.acknowledge_completion(user_id, record_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to acknowledge completion of task {record_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to acknowledge completion: {str(e)}"
+        )
+
 @app.post("/tasks/{record_id}/agent-edit", response_model=TaskAgentEditResponse)
 def agent_edit_task(record_id: str, request: TaskAgentEditRequest, user_id: str = Depends(get_current_user_id)):
     """

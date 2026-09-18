@@ -3,7 +3,8 @@ import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import { useTaskFilters } from '../hooks/useTaskFilters';
 import { toLocalISODate, weekdayShortUpper } from '../utils/formatDate';
-import { isVisibleTask } from '../utils/taskDisplay';
+import { isVisibleTask, isClosedForMe } from '../utils/taskDisplay';
+import { useMembers } from '../hooks/useMembers';
 
 /**
  * The next seven days as day-headed sections, plus everything with no date.
@@ -31,9 +32,9 @@ function getSectionLabel(t, daysFromNow, date) {
   return `${weekday} ${day}`;
 }
 
-function computeSections(tasks, t) {
+function computeSections(tasks, t, myId) {
   const baseFilter = (task) =>
-    task.approval_status && !task.is_completed && isVisibleTask(task);
+    task.approval_status && !isClosedForMe(task, myId) && isVisibleTask(task);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -68,18 +69,20 @@ function computeSections(tasks, t) {
   return { daySections, noDateSection };
 }
 
-function UpcomingList({ tasks, unfilteredTasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast }) {
+function UpcomingList({ tasks, unfilteredTasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskAcknowledged }) {
   const { t } = useTranslation();
   const { activeCount, clearAll } = useTaskFilters();
+  // Who "I" am — a task a colleague closed stays on this list until I press OK.
+  const { myId } = useMembers();
 
-  const { daySections, noDateSection } = computeSections(tasks, t);
+  const { daySections, noDateSection } = computeSections(tasks, t, myId);
 
   const shown = [...daySections, noDateSection].reduce((n, section) => n + section.tasks.length, 0);
   // Only counted in the one case that needs explaining: nothing on screen and
   // something switched on.
   const hiddenByFilters = shown === 0 && activeCount > 0 && unfilteredTasks
     ? (() => {
-        const all = computeSections(unfilteredTasks, t);
+        const all = computeSections(unfilteredTasks, t, myId);
         return [...all.daySections, all.noDateSection].reduce((n, section) => n + section.tasks.length, 0);
       })()
     : 0;
@@ -125,6 +128,7 @@ function UpcomingList({ tasks, unfilteredTasks, expandedTaskId, onToggleExpand, 
               expandedTaskId={expandedTaskId}
               onToggleExpand={onToggleExpand}
               onUpdateTask={onTaskUpdate}
+              onTaskAcknowledged={onTaskAcknowledged}
               onTaskDeleted={onTaskDeleted}
               onShowToast={onShowToast}
             />

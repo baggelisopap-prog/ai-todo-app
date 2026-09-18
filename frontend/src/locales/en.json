@@ -591,7 +591,13 @@
     "workspace_archived": "{{actor}}: archived the workspace",
     "workspace_restored": "{{actor}}: restored the workspace",
     "task_assigned": "{{actor}}: assigned «{{task}}» to {{member}}",
-    "task_unassigned": "{{actor}}: put «{{task}}» back on the pile"
+    "task_unassigned": "{{actor}}: put «{{task}}» back on the pile",
+    "task_completed": "{{actor}}: completed «{{task}}»",
+    "task_reopened": "{{actor}}: reopened «{{task}}»"
+  },
+  "handover": {
+    "closed_by": "{{name}} completed it · {{when}}",
+    "ok": "OK"
   },
   "color": {
     "purple": "Purple",

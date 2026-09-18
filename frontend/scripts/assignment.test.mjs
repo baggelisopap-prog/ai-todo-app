@@ -13,6 +13,7 @@
  */
 import {
   filterTasksByAssignment,
+  effectiveAssignee,
   ASSIGNMENT_ALL,
   ASSIGNMENT_MINE,
   ASSIGNMENT_UNASSIGNED,
@@ -77,6 +78,28 @@ check(
 );
 check('an empty list survives', filterTasksByAssignment([], ASSIGNMENT_MINE, ME), []);
 check('a missing list survives', filterTasksByAssignment(undefined, ASSIGNMENT_MINE, ME), []);
+
+// --- Who the screen names as responsible ----------------------------------
+// The owner's rule, in his words: "whoever makes a task is the one it is
+// assigned to, unless they send it to somebody else". That was already true of
+// every part of the system that acts — filterTasksByAssignment above, and
+// repository.get_owned_or_assigned_tasks behind it, both count a task you made
+// and nobody took as yours. The only place it was NOT true was the picture: an
+// unassigned task drew no face at all, so a room full of everybody's untaken
+// work looked ownerless.
+//
+// A display rule and nothing more. It deliberately does NOT write assigned_to,
+// which would need the creator to be a member of the task's workspace and is
+// refused outright for a task in no workspace at all.
+check('an assigned task names its assignee', effectiveAssignee(tasks[0]), ME);
+check('an untaken task names whoever made it', effectiveAssignee(tasks[1]), ME);
+check(
+  'a handover names the person it went to, not the person it came from',
+  effectiveAssignee({ assigned_to: HER, created_by: ME }),
+  HER
+);
+check('a task with neither names nobody', effectiveAssignee({}), null);
+check('a missing task names nobody', effectiveAssignee(undefined), null);
 
 console.log(failures === 0 ? '\nall passed' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

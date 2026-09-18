@@ -3,7 +3,7 @@ import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import { isVisibleTask } from '../utils/taskDisplay';
 
-function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, newTaskIds }) {
+function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, newTaskIds, onTaskAcknowledged }) {
   const { t } = useTranslation();
 
   const inboxTasks = tasks.filter((task) =>
@@ -33,6 +33,7 @@ function InboxView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
           newTaskIds={newTaskIds}
           onToggleExpand={onToggleExpand}
           onUpdateTask={onTaskUpdate}
+          onTaskAcknowledged={onTaskAcknowledged}
           onTaskDeleted={onTaskDeleted}
           onShowToast={onShowToast}
         />

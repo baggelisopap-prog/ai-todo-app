@@ -91,6 +91,16 @@ function ActivityPanel({ workspace, members }) {
         return details.assigned_to
           ? t('activity.task_assigned', { actor, task, member: nameOf(details.assigned_to) })
           : t('activity.task_unassigned', { actor, task });
+      // The two verbs the log was missing until 2026-09-17, and their absence
+      // was not cosmetic: a member may edit anything in a shared room BECAUSE
+      // this log says who did what, and the one act that ends a task was going
+      // unrecorded. Reopening is its own verb rather than the absence of one,
+      // or the log would show the same task completed twice and never say it
+      // came back.
+      case 'task_completed':
+        return t('activity.task_completed', { actor, task });
+      case 'task_reopened':
+        return t('activity.task_reopened', { actor, task });
       default:
         // The vocabulary is meant to grow — comments are the next project — and
         // the column has no CHECK constraint for that reason. An unknown verb

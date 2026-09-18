@@ -6,7 +6,8 @@ import HistoryList from './HistoryList';
 import CustomSelect from './CustomSelect';
 import FilterBar from './FilterBar';
 import { searchTasks } from '../utils/searchTasks';
-import { isVisibleTask } from '../utils/taskDisplay';
+import { isVisibleTask, isClosedForMe } from '../utils/taskDisplay';
+import { useMembers } from '../hooks/useMembers';
 import { useTaskFilters } from '../hooks/useTaskFilters';
 import {
   selectHistory,
@@ -51,6 +52,7 @@ function BrowseView({
   onTaskDeleted,
   onTaskRestored,
   onShowToast,
+  onTaskAcknowledged,
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState('active');
@@ -66,13 +68,18 @@ function BrowseView({
   const [historyRange, setHistoryRange] = useState(RANGE_MONTH);
 
   const { apply, activeCount, clearAll } = useTaskFilters();
+  // Who "I" am, for the handover rule in liveTasks below.
+  const { myId } = useMembers();
 
   // Everything still live: what the Ενεργά tab is about. Completed tasks left
   // this list on 2026-09-04 — they are history now, and the "Εμφάνιση
   // ολοκληρωμένων" toggle that used to reveal them here went with them.
+  // isClosedForMe rather than !is_completed since 2026-09-17: a task a
+  // colleague closed is not finished business for its creator or its assignee
+  // until they have seen it, so it stays here, struck through, until they do.
   const liveTasks = useMemo(
-    () => tasks.filter((task) => isVisibleTask(task) && !task.is_completed),
-    [tasks]
+    () => tasks.filter((task) => isVisibleTask(task) && !isClosedForMe(task, myId)),
+    [tasks, myId]
   );
 
   // The counts beside each category are the provider's now, computed the way
@@ -263,6 +270,7 @@ function BrowseView({
             expandedTaskId={expandedTaskId}
             onToggleExpand={onToggleExpand}
             onUpdateTask={onTaskUpdate}
+            onTaskAcknowledged={onTaskAcknowledged}
             onTaskDeleted={onTaskDeleted}
             onShowToast={onShowToast}
           />

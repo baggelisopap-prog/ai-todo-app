@@ -328,6 +328,12 @@ TASK_COLUMNS = {
     # this code is deployed or every insert is rejected wholesale (PGRST204),
     # which is the exact failure this guard exists to catch.
     "assigned_to",
+    # Handover (2026-09-17). Real columns, added by
+    # docs/migrations/2026-09-17-completion-handover.sql. Listed here rather
+    # than popped because a new task legitimately carries both — nobody closed
+    # it and nobody has acknowledged that — and because being listed here is
+    # what makes this guard refuse to pass until the migration exists.
+    "completed_at", "completed_source", "completed_by", "completion_seen_by",
 }
 
 

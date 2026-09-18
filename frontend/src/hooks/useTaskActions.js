@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { deleteTask } from '../api';
+import { deleteTask, acknowledgeTaskCompletion } from '../api';
 
 const ACTION_TOAST_KEYS = {
   approve: 'toast.approved',
@@ -21,12 +21,13 @@ const ACTION_TOAST_KEYS = {
  * the inline agent. Those belong to the sheet alone, and folding them in here
  * would just rebuild the same god-component behind a hook.
  */
-export function useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast }) {
+export function useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onAcknowledged }) {
   const { t } = useTranslation();
 
   const [pendingAction, setPendingAction] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [optimisticCompleted, setOptimisticCompleted] = useState(null);
+  const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
@@ -123,6 +124,32 @@ export function useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast }) {
     }
   }
 
+  /**
+   * "I have seen that somebody else closed this." The OK on a handover, which
+   * is what lets the task finally leave this person's list.
+   *
+   * NOT optimistic, unlike toggleComplete above. Ticking a task is an act the
+   * user is performing and the row should follow their thumb; this is an
+   * acknowledgement of somebody ELSE's act, and if the write fails the honest
+   * thing is for the strip to still be there. A handover that disappears from
+   * the screen without reaching the database is the failure this whole feature
+   * exists to prevent, one level up.
+   *
+   * Its own endpoint rather than a field on the PATCH: see api.js.
+   */
+  async function acknowledge() {
+    setIsAcknowledging(true);
+    setActionError(null);
+    try {
+      const updated = await acknowledgeTaskCompletion(task.record_id);
+      onAcknowledged?.(updated);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setIsAcknowledging(false);
+    }
+  }
+
   async function setNotify(enabled) {
     try {
       await onUpdate(task.record_id, { notify_enabled: enabled });
@@ -148,7 +175,9 @@ export function useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast }) {
     actionError,
     isDeleting,
     deleteError,
+    isAcknowledging,
     toggleComplete,
+    acknowledge,
     remove,
     setNotify,
     setCalendarSync,

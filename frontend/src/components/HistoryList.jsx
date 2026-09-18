@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { restoreTask } from '../api';
-import { uiLocale, toLocalISODate, formatDate } from '../utils/formatDate';
+import { uiLocale, toLocalISODate, formatDate, formatStamp } from '../utils/formatDate';
 import {
   groupHistoryByDay,
   KIND_COMPLETED,
@@ -36,30 +36,6 @@ const SOURCE_KEYS = {
   hostaway_reply: 'browse.source_hostaway_reply',
 };
 
-function timeOfDay(at) {
-  if (at === null) return '';
-  return new Date(at).toLocaleTimeString(uiLocale(), { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-/**
- * "14 Σεπ 14:32" — the event's own date AND hour.
- *
- * It used to be the hour alone, on the grounds that the day heading above
- * carried the date. True while you are reading top-down, and useless the
- * moment you are not: a row scrolled away from its heading said «Διαγράφηκε
- * 14:32» about no particular day. The owner asked for the date outright («να
- * έχει και ημερομηνία δημιουργίας και ημερομηνία διαγραφής»). Repeating the
- * heading is the price, and it is worth it — the line has to be true on its
- * own.
- *
- * toLocalISODate rather than toISOString: the latter is UTC and would print
- * the previous day for anything after 21:00 Athens time.
- */
-function stampOf(at) {
-  if (at === null) return '';
-  const date = new Date(at);
-  return `${formatDate(toLocalISODate(date))} ${timeOfDay(at)}`;
-}
 
 /**
  * "Σήμερα" / "Χθες" / "1 Σεπ 2026", or the undated heading.
@@ -105,14 +81,14 @@ function eventLine({ kind, at, exact, task }, t) {
   }
 
   if (kind === KIND_COMPLETED) {
-    const line = t('browse.event_completed', { when: stampOf(at) });
+    const line = t('browse.event_completed', { when: formatStamp(at) });
     // completed_source is why this column exists: a task once closed itself six
     // seconds after being created and nothing could say what had done it.
     const sourceKey = SOURCE_KEYS[task.completed_source];
     return sourceKey ? `${line} · ${t(sourceKey)}` : line;
   }
 
-  return t('browse.event_deleted', { when: stampOf(at) });
+  return t('browse.event_deleted', { when: formatStamp(at) });
 }
 
 /**
