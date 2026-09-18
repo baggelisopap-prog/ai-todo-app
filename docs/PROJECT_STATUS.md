@@ -11,6 +11,49 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **A completion by somebody else is a handover, not a finished fact (2026-09-17, migration
+  applied and deployed 2026-09-18). NOBODY HAS LOOKED AT IT YET.**
+  The owner closed a task a colleague had created in their shared workspace and reported it as
+  a bug. It was not one — `access.can_write` has allowed exactly that since 2026-09-11, by his
+  own decision. What WAS broken is the reason that decision was safe: a member may edit
+  anything in a room **because `workspace_activity` says who did what**, and closing a task —
+  the one act that ends it — was recorded nowhere at all. Not in the log, and not on the row,
+  which carries `completed_at` and `completed_source` but never a person.
+
+  Offered the lock he had originally wanted («μέλος αλλάζει μόνο ό,τι του έχει ανατεθεί» — one
+  `if`, no migration, the tightening `access.py` was written to accept), he chose something
+  better instead: **the task stays on the other party's list, struck through, naming who closed
+  it, until they press OK.** Two columns carry it — `completed_by` (who) and
+  `completion_seen_by` (who has acknowledged, an ARRAY because creator and assignee can both be
+  owed the same news, and a single flag is precisely how `notification_sent` broke reminders
+  when sharing arrived). Closing and reopening now also reach the activity log.
+
+  **NULL in `completed_by` is load-bearing**: it means no human pressed anything — the Hostaway
+  poller, a missed occurrence, **and every task completed before today**. There is no backfill,
+  which is what stops several hundred finished tasks reappearing on a list at deploy.
+
+  **Two pre-existing bugs fixed on the way, neither asked for.** `TaskRecord` never named
+  `completed_at`, so `response_model` stripped it and every completed task in the History
+  screen has been dated by its CREATION time since 2026-09-04; `completed_source` was missing
+  the same way, so HistoryList's «· από το AI» suffix has never once rendered. **Both dates and
+  labels in History will visibly change the moment this deploys.**
+
+  Evidence, as printed: `pytest tests/ -q` → **545 passed** (was 522), exit 0; `npm run check`
+  → exit 0, 334 PASS, 0 FAIL; `npm run build` → exit 0, 338 modules — run because `npm run
+  check` compiles no components and would pass with a broken `.jsx`. `npx eslint .` → 12
+  errors, **all pre-existing and none in code written today**.
+
+  **The migration is applied** (2026-09-18, by the owner, before the deploy — reversed, it
+  rejects every task write in the app with PGRST204). Read back from the live database:
+  **total 459, completed 376, closed_by_a_person 0, acknowledged 0, completion_seen_by NULL
+  0** — all three zeros required, and they mean no existing row was touched, so all 376
+  already-finished tasks stay gone from every list. **219 of those 376 carry a real
+  `completed_at`** and are the rows whose History date becomes correct.
+
+  **NOT VERIFIED: nobody has opened the app.** The counts above are the only measurement that
+  exists; not one part of the feature has been watched working, in any account. Reasoning in
+  DECISIONS.md; the full list of what nobody has seen is in CURRENT_TASK.md.
+
 - **History says when a task arrived and when it left, on one line (2026-09-17, `549f892`).**
   The owner's verdict on the screen was **«τώρα είναι χάος»**, and the cause was that neither
   date was where you could see it. The event line printed an **hour with no day** —
