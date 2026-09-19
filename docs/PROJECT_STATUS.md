@@ -11,6 +11,22 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **The task row's date leads its bottom line, with a calendar glyph (2026-09-19, `a9aa78d`). NOT seen working by anyone — see CURRENT_TASK.md.**
+  The owner reported the gap the 09-14 alignment fix had left behind — «η ημερομηνια ειναι με
+  μεγαλο κενο» — and named the fix himself: date and time first, everything else after. The
+  elastic spacer that used to push every date to the same right edge now sits at the END of the
+  facts, between them and the controls; the dates still form a column, now from a fixed left edge
+  instead of a computed right one. `tabular-nums` keeps «11:00» and «09:30» the same width so what
+  follows them starts at the same x, and the medium weight now applies to all four due tones
+  rather than only overdue and today.
+  **No colour changed** — a version that greyed the line for uniformity was drawn, the loss of the
+  overdue-red signal was named, and he declined it: «αστα με τα χρωματα». Then a calendar glyph in
+  front of the date and gaps 6px → 8px. **Known and accepted: the row now carries two calendar
+  icons meaning different things** — this one labels «when», the one at the right end is the Google
+  Calendar sync switch. He was told before it was written and asked for the calendar by name.
+  One file, `frontend/src/components/TaskRow.jsx`; no behaviour changed, only order, weight and
+  spacing. Reasoning in DECISIONS.md, «the task row's date LEADS its bottom line».
+
 - **A History row opens the task, read-only (2026-09-19). Tried by the owner; not checklisted.**
   The owner asked to tap into the History tab and see details, and answered the question that
   decides the shape — «διαβάζεις ή πειράζεις;» — with **«οπως οταν ειναι ανοιχτο απλα να μην

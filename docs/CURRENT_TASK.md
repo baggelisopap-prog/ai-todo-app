@@ -1,229 +1,131 @@
-ACTIVE TASK — A completion by somebody else is a handover. Shipped, migrated, and tried by the owner in the real app
+ACTIVE TASK — The task row's bottom line: date first, calendar glyph, wider gaps. Pushed, not yet seen working
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
-> **THE MIGRATION IS APPLIED (2026-09-18, by the owner) AND THE CODE IS PUSHED.** Read back
-> from the live database the same day: **total 459, completed 376, closed_by_a_person 0,
-> acknowledged 0, completion_seen_by NULL 0.** All three zeros were required — every task
-> already finished carries a NULL `completed_by` and therefore stays gone from every list.
-> The numbers are recorded in the migration file itself.
+> **PUSHED TO MAIN AS `a9aa78d`, WHICH AUTO-DEPLOYS.** One file changed:
+> `frontend/src/components/TaskRow.jsx`, +114 −26, most of it comments. No behaviour
+> changed — no new state, no new request, no new prop. Only the ORDER of the elements on
+> the row's second line, their weight, and the gaps between them.
 >
-> The order mattered and was kept: migration first, deploy second. Reversed, it rejects
-> **every task write in the app** (PGRST204 on an unknown column) — the failure
-> `category_name` caused on 2026-09-01 — and the guard test
-> `test_the_write_path_sends_only_real_columns` names both new columns so it cannot be
-> forgotten quietly next time.
->
-> The previous task (the task row rebuilt tighter, `b306a1e` and before) is finished and lives
-> in git and PROJECT_STATUS.md.
+> The previous task (a completion by somebody else is a handover, migration applied by the
+> owner on 2026-09-18, live counts read back and recorded) is **finished** and lives in git
+> and in PROJECT_STATUS.md. Nothing here supersedes it.
 
 ## What was asked
 
-The owner opened it as a bug, 2026-09-17:
+Opened as polish, 2026-09-19:
 
-> «εχω bug προς επιλυση. στο κοινω workspace έβαλε ο αλλος χρήστης ένα task. χωρίς να μου το
-> κανει asiign μπόρεσα και το έκλεισα εγω.»
+> «θελω να κανουμε ενα μικρο polish πως φαινονται τα τασκ»
 
-**It was not a bug.** `access.can_write` has said "you may write to what you can see" since
-2026-09-11, deliberately and with his agreement — see the DECISIONS.md entry from that date,
-where his own instinct («να μην μπορεί να πειράξει όλα τα task στο workspace») was put aside
-after reading what Trello and Todoist do. The boundary is the container, not the card.
+Asked what specifically, he gave the whole brief in one message:
 
-**What WAS broken is the half of that bargain that was never delivered.** The loose write rule
-was made safe by three things, one of them being "`workspace_activity` records who did what" —
-and the log knew about assignment and nothing else. Closing a task, the one act that ends it,
-was recorded **nowhere**: not in the log, and not on the row, which keeps `completed_at` (when)
-and `completed_source` (through which channel) but never who.
+> «η η ημερομηνια ειναι με μεγαλο κενο θελω η κατω γραμμη να ειναι ποιο ομορφη θελω η σειρα
+> να ειναι ημερομηνια ωρα και μετα τα αλλα που εχει σχεδιασε μου σε html τι καταλαβες»
 
-Told that, he did not ask for the lock. He asked for something better:
+Then, after seeing the three drawn options:
 
-> «όταν ένα task το κλείσει κάποιος αλλος πχ εχω κάνει εγω αναθεση σε κάποιον αλλο αυτος το
-> κλείνει. (ετσι πρέπει) όμως θέλω να φευγει τελειος σε αυτών αλλά αυτός που το έκανε asign να
-> βλεπει ένα μύνημα. ο τάδε έχει κλείσει το τάδε task και όταν πατάς οκ να κλείνει και σε
-> μένα. αλλά κάπως να διαφοροποείτε οταν έχει κλείσει από κάποιον άλλον»
+> «β αλλα τα χρωματα κατω να ειναι ολα ιδια ρε φιλε»
 
-and, asked how he pictured the message:
+and, when asked how far «όλα ίδια» went and told what greying the date would cost:
 
-> «όχι απλά βλέπει όταν πάει στα task ότι αυτος το ολοκλήρωσε φαντάζομαι κάτι σε να φαινεται
-> μια γραμμη διαγραμμενο απλα να μην έχει φύγει.»
+> «οχι αστα με τα χρωματα αυτα τα δυο οκ»
 
-and, separately, a rule of his own:
+and finally, after it shipped:
 
-> «πρώτον οποιος φτιάχνει ένα task ειναι αυτο που εχει ανατεθει το task εκτος αν το στείλει σε
-> κάποιον άλλο μονο δλδ αν πατηση assign to. αλλιως ασσιγν ston eayto toy.»
-
-He approved the design with «νιαιι» (both the handover and the display half of that last rule).
+> «θελω πρωτα να εχει ενα εικονιδιο ημερολογιο μετα τον μηνα και την ωρα και λιγο ποιο
+> μεγαλες αποστασης»
 
 ## The decisions that were his
 
-1. **No per-task lock.** Offered explicitly — «μέλος αλλάζει μόνο ό,τι του έχει ανατεθεί», one
-   `if` in `access.py`, the tightening `access.py` was written to accept. He chose the handover
-   instead. Nothing in `access.py` changed.
-2. **A strip inside the row, not a popup.** The alternative — a dialog on app open listing what
-   others closed — was rejected with him: dismissed in a hurry it is gone, and what it was
-   telling you is gone with it.
-3. **"Creator = assignee" is a DISPLAY rule.** See the DECISIONS.md entry; the system already
-   behaved that way everywhere that acts.
-
-## Two facts found while building, both his to know
-
-**The task he closed was unassigned** (his answer: «Σε κανέναν (αδέσποτο)»). Worth recording
-because the lock he originally imagined **would not have stopped him**: its natural form leaves
-untaken work open to every member, or nobody could ever pick anything up.
-
-**`is_open_task` was left alone on purpose.** A task awaiting someone's OK is finished work, so
-it does not ring a phone, does not enter the daily summary and does not appear in the agent's
-day view. The consequence, stated rather than discovered later: ask the agent «τι έχω σήμερα»
-while a handover is on screen and it will answer one lower than the rows you can count. The row
-is struck through, so it does not read as open work — but the numbers do differ, and that is a
-choice, not an oversight. Reminding somebody about a task a colleague already finished would be
-the worse failure.
+1. **Option Β of three**, drawn as an HTML mock at `https://claude.ai/artifact/2psv1AzG36bD1focG6cDrp`
+   (the page has since been updated to show what actually shipped). Α was a plain reorder; Γ
+   removed every separator dot.
+2. **No colour changes.** Β as drawn darkened the date and faded the tail. He cut that —
+   «αστα με τα χρωματα» — after being told, before answering, that greying the date would
+   remove the only at-a-glance «this is late» signal a list has. The overdue red and today
+   amber are now a standing constraint on this line, not a passing preference.
+3. **A calendar glyph, by name**, after being told the row already carries one at the other
+   end of the same line as the Google Calendar sync switch. He asked for the calendar anyway.
+   A clock is a one-word change if he changes his mind on seeing it.
 
 ## What changed, and where
 
-**Database — one migration, two columns, APPLIED 2026-09-18**
-`docs/migrations/2026-09-17-completion-handover.sql`
-- `tasks.completed_by uuid` — who closed it. NULL means no human did (Hostaway reply poller,
-  missed occurrences) **and every task completed before today**, which is what keeps several
-  hundred finished tasks from reappearing on a list. There is no backfill and must not be.
-- `tasks.completion_seen_by uuid[] not null default '{}'` — who has pressed OK. An array, not
-  a boolean, because two people can be owed the same handover (creator and assignee) and one
-  flag would let whoever read it first clear it for the other — exactly how
-  `tasks.notification_sent` broke reminders when sharing arrived.
+All of it in `frontend/src/components/TaskRow.jsx`, in the `<div>` that draws the second line.
 
-**Backend**
-- `services.update_task` stamps `completed_by` on every completion (UI **and agent** — telling
-  the agent to close a task is closing it) and clears both columns on reopen. It now keeps the
-  write gate's return value instead of discarding it, because the row it already read carries
-  the workspace the log needs.
-- `services.update_task` writes `task_completed` / `task_reopened` to `workspace_activity`.
-  **This is the gap that started the whole thing.**
-- `services.acknowledge_completion` / `repository.acknowledge_completion` — read-modify-write on
-  the array, narrowed by `scope_to_visible`. Deliberately **not** behind `access.require_write`:
-  the only value written is the caller's own id, so "may I see this" is the whole question.
-- `POST /tasks/{id}/acknowledge-completion`, 404 (not 403) when the task is not visible.
+- **The date and time moved to the front**, immediately after the completion circle.
+- **A hairline rule** separates them from the workspace pill — not a « · », which reads as
+  punctuation belonging to the date and makes «19 Σεπ, 11:00 ·» look like a cut-off sentence.
+- **The elastic spacer stayed flex-1 and moved to the end of the facts.** This is the part
+  that answers the complaint. It used to sit BETWEEN the category and the date, pushing every
+  date to the same right edge; its length changed with every row, and that variable hole is
+  what he saw. At the end of the line the same slack separates the facts from the controls,
+  where nothing has to line up across rows.
+- **`tabular-nums` on the date.** Proportional digits make «11:00» and «09:30» different
+  widths, so whatever follows starts at a different x on every row.
+- **`font-medium` on all four due tones.** `DUE_TONE_CLASSES` gave the weight to overdue and
+  today and withheld it from the rest — invisible while the date sat alone at the end, obvious
+  the moment dates stack in a column. The colours in that map are untouched.
+- **A 12px calendar glyph INSIDE the date's span**, not beside it, so it inherits the due tone
+  through `currentColor`. As a sibling it would have needed a colour of its own, and a grey
+  calendar welded to a red date reads as two facts rather than one. 12px and not the 16px the
+  controls use, because at 16 it outweighed the number it labels.
+- **Gaps 6px → 8px**, not 10 or 12. The air comes out of the category, the only element on the
+  line allowed to truncate; at 10-12px «Καθαριότητα» starts being cut on a 400px screen. The
+  trade was named to him rather than decided quietly.
 
-**Frontend**
-- `taskDisplay.awaitsMyAcknowledgement` / `isClosedForMe` — the rule, in one place. Four list
-  sites moved off `!task.is_completed`: Today, Upcoming, Browse's Ενεργά, and the category
-  counts in `TaskFilterProvider` (which must match Browse exactly or the number beside a
-  category disagrees with the list it opens). **The Inbox was left alone** — it is about
-  approving AI suggestions, not about finished work.
-- `TaskRow` draws **a notice instead of a row** for a handover (2026-09-19, redesigned with
-  him from three rendered options): no circle, no priority ring, no bell or calendar, no swipe
-  tray — «Ο/Η Μαρία ολοκλήρωσε ~~Έλεγχος θέρμανσης Β4~~», the timestamp, and two buttons,
-  **Ξανάνοιγμα** and **ΟΚ**. The first version put a strip inside the card and he rejected it
-  on sight; see DECISIONS.md.
-- **The bug that rejection exposed, fixed at the root**: `isCompleted` faded the whole
-  `<article>` to 70%, which fades the card's own BACKGROUND, so the permanently-mounted swipe
-  tray read through the text — «πεφτει το ένα γραμμα πανω στο αλλο». The fade now sits on the
-  content block inside the card. **This was never only about handovers**: the Calendar lists
-  completed rows permanently and had the same bleed all along.
-- `assignment.effectiveAssignee` — the avatar names the creator when nobody has taken the task.
-- `formatDate.formatStamp` — `stampOf` moved out of HistoryList so the row and the History
-  screen print an instant the same way. No behaviour change to History.
-- **Tapping a History row opens the task, read-only** (2026-09-19). `TaskDetailSheet` gains a
-  `readOnly` flag rather than gaining a twin: no Edit button, no ⋯ menu, no completion circle
-  to press, no reminder/calendar switches, no recurrence editor, **no inline AI editor** (that
-  one was missed on the first pass and caught by the owner on sight), and the checklist prints
-  its marks instead of offering them. The footer keeps the row's own way back — Επαναφορά /
-  Ξανάνοιγμα — passed in from HistoryList so it is the same handler, not a second one. The
-  sheet also shows the one line the live sheet cannot: how the task ended.
+**Five comments in the file that described the old order were corrected in place**, each
+saying what it used to claim rather than being deleted — including the one that asserted the
+spacer was what made the dates line up, which was true when written and is now the opposite
+of how the alignment is achieved.
 
-**Two pre-existing bugs fixed on the way, neither of them asked for**
-- `TaskRecord` never carried `completed_at`, so `response_model` stripped it and
-  `taskHistory.js` — which has read it since 2026-09-04 — saw `undefined` on every row. **Every
-  completed task in the History screen has been dated by its CREATION time** and flagged as a
-  completion from before the column existed. Both columns are now on the model.
-- Same shape, same screen: `completed_source` never reached the browser either, so
-  HistoryList's «· από το AI» suffix has never once rendered.
+## Evidence
 
-**And the tail that fixing them exposed, 2026-09-19.** Surfacing `completed_source` made a
-four-week-old label visible for the first time — and in a shared room it was a lie. The owner
-found it within a day: «στην ιστορια λεει by you οχι ο χ εκλεισε». That suffix reads the
-CHANNEL, not the person, and «από εσένα» was written when the app had one user.
-`utils/taskHistory.completionCredit` now names the PERSON where `completed_by` has one (over
-`agent` too — telling the agent to close a task is a person closing it) and the CHANNEL where
-it does not: «από την εφαρμογή», never a guessed "you". It lives in `utils/` because
-`scripts/*.test.mjs` cannot import a `.jsx`, which is exactly how the old one went four weeks
-without anybody noticing it had stopped being true. A departed member gets «από πρώην μέλος»
-rather than a name-shaped hole, on the task row too.
-
-## Baselines, as the commands actually printed them today
+Re-run after the final change, 2026-09-19:
 
 ```
-./venv/Scripts/python.exe -m pytest tests/ -q     → 545 passed in 4.91s   (exit 0)
-                                                    was 522 before this work
-cd frontend && npm run check                      → exit 0, 334 PASS, 0 FAIL
-cd frontend && npm run build                      → exit 0, 338 modules, built in 407ms
-cd frontend && npx eslint .                       → exit 1, 12 errors
+npm run check   → ui-check: OK — 93 files, 50 tokens, 541 translation keys
+                  all passed (13 suites)          exit 0
+npm run build   → ✓ 338 modules transformed. ✓ built in 353ms
+npm run lint    → ✖ 12 problems (12 errors, 0 warnings)
 ```
 
-**The 12 lint errors are all pre-existing and none is in code written today**: `public/sw.js`
-(6), `App.jsx:213`, `api.js:82/167/205`, `SettingsModal.jsx:603`, `TodayView.jsx:69` — the last
-three files' errors are `set-state-in-effect` in effects that were not touched. `npm run lint`
-is not part of `npm run check`, which is this project's declared gate.
+`npm run build` is run separately and on purpose: `npm run check` does **not** compile the
+components, so a broken JSX file passes it silently.
 
-`npm run build` was run **because `npm run check` does not compile the components** — the
-`scripts/*.test.mjs` suite imports `src/utils/*` only, so a broken `.jsx` would pass it
-silently. That is the only reason there is evidence the screen still builds.
+The 12 lint errors are **pre-existing and in other files** — `api.js`, `App.jsx`,
+`public/sw.js`, `components/SettingsModal.jsx`, `components/TodayView.jsx`. `TaskRow.jsx` is
+not among them. This count was not compared against a previous run, so it is stated as "not
+caused by this change", not as "unchanged".
 
-## What a person has actually SEEN
+## What a person has SEEN
 
-**The migration landing**, read back out of the live database (the numbers above): the columns
-exist, carry their defaults, and touched no existing row.
+- The three options, as a static HTML mock. He chose from it.
+- The app booting at `http://localhost:5173` and reaching its login screen.
 
-**And the owner using the deployed app, 2026-09-19** — his words, in full: «το δοκιμαζω τωρα
-ola kala». That is a real person on the real thing, which is the bar this file cares about,
-and it is the reason the previous version of this section is gone rather than edited.
+## What NOBODY has seen
 
-**It is NOT a checklist, and the difference matters for whoever reads this next.** What that
-sentence establishes is that the app works and nothing is visibly broken. What it does not
-establish is which paths were exercised: whether a handover was produced from the second
-account at all, whether ΟΚ or Ξανάνοιγμα was ever pressed, and which of the History tab's four
-kinds were opened. Nobody wrote any of that down, including him — so the list below is what a
-second pass should still confirm, not a list of known failures.
+- **The change itself, running, against real tasks.** This is the whole of it. The servers
+  were started for him (`uvicorn main:app` on 8000, `vite` on 5173) and the tab was left on
+  the login screen; logging in is his, not the assistant's. He said «καλο push» without
+  reporting back on what the rows looked like, so the last word on this is a mock, not the app.
+- **Whether 8px is enough air**, or whether the category now truncates sooner than he likes.
+- **The two-calendar collision in practice.** It is accepted in principle and has never been
+  looked at on a real row.
+- **A row with no date**, which now draws a calendar glyph next to «Χωρίς ημερομηνία».
+- **A shared workspace row**, where the avatar sits on the line above and the pill is widest.
 
-## What a second pass should still confirm
+What would settle all of it: open a list on a phone-width window with the servers running,
+and look at Σήμερα, Επερχόμενα and Ημερολόγιο — the last one because it lists completed rows
+permanently, which is the only place the faded variant of this line appears.
 
-1. **The handover end to end, from two accounts.** A shared workspace, one person closes the
-   other's task. Settles: does the notice appear for the right person, does ΟΚ remove it, does
-   Ξανάνοιγμα bring the task back for BOTH of them, and does the row leave the closer's list
-   immediately. This is the single most valuable thing left unconfirmed.
-2. ~~The migration itself.~~ **DONE 2026-09-18** — numbers above.
-3. ~~That no old task comes back.~~ **SETTLED 2026-09-19, by absence.** All 376
-   already-completed tasks carry `completed_by = NULL` and had to stay gone; the owner opened
-   the deployed app and reported «ola kala». 376 finished tasks reappearing in his lists is not
-   something he would have described that way. Not a checklist item — a flood that did not
-   happen — but on this particular risk that is the whole of the evidence needed.
-4. **The History screen's dates.** They CHANGE with this deploy: **219 of the 376 completed
-   tasks** have a real `completed_at` and will move from their creation date to their true
-   completion date, and the «· από την εφαρμογή / από το AI» suffix starts appearing. The other
-   157 were completed before 2026-08-13, have no timestamp, and correctly keep showing the
-   creation date under the flag that says so. This is the fix, but it will look like a change
-   he did not ask for.
-5. **The activity log's two new lines** («ο Χ ολοκλήρωσε το Υ»). These are in the OTHER
-   «Ιστορικό» — the activity list inside a workspace's **Μέλη** panel, not Browse's History
-   tab. Both screens WERE literally called «Ιστορικό»
-   (`activity.title` and `browse.tab_history`), which is what made the owner read one claim
-   about the other; on his word («ναι κανε το Δραστηριότητα») the workspace panel is now
-   **«Δραστηριότητα»** and Browse keeps «Ιστορικό». Note the log is NOT retroactive: only
-   completions made after the 2026-09-18 deploy appear there.
-6. **The corrected History credit line** — «από τον/την Μαρία» on a task a colleague closed,
-   «από την εφαρμογή» on the older ones.
-7. **The avatar now showing on untaken tasks** in a shared room — a face appears on rows that
-   had none.
-8. **The notice itself**, and both its buttons. The DESIGN was seen and chosen by the owner as
-   a rendered page; whether the React version was ever on his screen depends on whether a
-   handover existed to show it, which is item 1. Ξανάνοιγμα in
-   particular has no test of its own — it reuses the existing uncomplete action, which is
-   covered, but nothing proves the button is wired to it.
-9. **Completed rows in the Calendar**, which should stop showing the swipe tray through
-   themselves. That bleed predates all of this work.
-10. **The read-only sheet, in every one of its four kinds** — completed, deleted, missed,
-    rejected. A missed occurrence is the one with no footer button, and nothing has confirmed
-    the sheet looks right with an empty footer bar.
+## Servers, if picking this back up
 
-## Carried forward, still unwatched from earlier work
+```
+./venv/Scripts/python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
+cd frontend && npm run dev
+```
 
-- A real Hostaway guest message arriving since escalation was rekeyed onto `system_key`.
-- The 2026-09-13 task-row rebuild: nobody has looked at it on a phone.
+Open **`http://localhost:5173`**, never `http://127.0.0.1:5173`. The CORS allowlist in
+`main.py:431` names `http://localhost:5173`, and the browser treats the two spellings as
+different origins — from `127.0.0.1` every preflight comes back `400 Bad Request` and the app
+loads but shows no data. This cost a round trip in this session; it is a launch mistake, not
+an app bug, and the allowlist is correct as it stands.
