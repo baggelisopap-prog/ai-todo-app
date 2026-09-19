@@ -504,10 +504,14 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
               className="mt-1 flex items-center gap-2 rounded-md bg-[var(--bg-hover)] pl-2 pr-1 py-1"
             >
               <span className="flex-1 min-w-0 truncate text-[11px] leading-[1.3] text-[var(--text-secondary)]">
-                {t('handover.closed_by', {
-                  name: closedBy?.display_name || t('members.former_member'),
-                  when: formatStamp(task.completed_at),
-                })}
+                {closedBy?.display_name
+                  ? t('handover.closed_by', {
+                      name: closedBy.display_name,
+                      when: formatStamp(task.completed_at),
+                    })
+                  // Somebody who has left the room has no name to print, and
+                  // «Ο/Η Πρώην μέλος το ολοκλήρωσε» is not a Greek sentence.
+                  : t('handover.closed_by_former', { when: formatStamp(task.completed_at) })}
               </span>
               <button
                 type="button"

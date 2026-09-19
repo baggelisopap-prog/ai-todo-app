@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { restoreTask } from '../api';
 import { uiLocale, toLocalISODate, formatDate, formatStamp } from '../utils/formatDate';
+import { useMembers } from '../hooks/useMembers';
 import {
+  completionCredit,
   groupHistoryByDay,
   KIND_COMPLETED,
   KIND_DELETED,
@@ -30,11 +32,11 @@ const KIND_STYLES = {
   [KIND_REJECTED]: { glyph: '✕', color: 'var(--text-muted)' },
 };
 
-const SOURCE_KEYS = {
-  ui: 'browse.source_ui',
-  agent: 'browse.source_agent',
-  hostaway_reply: 'browse.source_hostaway_reply',
-};
+// SOURCE_KEYS lived here and mapped completed_source straight to a label, one
+// of which read «από εσένα». That was true while the app had one user and
+// became a lie the day two people shared a workspace — see
+// taskHistory.completionCredit, which now answers this and is testable under
+// plain Node, unlike anything in this file.
 
 
 /**
@@ -67,7 +69,7 @@ function dayHeading(day, t, now) {
  * completion from before completed_at existed. Those rows say so instead of
  * printing an hour that would look like fact.
  */
-function eventLine({ kind, at, exact, task }, t) {
+function eventLine({ kind, at, exact, task }, t, nameFor) {
   if (kind === KIND_REJECTED) return t('browse.event_rejected');
 
   if (kind === KIND_MISSED) {
@@ -82,10 +84,19 @@ function eventLine({ kind, at, exact, task }, t) {
 
   if (kind === KIND_COMPLETED) {
     const line = t('browse.event_completed', { when: formatStamp(at) });
-    // completed_source is why this column exists: a task once closed itself six
-    // seconds after being created and nothing could say what had done it.
-    const sourceKey = SOURCE_KEYS[task.completed_source];
-    return sourceKey ? `${line} · ${t(sourceKey)}` : line;
+    // WHO closed it where that is known, WHAT channel where it is not, and
+    // nothing at all where neither column can say — the rule and the reason
+    // are in taskHistory.completionCredit. `completed_source` is still why the
+    // column exists at all: a task once closed itself six seconds after being
+    // created and nothing anywhere could say what had done it.
+    const credit = completionCredit(task, nameFor?.myId);
+    if (!credit) return line;
+    if (!credit.userId) return `${line} · ${t(credit.key)}`;
+    // Somebody who has since left the room resolves to no name. That gets its
+    // own sentence rather than the generic "Πρώην μέλος" dropped into a slot
+    // built for a first name — «από τον/την Πρώην μέλος» is not Greek.
+    const name = nameFor.of(task.workspace_id, credit.userId);
+    return `${line} · ${name ? t(credit.key, { name }) : t('browse.source_former_member')}`;
   }
 
   return t('browse.event_deleted', { when: formatStamp(at) });
@@ -103,8 +114,8 @@ function eventLine({ kind, at, exact, task }, t) {
  * A row with no creation stamp keeps the event alone rather than printing an
  * arrow that starts nowhere.
  */
-function lifeLine(row, t) {
-  const event = eventLine(row, t);
+function lifeLine(row, t, nameFor) {
+  const event = eventLine(row, t, nameFor);
   const created = row.task.created_at || row.task.created_time;
   if (!created) return event;
   return `${t('browse.created_on', { date: formatDate(created.slice(0, 10)) })} → ${event}`;
@@ -153,6 +164,20 @@ const ACTIONS = {
 
 function HistoryRow({ row, onAct, isBusy }) {
   const { t } = useTranslation();
+  // id → name, for the one label on this row that needs it. Bundled into a
+  // single object rather than passed as two arguments because lifeLine hands it
+  // straight down to eventLine, and both halves travel together: who I am
+  // decides «από εσένα» versus a name, and the lookup turns the id into
+  // something readable. personFor answers null on a solo account, which is
+  // correct — there is nobody else there to have closed anything.
+  const { myId, personFor } = useMembers();
+  const nameFor = {
+    myId,
+    // null, not a placeholder: the caller has a whole sentence for the case
+    // where the person is gone, and a placeholder here would fill a slot that
+    // expects a first name.
+    of: (workspaceId, userId) => personFor(workspaceId, userId)?.display_name || null,
+  };
   const { kind, task } = row;
   const style = KIND_STYLES[kind];
   const action = ACTIONS[kind];
@@ -172,7 +197,7 @@ function HistoryRow({ row, onAct, isBusy }) {
         {/* Both dates, in one line — see lifeLine. "When did this go in" was
             the third thing the History tab was asked for, and it had no field
             on the frontend until created_at was surfaced. */}
-        <p className="text-xs text-[var(--text-secondary)] mt-0.5">{lifeLine(row, t)}</p>
+        <p className="text-xs text-[var(--text-secondary)] mt-0.5">{lifeLine(row, t, nameFor)}</p>
       </div>
 
       {action && (

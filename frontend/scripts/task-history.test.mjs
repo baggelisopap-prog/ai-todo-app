@@ -9,6 +9,7 @@
  */
 import {
   historyEntry,
+  completionCredit,
   isHistoryTask,
   selectHistory,
   groupHistoryByDay,
@@ -240,6 +241,65 @@ check('counts per kind', [counts.completed, counts.deleted, counts.missed, count
 // --- Missing input must not throw -----------------------------------------
 check('undefined list is survivable', selectHistory(undefined, { now: NOW }).length, 0);
 check('a null task is survivable', historyEntry(null), null);
+
+// --- Who gets the credit for a completion ---------------------------------
+// The label under a finished task said «από εσένα» for four weeks of wall time
+// and never once appeared, because completed_source never reached the browser.
+// Fixing that transport on 2026-09-18 made it visible — and in a shared room it
+// was a LIE: it names the CHANNEL a completion came through (ui / agent /
+// hostaway_reply), written when the app had exactly one user, so "through the
+// screen" and "by you" were the same fact. The owner read it about a task a
+// colleague had closed and said so.
+//
+// completed_by answers the real question now, so: name the person where we know
+// them, name the CHANNEL where we do not, and never guess.
+const ME = 'user-me';
+const HER = 'user-her';
+
+check(
+  'a task I closed myself is credited to me',
+  completionCredit({ completed_by: ME, completed_source: 'ui' }, ME),
+  { key: 'browse.source_you' }
+);
+check(
+  'a task she closed is credited to HER, not to the screen it came through',
+  completionCredit({ completed_by: HER, completed_source: 'ui' }, ME),
+  { key: 'browse.source_person', userId: HER }
+);
+check(
+  'the person wins over the channel even when the agent did the writing',
+  completionCredit({ completed_by: HER, completed_source: 'agent' }, ME),
+  { key: 'browse.source_person', userId: HER }
+);
+
+// No person recorded: every task finished before 2026-09-18, plus the two paths
+// where no human presses anything.
+check(
+  'an old manual completion names the app, never a person',
+  completionCredit({ completed_source: 'ui' }, ME),
+  { key: 'browse.source_app' }
+);
+check(
+  'a guest reply closing a Hostaway task says so',
+  completionCredit({ completed_source: 'hostaway_reply' }, ME),
+  { key: 'browse.source_hostaway_reply' }
+);
+check(
+  'an old agent completion still names the agent',
+  completionCredit({ completed_source: 'agent' }, ME),
+  { key: 'browse.source_agent' }
+);
+check(
+  'a completion with neither column says nothing at all',
+  completionCredit({}, ME),
+  null
+);
+check('a null task is survivable here too', completionCredit(null, ME), null);
+check(
+  'before my own id arrives, my own completion is named rather than miscredited',
+  completionCredit({ completed_by: ME, completed_source: 'ui' }, null),
+  { key: 'browse.source_person', userId: ME }
+);
 
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');
 process.exit(failures ? 1 : 0);

@@ -32,6 +32,18 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   poller, a missed occurrence, **and every task completed before today**. There is no backfill,
   which is what stops several hundred finished tasks reappearing on a list at deploy.
 
+  **Corrected 2026-09-19, one day later, by the owner reading the screen.** Surfacing
+  `completed_source` (below) made a four-week-old label visible for the first time, and in a
+  shared room it was a lie: Browse → Ιστορικό printed **«από εσένα»** under a task his
+  colleague had closed. That suffix names the CHANNEL a completion came through, and the word
+  was written when the app had one user. It now names the **person** where `completed_by` has
+  one and the **channel** where it does not — «από την εφαρμογή», never a guessed "you", for
+  every task finished before 2026-09-18. Moved into `utils/taskHistory.completionCredit`
+  because `scripts/*.test.mjs` cannot import a `.jsx`, which is how the old one went four
+  weeks without being noticed. **Still open: both `browse.tab_history` and `activity.title`
+  are the word «Ιστορικό»**, two different screens with one name — the reason the owner read a
+  claim about one as a claim about the other.
+
   **Two pre-existing bugs fixed on the way, neither asked for.** `TaskRecord` never named
   `completed_at`, so `response_model` stripped it and every completed task in the History
   screen has been dated by its CREATION time since 2026-09-04; `completed_source` was missing

@@ -235,7 +235,10 @@
     "event_rejected": "Απορρίφθηκε η πρόταση του AI",
     "event_undated": "η ώρα δεν καταγράφηκε",
     "created_on": "Μπήκε {{date}}",
-    "source_ui": "από εσένα",
+    "source_you": "από εσένα",
+    "source_person": "από τον/την {{name}}",
+    "source_app": "από την εφαρμογή",
+    "source_former_member": "από πρώην μέλος",
     "source_agent": "από τον agent",
     "source_hostaway_reply": "με απάντηση στο Hostaway",
     "restore": "Επαναφορά",
@@ -597,6 +600,7 @@
   },
   "handover": {
     "closed_by": "Ο/Η {{name}} το ολοκλήρωσε · {{when}}",
+    "closed_by_former": "Ολοκληρώθηκε από πρώην μέλος · {{when}}",
     "ok": "ΟΚ"
   },
   "color": {

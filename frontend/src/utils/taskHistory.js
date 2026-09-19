@@ -214,3 +214,51 @@ export function countByKind(tasks, { range = RANGE_ALL, now = new Date() } = {})
   }
   return counts;
 }
+
+// Which channel a completion came through, for the rows where no person was
+// recorded. `ui` deliberately reads as "the app" and NOT as "you": see
+// completionCredit below for why that word had to change.
+const COMPLETION_CHANNEL_KEYS = {
+  ui: 'browse.source_app',
+  agent: 'browse.source_agent',
+  hostaway_reply: 'browse.source_hostaway_reply',
+};
+
+/**
+ * Who — or what — gets the credit for a completion, as a translation key plus
+ * whatever the caller needs to resolve a name. Returns null when the row can
+ * say nothing honest.
+ *
+ * THIS LABEL TOLD A LIE FOR ONE DAY AND WAS WRITTEN FOUR WEEKS BEFORE THAT.
+ * It read `completed_source` — the CHANNEL a completion came through — and
+ * printed «από εσένα» for `ui`, which was exactly true while the app had one
+ * user, because "through the app's own screen" and "by you" were the same
+ * fact. It never actually appeared on screen in all that time, because
+ * TaskRecord did not carry the column and response_model stripped it. Fixing
+ * that transport on 2026-09-18 made it visible, in a workspace with two people
+ * in it, on a task the owner's colleague had closed. He read «από εσένα» and
+ * said so.
+ *
+ * `completed_by` answers the real question as of 2026-09-17, so the person
+ * wins wherever there is one — including over `agent`, because telling the
+ * agent to close a task is still a person closing it.
+ *
+ * WHERE THERE IS NO PERSON, THE CHANNEL IS NAMED AND NOBODY IS GUESSED. That
+ * covers every task completed before 2026-09-18 — including a week of shared
+ * completions between 09-11 and 09-18 that genuinely might have been somebody
+ * else's — plus the two paths where no human presses anything. «από την
+ * εφαρμογή» still distinguishes a manual close from the agent's and from a
+ * guest reply, which is all `completed_source` ever honestly knew.
+ */
+export function completionCredit(task, myId) {
+  if (!task) return null;
+
+  if (task.completed_by) {
+    return task.completed_by === myId
+      ? { key: 'browse.source_you' }
+      : { key: 'browse.source_person', userId: task.completed_by };
+  }
+
+  const key = COMPLETION_CHANNEL_KEYS[task.completed_source];
+  return key ? { key } : null;
+}

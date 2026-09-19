@@ -235,7 +235,10 @@
     "event_rejected": "AI suggestion rejected",
     "event_undated": "time not recorded",
     "created_on": "Added {{date}}",
-    "source_ui": "by you",
+    "source_you": "by you",
+    "source_person": "by {{name}}",
+    "source_app": "through the app",
+    "source_former_member": "by a former member",
     "source_agent": "by the agent",
     "source_hostaway_reply": "by a Hostaway reply",
     "restore": "Restore",
@@ -597,6 +600,7 @@
   },
   "handover": {
     "closed_by": "{{name}} completed it · {{when}}",
+    "closed_by_former": "Completed by a former member · {{when}}",
     "ok": "OK"
   },
   "color": {

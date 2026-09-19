@@ -121,6 +121,17 @@ the worse failure.
 - Same shape, same screen: `completed_source` never reached the browser either, so
   HistoryList's «· από το AI» suffix has never once rendered.
 
+**And the tail that fixing them exposed, 2026-09-19.** Surfacing `completed_source` made a
+four-week-old label visible for the first time — and in a shared room it was a lie. The owner
+found it within a day: «στην ιστορια λεει by you οχι ο χ εκλεισε». That suffix reads the
+CHANNEL, not the person, and «από εσένα» was written when the app had one user.
+`utils/taskHistory.completionCredit` now names the PERSON where `completed_by` has one (over
+`agent` too — telling the agent to close a task is a person closing it) and the CHANNEL where
+it does not: «από την εφαρμογή», never a guessed "you". It lives in `utils/` because
+`scripts/*.test.mjs` cannot import a `.jsx`, which is exactly how the old one went four weeks
+without anybody noticing it had stopped being true. A departed member gets «από πρώην μέλος»
+rather than a name-shaped hole, on the task row too.
+
 ## Baselines, as the commands actually printed them today
 
 ```
@@ -162,8 +173,15 @@ looked at in a browser**, by anybody, in any account.
    157 were completed before 2026-08-13, have no timestamp, and correctly keep showing the
    creation date under the flag that says so. This is the fix, but it will look like a change
    he did not ask for.
-5. **The activity log's two new lines** («ο Χ ολοκλήρωσε το Υ»), which no screen has rendered.
-6. **The avatar now showing on untaken tasks** in a shared room — a face appears on rows that
+5. **The activity log's two new lines** («ο Χ ολοκλήρωσε το Υ»). These are in the OTHER
+   «Ιστορικό» — the activity list inside a workspace's **Μέλη** panel, not Browse's History
+   tab. **Both screens are literally called «Ιστορικό»** (`activity.title` and
+   `browse.tab_history`), which is what made the owner read one claim about the other. Worth
+   renaming one of them; not done without him. Note the log is NOT retroactive: only
+   completions made after the 2026-09-18 deploy appear there.
+6. **The corrected History credit line** — «από τον/την Μαρία» on a task a colleague closed,
+   «από την εφαρμογή» on the older ones.
+7. **The avatar now showing on untaken tasks** in a shared room — a face appears on rows that
    had none.
 
 ## Carried forward, still unwatched from earlier work
