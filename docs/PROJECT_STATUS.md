@@ -17,8 +17,8 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   εχχει επεξεργασία»**. So `TaskDetailSheet` gained a `readOnly` mode rather than a twin: the
   point of the request is that a finished task looks exactly like a live one, and a parallel
   component drifts from this one field by field. Every door to a write is closed rather than
-  dimmed — no Edit, no ⋯ menu, no completion circle, and the reminder / calendar / repeat rows
-  are ABSENT, because all three are instructions about a future a deleted task does not have.
+  dimmed — no Edit, no ⋯ menu, no completion circle, no inline AI editor, and the
+  reminder / calendar / repeat rows are ABSENT, because all three are instructions about a future a deleted task does not have.
   The footer keeps the row's own Επαναφορά / Ξανάνοιγμα, his call, passed in as the same
   handler the row already uses. The sheet shows one thing the live one cannot: how the task
   ended, built from the same `lifeLine` the row prints so the two can never disagree.

@@ -123,8 +123,9 @@ the worse failure.
   screen print an instant the same way. No behaviour change to History.
 - **Tapping a History row opens the task, read-only** (2026-09-19). `TaskDetailSheet` gains a
   `readOnly` flag rather than gaining a twin: no Edit button, no ⋯ menu, no completion circle
-  to press, no reminder/calendar switches, no recurrence editor, and the checklist prints its
-  marks instead of offering them. The footer keeps the row's own way back — Επαναφορά /
+  to press, no reminder/calendar switches, no recurrence editor, **no inline AI editor** (that
+  one was missed on the first pass and caught by the owner on sight), and the checklist prints
+  its marks instead of offering them. The footer keeps the row's own way back — Επαναφορά /
   Ξανάνοιγμα — passed in from HistoryList so it is the same handler, not a second one. The
   sheet also shows the one line the live sheet cannot: how the task ended.
 

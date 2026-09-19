@@ -1038,10 +1038,16 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             </div>
           )}
 
-          {/* Inline task agent, in BOTH modes. It suits a reading context as
-              well as an editing one — it is a sentence, not a form — and
-              "move it to next week" is exactly what someone who just opened a
-              task to look at it wants to say.
+          {/* Inline task agent, in both EDITING modes but never in read-only.
+              It suits a reading context as well as an editing one — it is a
+              sentence, not a form — and "move it to next week" is exactly what
+              someone who just opened a task to look at it wants to say.
+
+              NOT IN THE HISTORY TAB. Caught by the owner on sight — «απλα να
+              μην υπαρχει το ai εκει» — and he is right twice over: it is a way
+              to CHANGE the task, which is the one thing read-only exists to
+              prevent, and every sentence it accepts ("move it to next week")
+              is meaningless about work that is already finished or deleted.
 
               ONE LINE AT REST, as of 2026-09-11. It used to be four stacked
               things inside a bordered grey card: a caption, the input row, a
@@ -1062,6 +1068,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
 
               What did NOT change: what it does, what it asks the server, and
               the fact that nothing happens to the task until you approve it. */}
+          {!readOnly && (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="flex-1 min-w-0 flex items-center gap-2 rounded-md border border-[var(--border-medium)] bg-[var(--bg-input)] px-2.5 py-2 focus-within:border-[var(--border-focus)] focus-within:ring-2 focus-within:ring-[color:var(--ring-soft)] transition-colors">
@@ -1169,6 +1176,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
               </p>
             )}
           </div>
+          )}
 
           {saveError && (
             <p className="text-xs text-[var(--danger)]">{t('errors.failed_save')}: {saveError}</p>
