@@ -175,9 +175,10 @@ looked at in a browser**, by anybody, in any account.
    he did not ask for.
 5. **The activity log's two new lines** («ο Χ ολοκλήρωσε το Υ»). These are in the OTHER
    «Ιστορικό» — the activity list inside a workspace's **Μέλη** panel, not Browse's History
-   tab. **Both screens are literally called «Ιστορικό»** (`activity.title` and
-   `browse.tab_history`), which is what made the owner read one claim about the other. Worth
-   renaming one of them; not done without him. Note the log is NOT retroactive: only
+   tab. Both screens WERE literally called «Ιστορικό»
+   (`activity.title` and `browse.tab_history`), which is what made the owner read one claim
+   about the other; on his word («ναι κανε το Δραστηριότητα») the workspace panel is now
+   **«Δραστηριότητα»** and Browse keeps «Ιστορικό». Note the log is NOT retroactive: only
    completions made after the 2026-09-18 deploy appear there.
 6. **The corrected History credit line** — «από τον/την Μαρία» on a task a colleague closed,
    «από την εφαρμογή» on the older ones.

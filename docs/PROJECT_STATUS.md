@@ -40,9 +40,10 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   one and the **channel** where it does not — «από την εφαρμογή», never a guessed "you", for
   every task finished before 2026-09-18. Moved into `utils/taskHistory.completionCredit`
   because `scripts/*.test.mjs` cannot import a `.jsx`, which is how the old one went four
-  weeks without being noticed. **Still open: both `browse.tab_history` and `activity.title`
-  are the word «Ιστορικό»**, two different screens with one name — the reason the owner read a
-  claim about one as a claim about the other.
+  weeks without being noticed. **Also renamed on his word**: `browse.tab_history` and
+  `activity.title` were both the word «Ιστορικό», two different screens under one name — the
+  reason he read a claim about one as a claim about the other. The workspace panel is now
+  **«Δραστηριότητα»** / "Activity"; Browse keeps «Ιστορικό».
 
   **Two pre-existing bugs fixed on the way, neither asked for.** `TaskRecord` never named
   `completed_at`, so `response_model` stripped it and every completed task in the History
