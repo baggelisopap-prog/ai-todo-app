@@ -457,8 +457,92 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
               the date off: «κατω θελω σιγουρα να βλεπω ημερομηνια ωρα και χωρο
               κατηγορια». Something must give when four things share ~271px on a
               phone; the category is the one that, cut, still leaves its first
-              letters AND the room's colour beside it. */}
-          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden text-[11px] leading-[1.3]">
+              letters AND the room's colour beside it.
+
+              THE DATE LEADS THE LINE — his call, 2026-09-19, from three drawn
+              options: «θελω η σειρα να ειναι ημερομηνια ωρα και μετα τα αλλα».
+
+              CORRECTED: this paragraph used to end by saying the middle "takes
+              the slack in every row, so every date ends at the same edge and
+              they read as a column". That was true and it is why the slack was
+              put between the category and the date in the first place — but the
+              slack is a stretching hole whose length changes with every row, and
+              it is what he reported next: «η ημερομηνια ειναι με μεγαλο κενο».
+
+              The column survives the move, and is in fact stronger. The date is
+              now the FIRST thing after the circle, so it starts at the same x on
+              every row — a fixed edge rather than one computed from whatever
+              happened to be left over. The slack itself has not gone anywhere;
+              it has moved to where a gap belongs, between the facts and the
+              controls, which is the one place in the line nothing has to line up
+              across.
+
+              No colour changed with the reorder. He was offered a version where
+              the tail faded and the date darkened and said «αστα με τα χρωματα»
+              — so the hierarchy here is carried by WEIGHT and POSITION only, and
+              the overdue red / today amber keep being the only colour the line
+              spends on the date.
+
+              THE GAP IS 8px, NOT 6. His words: «λιγο ποιο μεγαλες αποστασεις».
+              It is not free — every pixel of air here comes out of the category,
+              which is the one part of the line allowed to truncate — so it went
+              up by 2px rather than to the 10 or 12 that would read as roomier
+              still and would start cutting «Καθαριότητα» to «Καθαρ…» on a 400px
+              screen. If he wants more air, that is the trade to name first. */}
+          <div className="flex items-center gap-2 min-w-0 overflow-hidden text-[11px] leading-[1.3]">
+            {/* FIRST, and the same weight on every row.
+                tabular-nums is the reason a list of dates reads as a column and
+                not as ragged text: by default a "1" is narrower than a "0", so
+                «11:00» and «09:30» are different lengths and the room pill after
+                them starts at a different x on every row. Tabular figures are
+                all one width, so the whole tail lines up down the list.
+
+                font-medium is here rather than only in DUE_TONE_CLASSES because
+                that map gives the weight to overdue and today and withholds it
+                from everything else — which was invisible while the date sat
+                alone at the end of the line, and obvious the moment dates stack
+                in a column. Nothing about the COLOUR changed; only the weight,
+                which is now the same for all four tones.
+
+                THE GLYPH IS INSIDE THIS SPAN, NOT BESIDE IT, and that is what
+                keeps the owner's «αστα με τα χρωματα» true. It is drawn in
+                currentColor, so it inherits whichever tone the date already has
+                — red when overdue, amber when today, grey otherwise. Placed as
+                a sibling it would have needed a colour of its own, and a grey
+                calendar welded to a red date reads as two facts, not one.
+
+                KNOWN COLLISION, HIS CALL. This is the same glyph as the
+                calendar-sync toggle at the right-hand end of this line, so one
+                row now carries two calendars that mean different things: this
+                one labels «when», that one is a switch for Google Calendar. He
+                asked for the calendar by name after seeing it flagged. A clock
+                was offered as the alternative and is a one-word change.
+
+                w-3 (12px) against 11px text, rather than the w-4 the controls
+                use: this is a label for the number beside it, and at 16px it
+                outweighed the date it was labelling. */}
+            <span
+              className={`flex-none inline-flex items-center gap-1 tabular-nums font-medium ${task.due_date ? DUE_TONE_CLASSES[tone] : 'text-[var(--text-muted)]'}`}
+            >
+              <CalendarIcon className="w-3 h-3 flex-none" aria-hidden="true" />
+              {task.due_date ? formatDate(task.due_date, task.due_time) : t('task.no_date')}
+            </span>
+
+            {/* A HAIRLINE, NOT A « · ».
+                The dot was tried here first and read as punctuation belonging to
+                the date — «19 Σεπ, 11:00 ·» looks like a sentence that got cut
+                off. A rule is not punctuation: it separates two things without
+                claiming to be part of either. It is also the one mark that stays
+                legible at 11px when the date beside it is already coloured.
+
+                aria-hidden because it says nothing; the accessible reading of
+                this line is date, then room, then facts, with no word for the
+                line between them. */}
+            <span
+              aria-hidden="true"
+              className="flex-none w-px h-[11px] bg-[var(--border-medium)]"
+            />
+
             {/* ALWAYS a pill, including «Αταξινόμητα».
                 It used to be bare text in that one case, so a list mixing filed
                 and unfiled tasks showed two different shapes for the same fact
@@ -474,26 +558,26 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
               <span className="truncate">{workspace ? workspace.name : t('workspace.unfiled')}</span>
             </span>
 
-            {/* ALWAYS RENDERED, even when there is nothing to put in it.
-                An empty middle used to be skipped, and then nothing pushed the
-                date away from the pill — so a task with no category showed its
-                date halfway along the line while the one under it showed it at
-                the far right. Reading down a list, the dates wandered. The
-                owner: «να ειναι παντα στην ιδια σειρα, γτ τωρα η ημερομηνια και
-                η ωρα σε καπια δεν ειναι στο ιδιο σημειο». This span takes the
-                slack in every row, so every date ends at the same edge and they
-                read as a column.
+            {/* STILL ALWAYS RENDERED, and still the only thing that truncates —
+                but it is no longer holding the line's alignment together.
 
-                There was a « · » between this and the date for one commit. Once
-                the slack sits between them they can be half a screen apart, and
-                a separator with nothing on one side of it is just a mark stuck
-                to the date — visible in the owner's screenshot as an orphan dot.
-                The gap separates them; nothing else has to. */}
+                CORRECTED: this comment used to say the span "takes the slack in
+                every row, so every date ends at the same edge and they read as a
+                column", and that an earlier « · » had to be removed from beside
+                the date because the slack could push them half a screen apart.
+                All of that described the old order, where this sat BETWEEN the
+                pill and the date. The alignment it bought is now free — the date
+                is first, so it starts at a fixed x without anything stretching —
+                and the gap it cost is the one the owner reported: «η ημερομηνια
+                ειναι με μεγαλο κενο».
+
+                Kept as flex-1 rather than flex-none: the slack has to go
+                somewhere, and here, at the end of the facts, it separates them
+                from the controls instead of splitting the facts in half. Kept
+                rendered when empty for the same reason it always was — an
+                absent element would let the pill drift toward the controls on
+                exactly the rows that have no category. */}
             <span className="flex-1 min-w-0 truncate text-[var(--text-secondary)]">{middle}</span>
-
-            <span className={`flex-none ${task.due_date ? DUE_TONE_CLASSES[tone] : 'text-[var(--text-muted)]'}`}>
-              {task.due_date ? formatDate(task.due_date, task.due_time) : t('task.no_date')}
-            </span>
 
             {/* THE CONTROLS SHARE THE FACTS LINE — third arrangement, and his.
                 They were mixed in among wrapping chips, then a stacked column
@@ -504,12 +588,16 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
                 between them.
 
                 On one line there is no hole and the card loses a row entirely.
-                The date stops flying to the screen edge too — it now sits beside
-                the controls, a sensible distance from what it belongs to.
 
-                THE DATES STILL LINE UP, which was the whole point of the
-                previous fix: this group is flex-none and always exactly the same
-                width, so every date ends at the same x.
+                CORRECTED: two claims here described the arrangement that ended
+                on 2026-09-19. It said "the date stops flying to the screen edge
+                — it now sits beside the controls", and "THE DATES STILL LINE UP
+                … this group is flex-none and always exactly the same width, so
+                every date ends at the same x". The date is no longer at this end
+                of the line at all; it leads it. What is still true, and still
+                the reason this group is flex-none, is that these three controls
+                occupy the same width on every row — so the right edge of the
+                facts is a straight line down the list whatever the row holds.
 
                 What this gives up is the clean separation the column bought.
                 The difference from the FIRST arrangement, which he rejected, is
