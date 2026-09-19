@@ -121,6 +121,12 @@ the worse failure.
 - `assignment.effectiveAssignee` — the avatar names the creator when nobody has taken the task.
 - `formatDate.formatStamp` — `stampOf` moved out of HistoryList so the row and the History
   screen print an instant the same way. No behaviour change to History.
+- **Tapping a History row opens the task, read-only** (2026-09-19). `TaskDetailSheet` gains a
+  `readOnly` flag rather than gaining a twin: no Edit button, no ⋯ menu, no completion circle
+  to press, no reminder/calendar switches, no recurrence editor, and the checklist prints its
+  marks instead of offering them. The footer keeps the row's own way back — Επαναφορά /
+  Ξανάνοιγμα — passed in from HistoryList so it is the same handler, not a second one. The
+  sheet also shows the one line the live sheet cannot: how the task ended.
 
 **Two pre-existing bugs fixed on the way, neither of them asked for**
 - `TaskRecord` never carried `completed_at`, so `response_model` stripped it and
@@ -199,6 +205,9 @@ looked at in a browser**, by anybody, in any account.
    covered, but nothing proves the button is wired to it.
 9. **Completed rows in the Calendar**, which should stop showing the swipe tray through
    themselves. That bleed predates all of this work.
+10. **The read-only sheet, in every one of its four kinds** — completed, deleted, missed,
+    rejected. A missed occurrence is the one with no footer button, and nothing has confirmed
+    the sheet looks right with an empty footer bar.
 
 ## Carried forward, still unwatched from earlier work
 

@@ -11,6 +11,23 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
+- **A History row opens the task, read-only (2026-09-19). NOBODY HAS OPENED ONE.**
+  The owner asked to tap into the History tab and see details, and answered the question that
+  decides the shape — «διαβάζεις ή πειράζεις;» — with **«οπως οταν ειναι ανοιχτο απλα να μην
+  εχχει επεξεργασία»**. So `TaskDetailSheet` gained a `readOnly` mode rather than a twin: the
+  point of the request is that a finished task looks exactly like a live one, and a parallel
+  component drifts from this one field by field. Every door to a write is closed rather than
+  dimmed — no Edit, no ⋯ menu, no completion circle, and the reminder / calendar / repeat rows
+  are ABSENT, because all three are instructions about a future a deleted task does not have.
+  The footer keeps the row's own Επαναφορά / Ξανάνοιγμα, his call, passed in as the same
+  handler the row already uses. The sheet shows one thing the live one cannot: how the task
+  ended, built from the same `lifeLine` the row prints so the two can never disagree.
+
+  Evidence: `pytest` 545 passed, `npm run check` exit 0, `vite build` clean, `eslint` clean on
+  all three touched components. **Not verified: nobody has tapped a row.** The four kinds
+  (completed / deleted / missed / rejected) differ in the footer, and the missed one — the only
+  kind with no way back — has never been drawn with an empty footer bar.
+
 - **A completion by somebody else is a handover, not a finished fact (2026-09-17, migration
   applied and deployed 2026-09-18). NOBODY HAS LOOKED AT IT YET.**
   The owner closed a task a colleague had created in their shared workspace and reported it as

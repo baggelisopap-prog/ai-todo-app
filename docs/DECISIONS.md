@@ -1,6 +1,19 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: History opens the SAME sheet, with every door to a write closed
+The owner asked to tap a History row and see details. Three answers were real, and the question put to him was the one that separates them — «διαβάζεις ή πειράζεις;». His answer decided it: **«οπως οταν ειναι ανοιχτο απλα να μην εχχει επεξεργασία»**.
+
+**So a `readOnly` flag on `TaskDetailSheet`, not a second component.** That is the whole point of what he asked for: a finished task has to look *exactly* like a live one. A parallel reading-only sheet would drift from this one field by field — and the field it quietly stopped showing would be the one somebody opened the screen to check. The cost is honest and worth naming: `TaskDetailSheet` is already 1,146 lines and this adds a mode to it. It was acceptable because most of the sheet is ALREADY gated behind `isEditing`, so the flag had to close only the handful of controls that are live in read mode.
+
+**Rejected: showing the live, editable sheet as-is.** Zero new code, and wrong in a way that would only show up later — it offers a reminder and a calendar sync on a task that has been deleted. A reminder is an instruction about the future, and a deleted task has no future to act on. Those two switches and the recurrence row are therefore ABSENT in read-only rather than disabled: a switch you cannot flip still invites you to try, and then has to explain itself.
+
+**Rejected: expanding the row in place.** Faster to scan down a list of ten, and it collapses the moment a task has a real description or an eight-item checklist — which is exactly the task somebody taps.
+
+**The footer keeps one button, and that was his call** («το πρώτο, βάλε το κουμπί»): where a live task shows Επεξεργασία, a history row shows its own way back — Επαναφορά for a deleted task, Ξανάνοιγμα for a completed one. It is not a second implementation; History passes the same handler its row already uses, so the two buttons are one act reached two ways. A missed occurrence has no way back and its footer is simply empty, which is the same rule the row has followed since this screen was built.
+
+**One thing the read-only sheet shows that the live one cannot**: how the task ended — «Μπήκε 3 Σεπ → Ολοκληρώθηκε 17 Σεπ 14:32 · από τη Μαρία». It is composed by HistoryList from the same `lifeLine` the row prints, not rebuilt inside the sheet, so a row and its sheet can never disagree about how a task finished.
+
 ### Decision: a handed-back task stops being a row and becomes a notice — with a way back
 **The owner saw the first version on a phone and the verdict was «πεφτει το ένα γραμμα πανω στο αλλο».** He was describing a real defect, and it was not the layout: the swipe tray — «Αλλαγή» / «Διαγραφή» — is absolutely positioned behind EVERY row and permanently mounted, and `isCompleted` faded the whole `<article>` to 70%. Opacity on an element fades its own background too, so the tray read straight through the title and the date. Two layers of text, not bad alignment. **It had been invisible until the handover work only because a completed task used to leave every list instantly — but it was never only about handovers: the Calendar lists completed rows permanently and had the same bleed from the day that opacity was written.** Fixed at the root: the fade moved off the card and onto the content block inside it, so the card's background stays solid everywhere.
 

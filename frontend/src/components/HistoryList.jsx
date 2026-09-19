@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import TaskDetailSheet from './TaskDetailSheet';
 import { useTranslation } from 'react-i18next';
 import { restoreTask } from '../api';
 import { uiLocale, toLocalISODate, formatDate, formatStamp } from '../utils/formatDate';
@@ -162,28 +163,21 @@ const ACTIONS = {
   },
 };
 
-function HistoryRow({ row, onAct, isBusy }) {
+function HistoryRow({ row, onAct, isBusy, onOpen, nameFor }) {
   const { t } = useTranslation();
-  // id → name, for the one label on this row that needs it. Bundled into a
-  // single object rather than passed as two arguments because lifeLine hands it
-  // straight down to eventLine, and both halves travel together: who I am
-  // decides «από εσένα» versus a name, and the lookup turns the id into
-  // something readable. personFor answers null on a solo account, which is
-  // correct — there is nobody else there to have closed anything.
-  const { myId, personFor } = useMembers();
-  const nameFor = {
-    myId,
-    // null, not a placeholder: the caller has a whole sentence for the case
-    // where the person is gone, and a placeholder here would fill a slot that
-    // expects a first name.
-    of: (workspaceId, userId) => personFor(workspaceId, userId)?.display_name || null,
-  };
   const { kind, task } = row;
   const style = KIND_STYLES[kind];
   const action = ACTIONS[kind];
 
   return (
-    <li className="flex items-start gap-3 py-2.5 px-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)]">
+    /* The whole row opens the task, EXCEPT the button — which is why that
+       button stops the click rather than the row checking what was hit. The
+       live rows solve the same problem with a data-no-toggle attribute and a
+       closest() lookup; there is exactly one island here, so one
+       stopPropagation is the honest version of the same rule. */
+    <li
+      onClick={() => onOpen(row)}
+      className="flex items-start gap-3 py-2.5 px-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
       <span
         aria-hidden="true"
         className="mt-0.5 w-5 h-5 flex-shrink-0 rounded-full flex items-center justify-center text-xs font-semibold bg-[var(--bg-hover)]"
@@ -203,7 +197,7 @@ function HistoryRow({ row, onAct, isBusy }) {
       {action && (
         <button
           type="button"
-          onClick={() => onAct(row)}
+          onClick={(e) => { e.stopPropagation(); onAct(row); }}
           disabled={isBusy}
           className="flex-shrink-0 px-2.5 py-1 rounded-md text-xs border border-[var(--border-medium)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors"
         >
@@ -217,6 +211,10 @@ function HistoryRow({ row, onAct, isBusy }) {
 function HistoryList({ rows, onTaskUpdate, onTaskRestored, onShowToast }) {
   const { t } = useTranslation();
   const [busyId, setBusyId] = useState(null);
+  // Which row is open, by record_id. The id and not the row object, so the
+  // open sheet follows the row across a refetch instead of holding a stale copy.
+  const [openId, setOpenId] = useState(null);
+  const { myId, personFor } = useMembers();
   const now = new Date();
 
   /**
@@ -259,6 +257,26 @@ function HistoryList({ rows, onTaskUpdate, onTaskRestored, onShowToast }) {
 
   const groups = groupHistoryByDay(rows);
 
+  // The sheet needs the same sentence the row prints, built the same way — see
+  // lifeLine. Resolved here rather than inside the sheet because this is the
+  // screen that knows a task's history; the sheet only knows a task.
+  // id → name, built ONCE for both the rows and the sheet. Bundled into a
+  // single object rather than passed as two arguments because lifeLine hands it
+  // straight down to eventLine, and both halves travel together: who I am
+  // decides «από εσένα» versus a name, and the lookup turns the id into
+  // something readable.
+  //
+  // `of` answers null rather than a placeholder when the person is gone: the
+  // caller has a whole sentence for that case, and a placeholder here would
+  // fill a slot built for a first name. personFor also answers null on a solo
+  // account, which is correct — there is nobody else to have closed anything.
+  const nameFor = {
+    myId,
+    of: (workspaceId, userId) => personFor(workspaceId, userId)?.display_name || null,
+  };
+  const openRow = rows.find((r) => r.task.record_id === openId) || null;
+  const openAction = openRow ? ACTIONS[openRow.kind] : null;
+
   return (
     <div className="space-y-5">
       {groups.map((group) => (
@@ -273,11 +291,40 @@ function HistoryList({ rows, onTaskUpdate, onTaskRestored, onShowToast }) {
                 row={row}
                 onAct={handleAct}
                 isBusy={busyId === row.task.record_id}
+                onOpen={(r) => setOpenId(r.task.record_id)}
+                nameFor={nameFor}
               />
             ))}
           </ul>
         </section>
       ))}
+
+      {/* Read-only, because a finished task should look exactly like a live one
+          and do nothing — the owner's answer: «οπως οταν ειναι ανοιχτο απλα να
+          μην εχχει επεξεργασία». The one action it keeps is the row's own way
+          back, so deciding you want a task after reading it does not mean
+          closing the sheet and hunting for the row again. */}
+      {openRow && (
+        <TaskDetailSheet
+          task={openRow.task}
+          readOnly
+          historyLine={lifeLine(openRow, t, nameFor)}
+          footerAction={openAction ? {
+            label: t(openAction.labelKey),
+            busyLabel: t(openAction.busyKey),
+            isBusy: busyId === openRow.task.record_id,
+            onAct: async () => {
+              await handleAct(openRow);
+              // Closed only after the act, so a failure leaves the sheet open
+              // with its toast rather than dropping the user back to a list
+              // where nothing appears to have happened.
+              setOpenId(null);
+            },
+          } : null}
+          onClose={() => setOpenId(null)}
+          onShowToast={onShowToast}
+        />
+      )}
     </div>
   );
 }

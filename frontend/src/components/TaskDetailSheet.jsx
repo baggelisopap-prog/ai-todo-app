@@ -243,7 +243,32 @@ const INPUT_CLASSES =
  * they do — and say why they cannot act, instead of looking disabled and
  * responding anyway.
  */
-function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskDeleted, onShowToast }) {
+/**
+ * `readOnly` is how the History tab reads a task without being able to change
+ * it, added 2026-09-19 on the owner's answer to "διαβάζεις ή πειράζεις;" —
+ * «οπως οταν ειναι ανοιχτο απλα να μην εχχει επεξεργασία».
+ *
+ * A FLAG ON THIS SHEET RATHER THAN A SECOND, READING-ONLY SHEET. The whole
+ * point of what he asked for is that a finished task looks exactly like a live
+ * one; a parallel component would drift from this one field by field, and the
+ * thing that drifts is what the reader is trying to check.
+ *
+ * It closes every door to a write rather than dimming them: there is no Edit
+ * button, no ⋯ menu, no completion circle to press, no reminder or calendar
+ * switch, and the checklist prints its marks instead of offering them. A
+ * disabled control on a deleted task would still be asking a question that has
+ * no good answer.
+ *
+ * `footerAction` is the one exception, and it is the owner's call: opening a
+ * row to decide you want it back and then having to close it again and hunt
+ * for the row is two steps for one decision. History passes its OWN restore /
+ * reopen handler, so the button here and the button on the row are literally
+ * the same act.
+ *
+ * `historyLine` is the only thing this sheet shows that the live one cannot:
+ * how the task ended. Without it this would just be an old card.
+ */
+function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskDeleted, onShowToast, readOnly = false, footerAction = null, historyLine = null }) {
   useModalBehavior(onClose);
   const { t } = useTranslation();
   const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast });
@@ -540,21 +565,36 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
         {/* Header stays put while the body scrolls, so the circle and the menu
             are reachable without scrolling back up on a long task. */}
         <div className="flex items-start gap-3 p-4 border-b border-[var(--border-subtle)] flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => actions.toggleComplete(variant)}
-            className={`tap-44 w-5 h-5 mt-1 rounded-full flex-shrink-0 flex items-center justify-center transition-all
-              ${isCompleted
-                ? 'bg-[var(--success)] border-2 border-[var(--success)]'
-                : 'border-2 border-[var(--border-medium)] hover:border-[var(--text-secondary)]'}`}
-            aria-label={
-              variant === 'inbox'
-                ? t('actions.approve')
-                : (isCompleted ? t('task.mark_incomplete') : t('task.mark_complete'))
-            }
-          >
-            {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
-          </button>
+          {readOnly ? (
+            /* The same circle, as a mark. Not a disabled button: a control that
+               cannot act is a question with no answer, and this one only ever
+               reported a state anyway. */
+            <span
+              aria-hidden="true"
+              className={`w-5 h-5 mt-1 rounded-full flex-shrink-0 flex items-center justify-center
+                ${isCompleted
+                  ? 'bg-[var(--success)] border-2 border-[var(--success)]'
+                  : 'border-2 border-[var(--border-medium)]'}`}
+            >
+              {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => actions.toggleComplete(variant)}
+              className={`tap-44 w-5 h-5 mt-1 rounded-full flex-shrink-0 flex items-center justify-center transition-all
+                ${isCompleted
+                  ? 'bg-[var(--success)] border-2 border-[var(--success)]'
+                  : 'border-2 border-[var(--border-medium)] hover:border-[var(--text-secondary)]'}`}
+              aria-label={
+                variant === 'inbox'
+                  ? t('actions.approve')
+                  : (isCompleted ? t('task.mark_incomplete') : t('task.mark_complete'))
+              }
+            >
+              {isCompleted && <CheckIcon className="w-3 h-3 text-white" />}
+            </button>
+          )}
 
           {/* While editing, the heading IS the field. It used to be printed
               twice on one screen — here, and again inside a box captioned
@@ -586,6 +626,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             </h2>
           )}
 
+          {!readOnly && (
           <TaskMenu
             isPending={isPending}
             isCompleted={isCompleted}
@@ -601,6 +642,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             onDelete={handleDelete}
             t={t}
           />
+          )}
 
           <button
             type="button"
@@ -644,6 +686,19 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                 )}
               </div>
 
+              {/* «Μπήκε 3 Σεπ → Ολοκληρώθηκε 17 Σεπ 14:32 · από τη Μαρία».
+                  The only thing this sheet says that the live one cannot, and
+                  the reason the History tab is worth opening at all — without
+                  it this is just an old card. Composed by HistoryList, which
+                  already builds exactly this sentence for the row itself, so
+                  the row and the sheet can never disagree about how a task
+                  ended. */}
+              {historyLine && (
+                <p className="text-xs text-[var(--text-secondary)] bg-[var(--bg-hover)] rounded-md px-2.5 py-1.5">
+                  {historyLine}
+                </p>
+              )}
+
               {showDescription && (
                 <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
                   {task.description}
@@ -658,17 +713,30 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                   <ul className="space-y-0.5">
                     {displayChecklist.map((item, index) => (
                       <li key={index}>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleChecklistItem(index)}
-                          disabled={pendingToggleIdx !== null}
-                          className="flex items-center gap-2 w-full text-left py-1.5 px-2 rounded text-sm hover:bg-[var(--bg-hover)] transition-colors disabled:cursor-wait"
-                        >
-                          {item.done ? <CheckedBox /> : <EmptyBox />}
-                          <span className={item.done ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}>
-                            {item.text}
+                        {/* READ-ONLY PRINTS THE SAME ROW WITHOUT THE OFFER.
+                            What the reader wants from a finished task is which
+                            steps were actually done — so the boxes stay, and
+                            only the ability to change them goes. */}
+                        {readOnly ? (
+                          <span className="flex items-center gap-2 w-full py-1.5 px-2 text-sm">
+                            {item.done ? <CheckedBox /> : <EmptyBox />}
+                            <span className={item.done ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}>
+                              {item.text}
+                            </span>
                           </span>
-                        </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleChecklistItem(index)}
+                            disabled={pendingToggleIdx !== null}
+                            className="flex items-center gap-2 w-full text-left py-1.5 px-2 rounded text-sm hover:bg-[var(--bg-hover)] transition-colors disabled:cursor-wait"
+                          >
+                            {item.done ? <CheckedBox /> : <EmptyBox />}
+                            <span className={item.done ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}>
+                              {item.text}
+                            </span>
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -684,6 +752,12 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                   the row. Here they are labelled, genuinely disabled when they
                   cannot act, and say what is missing instead of waiting to be
                   tapped before explaining. */}
+              {/* A reminder, a calendar sync and a repeat pattern are all
+                  instructions about the FUTURE. On a task that is finished or
+                  deleted they have no future to act on, so they are absent
+                  rather than disabled — a switch you cannot flip still invites
+                  you to try. */}
+              {!readOnly && (
               <div className="space-y-3 pt-1">
                 <Switch
                   label={t('task.notification_label')}
@@ -722,6 +796,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                   </span>
                 </button>
               </div>
+              )}
             </>
           ) : (
             <>
@@ -1107,7 +1182,23 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
         </div>
 
         <div className="flex items-center gap-2 p-4 border-t border-[var(--border-subtle)] flex-shrink-0">
-          {!isEditing ? (
+          {readOnly ? (
+            /* Where Edit sits on a live task. History passes its own restore /
+               reopen handler, so this button and the one on the row are the
+               same act reached two ways — the owner's call: «το πρώτο, βάλε το
+               κουμπί». A row whose kind has no way back (a missed occurrence)
+               passes nothing and the footer is simply empty. */
+            footerAction && (
+              <button
+                type="button"
+                onClick={footerAction.onAct}
+                disabled={footerAction.isBusy}
+                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)] disabled:bg-[var(--bg-hover)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed transition-colors"
+              >
+                {footerAction.isBusy ? footerAction.busyLabel : footerAction.label}
+              </button>
+            )
+          ) : !isEditing ? (
             <button
               type="button"
               onClick={startEditing}
