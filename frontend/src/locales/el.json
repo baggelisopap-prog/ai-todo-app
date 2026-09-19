@@ -599,8 +599,8 @@
     "task_reopened": "{{actor}}: ξανάνοιξε «{{task}}»"
   },
   "handover": {
-    "closed_by": "Ο/Η {{name}} το ολοκλήρωσε · {{when}}",
-    "closed_by_former": "Ολοκληρώθηκε από πρώην μέλος · {{when}}",
+    "notice_by": "Ο/Η {{name}} ολοκλήρωσε",
+    "notice_by_former": "Ολοκληρώθηκε από πρώην μέλος",
     "ok": "ΟΚ"
   },
   "color": {

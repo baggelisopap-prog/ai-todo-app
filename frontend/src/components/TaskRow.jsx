@@ -26,6 +26,7 @@ import {
   BellFilledIcon,
   BellOutlineIcon,
   TrashIcon,
+  ReopenIcon,
 } from './TaskIcons';
 
 // The priority is the COLOUR of the completion circle's ring, and nothing else.
@@ -211,8 +212,20 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
     'shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]',
     'transition-shadow cursor-pointer',
     isSelected ? 'ring-2 ring-[var(--border-focus)]/20' : '',
-    isRejected ? 'opacity-60' : isCompleted ? 'opacity-70' : '',
   ].filter(Boolean).join(' ');
+
+  // FADED CONTENT, SOLID CARD — and the split is the whole point.
+  //
+  // These two classes sat on the <article> itself until 2026-09-19, which faded
+  // the card's own BACKGROUND along with its text. The swipe tray is absolutely
+  // positioned behind every row and always mounted, so a translucent card let
+  // «Αλλαγή» and «Διαγραφή» read straight through the title and the date. The
+  // owner's words for it: «πεφτει το ένα γραμμα πανω στο αλλο».
+  //
+  // It was invisible until the handover work, because a completed task used to
+  // leave every list instantly — but it was never only about handovers: the
+  // Calendar lists completed rows permanently and had the same bleed all along.
+  const contentClasses = isRejected ? 'opacity-60' : isCompleted ? 'opacity-70' : '';
 
   function handleClick(e) {
     // The menu and the completion circle live inside the row but are not "open
@@ -253,6 +266,79 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
   // How far the row is displaced: following the finger mid-swipe, or parked
   // open over the tray.
   const offset = isTrayOpen ? -TRAY_WIDTH_PX : swipe.dx;
+
+  // A task somebody else closed, waiting for this person's OK, STOPS BEING A
+  // ROW. Chosen by the owner from three drawn options, and the reasoning is his:
+  // the work is done, so the thing on screen should not go on pretending to be
+  // work. No completion circle to press, no priority ring, no swipe tray, no
+  // bell or calendar — a sentence saying what happened, and the two answers to
+  // it.
+  //
+  // It replaces the card rather than dressing it, which is also what finally
+  // removed the bug he reported: the old version kept the card and faded it to
+  // 70%, and a translucent card let the swipe tray's «Αλλαγή» and «Διαγραφή»
+  // read straight through the text. (The fade itself is fixed below as well,
+  // because the Calendar shows completed rows too and had the same bleed.)
+  if (handover) {
+    const closedByName = closedBy?.display_name;
+    return (
+      <div className="flex items-start gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-[var(--shadow-card)] px-2.5 py-[9px]">
+        <span
+          aria-hidden="true"
+          className="mt-px w-5 h-5 rounded-full flex-none flex items-center justify-center bg-[var(--success-bg)] text-[var(--success)]"
+        >
+          <CheckIcon className="w-3 h-3" />
+        </span>
+
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+          <p className="text-xs leading-[1.35] text-[var(--text-secondary)] truncate">
+            {closedByName
+              ? t('handover.notice_by', { name: closedByName })
+              : t('handover.notice_by_former')}{' '}
+            {/* The task's own name, struck through — the one place this notice
+                still looks like the task it replaced, so the eye finds which
+                one it is without reading the whole sentence. */}
+            <span className="line-through text-[var(--text-muted)]">{task.task_name}</span>
+          </p>
+
+          <div className="flex items-center gap-1.5">
+            <span className="flex-1 min-w-0 truncate text-[10.5px] leading-[1.3] text-[var(--text-muted)] tabular-nums">
+              {formatStamp(task.completed_at)}
+            </span>
+
+            {/* «Ξανάνοιγμα» is the word the History screen already uses for this
+                exact act, reused rather than re-invented. It carries its label
+                and not just its shape: this is a rare action, and an icon seen
+                once a month is guessed at rather than remembered. */}
+            <button
+              type="button"
+              onClick={actions.uncomplete}
+              disabled={Boolean(actions.pendingAction) || actions.isAcknowledging}
+              className="tap-40 flex-none inline-flex items-center gap-1.5 min-h-[28px] px-2.5 rounded-md border border-[var(--border-medium)] text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-60"
+            >
+              <ReopenIcon className="w-3.5 h-3.5" />
+              {t('browse.reopen')}
+            </button>
+
+            <button
+              type="button"
+              onClick={actions.acknowledge}
+              disabled={actions.isAcknowledging || Boolean(actions.pendingAction)}
+              className="tap-40 flex-none min-h-[28px] px-3 rounded-md text-[11px] font-semibold text-white bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-60"
+            >
+              {t('handover.ok')}
+            </button>
+          </div>
+
+          {actions.actionError && (
+            <p className="text-[11px] text-[var(--danger)]">
+              {`${t('errors.failed_update')}: ${actions.actionError}`}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     // The mark goes on the wrapper, not on the card inside it: this element's
@@ -319,7 +405,7 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
         }}
       >
       {/* The circle, the title, the line of facts, and the controls under them. */}
-      <div className="flex items-start gap-2 py-[9px] px-2.5">
+      <div className={`flex items-start gap-2 py-[9px] px-2.5 ${contentClasses}`}>
         <button
           type="button"
           data-no-toggle
@@ -482,48 +568,6 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
               />
             </span>
           </div>
-
-          {/* THE HANDOVER STRIP. Drawn only for the person who is owed the
-              news — the creator or the assignee, never the colleague who did
-              the closing, for whom the task left every list the moment they
-              ticked it.
-
-              It sits INSIDE the row rather than being a dialog on top of the
-              app, which was the alternative and was rejected with the owner:
-              a popup that is dismissed in a hurry is gone, and what it was
-              telling you is gone with it. Here the task is simply still there,
-              struck through, until it is acknowledged — so missing it costs
-              nothing and reading it later still works.
-
-              data-no-toggle and stopPropagation so pressing OK does not also
-              open the task sheet, the same guard the controls line uses. */}
-          {handover && (
-            <div
-              data-no-toggle
-              onClick={(e) => e.stopPropagation()}
-              className="mt-1 flex items-center gap-2 rounded-md bg-[var(--bg-hover)] pl-2 pr-1 py-1"
-            >
-              <span className="flex-1 min-w-0 truncate text-[11px] leading-[1.3] text-[var(--text-secondary)]">
-                {closedBy?.display_name
-                  ? t('handover.closed_by', {
-                      name: closedBy.display_name,
-                      when: formatStamp(task.completed_at),
-                    })
-                  // Somebody who has left the room has no name to print, and
-                  // «Ο/Η Πρώην μέλος το ολοκλήρωσε» is not a Greek sentence.
-                  : t('handover.closed_by_former', { when: formatStamp(task.completed_at) })}
-              </span>
-              <button
-                type="button"
-                data-no-toggle
-                onClick={actions.acknowledge}
-                disabled={actions.isAcknowledging}
-                className="tap-40 flex-none px-2.5 py-0.5 rounded text-[11px] font-semibold text-white bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-60"
-              >
-                {t('handover.ok')}
-              </button>
-            </div>
-          )}
 
           {(actions.actionError || actions.deleteError) && (
             <p className="mt-1 text-[11px] text-[var(--danger)]">

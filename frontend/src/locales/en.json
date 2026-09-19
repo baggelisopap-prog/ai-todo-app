@@ -599,8 +599,8 @@
     "task_reopened": "{{actor}}: reopened «{{task}}»"
   },
   "handover": {
-    "closed_by": "{{name}} completed it · {{when}}",
-    "closed_by_former": "Completed by a former member · {{when}}",
+    "notice_by": "{{name}} completed",
+    "notice_by_former": "Completed by a former member",
     "ok": "OK"
   },
   "color": {

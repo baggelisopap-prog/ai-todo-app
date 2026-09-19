@@ -108,7 +108,16 @@ the worse failure.
   counts in `TaskFilterProvider` (which must match Browse exactly or the number beside a
   category disagrees with the list it opens). **The Inbox was left alone** — it is about
   approving AI suggestions, not about finished work.
-- `TaskRow` draws the strip: struck-through title, «Ο/Η Χ το ολοκλήρωσε · 17 Σεπ 14:32», ΟΚ.
+- `TaskRow` draws **a notice instead of a row** for a handover (2026-09-19, redesigned with
+  him from three rendered options): no circle, no priority ring, no bell or calendar, no swipe
+  tray — «Ο/Η Μαρία ολοκλήρωσε ~~Έλεγχος θέρμανσης Β4~~», the timestamp, and two buttons,
+  **Ξανάνοιγμα** and **ΟΚ**. The first version put a strip inside the card and he rejected it
+  on sight; see DECISIONS.md.
+- **The bug that rejection exposed, fixed at the root**: `isCompleted` faded the whole
+  `<article>` to 70%, which fades the card's own BACKGROUND, so the permanently-mounted swipe
+  tray read through the text — «πεφτει το ένα γραμμα πανω στο αλλο». The fade now sits on the
+  content block inside the card. **This was never only about handovers**: the Calendar lists
+  completed rows permanently and had the same bleed all along.
 - `assignment.effectiveAssignee` — the avatar names the creator when nobody has taken the task.
 - `formatDate.formatStamp` — `stampOf` moved out of HistoryList so the row and the History
   screen print an instant the same way. No behaviour change to History.
@@ -184,6 +193,12 @@ looked at in a browser**, by anybody, in any account.
    «από την εφαρμογή» on the older ones.
 7. **The avatar now showing on untaken tasks** in a shared room — a face appears on rows that
    had none.
+8. **The notice itself**, and both its buttons. The DESIGN was seen and chosen by the owner as
+   a rendered page; the React version of it has never been on a screen. Ξανάνοιγμα in
+   particular has no test of its own — it reuses the existing uncomplete action, which is
+   covered, but nothing proves the button is wired to it.
+9. **Completed rows in the Calendar**, which should stop showing the swipe tray through
+   themselves. That bleed predates all of this work.
 
 ## Carried forward, still unwatched from earlier work
 

@@ -32,7 +32,17 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   poller, a missed occurrence, **and every task completed before today**. There is no backfill,
   which is what stops several hundred finished tasks reappearing on a list at deploy.
 
-  **Corrected 2026-09-19, one day later, by the owner reading the screen.** Surfacing
+  **Redesigned 2026-09-19 after he saw it on a phone: «πεφτει το ένα γραμμα πανω στο αλλο».**
+  A real defect, and not the layout — the swipe tray sits behind every row permanently, and
+  `isCompleted` faded the whole card to 70%, which fades its background too, so «Αλλαγή» and
+  «Διαγραφή» read through the text. Invisible until now only because completed tasks used to
+  leave every list instantly; **the Calendar has had the same bleed since the day that opacity
+  was written.** Fixed at the root (the fade moved onto the content, not the card), and the
+  handover row was rebuilt from three options drawn for him as a rendered page: it is now a
+  **notice**, not a task row — no circle, no tray — carrying **Ξανάνοιγμα** and **ΟΚ**. His
+  condition for choosing it: «να εχει και ενα κουμπι … και να ξανα ανοιγη το τασκ αμα θελω».
+
+  **Corrected 2026-09-19, by the owner reading the screen.** Surfacing
   `completed_source` (below) made a four-week-old label visible for the first time, and in a
   shared room it was a lie: Browse → Ιστορικό printed **«από εσένα»** under a task his
   colleague had closed. That suffix names the CHANNEL a completion came through, and the word
