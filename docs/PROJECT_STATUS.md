@@ -11,7 +11,7 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
 
 ## Shipped and live ✅
 
-- **A History row opens the task, read-only (2026-09-19). NOBODY HAS OPENED ONE.**
+- **A History row opens the task, read-only (2026-09-19). Tried by the owner; not checklisted.**
   The owner asked to tap into the History tab and see details, and answered the question that
   decides the shape — «διαβάζεις ή πειράζεις;» — with **«οπως οταν ειναι ανοιχτο απλα να μην
   εχχει επεξεργασία»**. So `TaskDetailSheet` gained a `readOnly` mode rather than a twin: the
@@ -24,12 +24,14 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   ended, built from the same `lifeLine` the row prints so the two can never disagree.
 
   Evidence: `pytest` 545 passed, `npm run check` exit 0, `vite build` clean, `eslint` clean on
-  all three touched components. **Not verified: nobody has tapped a row.** The four kinds
-  (completed / deleted / missed / rejected) differ in the footer, and the missed one — the only
-  kind with no way back — has never been drawn with an empty footer bar.
+  all three touched components — **and the owner then used the deployed app and reported «το
+  δοκιμαζω τωρα ola kala».** A real person on the real thing, which is the bar that counts.
+  **What that does NOT establish**: which of the four kinds (completed / deleted / missed /
+  rejected) he opened. They differ only in the footer, and the missed one — the only kind with
+  no way back — has still never been seen with its empty footer bar.
 
 - **A completion by somebody else is a handover, not a finished fact (2026-09-17, migration
-  applied and deployed 2026-09-18). NOBODY HAS LOOKED AT IT YET.**
+  applied and deployed 2026-09-18, tried by the owner 2026-09-19).**
   The owner closed a task a colleague had created in their shared workspace and reported it as
   a bug. It was not one — `access.can_write` has allowed exactly that since 2026-09-11, by his
   own decision. What WAS broken is the reason that decision was safe: a member may edit
@@ -90,9 +92,10 @@ AI-powered personal to-do app. Captures tasks (text/voice/image), auto-categoriz
   already-finished tasks stay gone from every list. **219 of those 376 carry a real
   `completed_at`** and are the rows whose History date becomes correct.
 
-  **NOT VERIFIED: nobody has opened the app.** The counts above are the only measurement that
-  exists; not one part of the feature has been watched working, in any account. Reasoning in
-  DECISIONS.md; the full list of what nobody has seen is in CURRENT_TASK.md.
+  **The owner has since used the deployed app — «το δοκιμαζω τωρα ola kala».** That retires
+  "nobody has seen it", and it is not a checklist: whether a handover was ever produced from
+  the SECOND account, and whether ΟΚ or Ξανάνοιγμα was actually pressed, nobody wrote down.
+  Reasoning in DECISIONS.md; what a second pass should still confirm is in CURRENT_TASK.md.
 
 - **History says when a task arrived and when it left, on one line (2026-09-17, `549f892`).**
   The owner's verdict on the screen was **«τώρα είναι χάος»**, and the cause was that neither

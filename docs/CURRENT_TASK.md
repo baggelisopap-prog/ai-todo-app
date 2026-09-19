@@ -1,4 +1,4 @@
-ACTIVE TASK — A completion by somebody else is a handover. Migration APPLIED, code deployed, NOBODY HAS LOOKED AT IT
+ACTIVE TASK — A completion by somebody else is a handover. Shipped, migrated, and tried by the owner in the real app
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **THE MIGRATION IS APPLIED (2026-09-18, by the owner) AND THE CODE IS PUSHED.** Read back
@@ -169,20 +169,32 @@ silently. That is the only reason there is evidence the screen still builds.
 
 ## What a person has actually SEEN
 
-**The migration landing, and nothing else.** Its effect was read back out of the live database
-(the numbers above) — so the columns exist, carry their defaults, and touched no existing row.
-That is a real measurement and it is the only one. **Not one line of the FEATURE has been
-looked at in a browser**, by anybody, in any account.
+**The migration landing**, read back out of the live database (the numbers above): the columns
+exist, carry their defaults, and touched no existing row.
 
-## What nobody has watched, and what would settle it
+**And the owner using the deployed app, 2026-09-19** — his words, in full: «το δοκιμαζω τωρα
+ola kala». That is a real person on the real thing, which is the bar this file cares about,
+and it is the reason the previous version of this section is gone rather than edited.
 
-1. **The whole feature, end to end.** Two accounts, a shared workspace, one closes the other's
-   task. Settles: does the strip appear, does OK remove the row, does the other person's list
-   clear immediately.
+**It is NOT a checklist, and the difference matters for whoever reads this next.** What that
+sentence establishes is that the app works and nothing is visibly broken. What it does not
+establish is which paths were exercised: whether a handover was produced from the second
+account at all, whether ΟΚ or Ξανάνοιγμα was ever pressed, and which of the History tab's four
+kinds were opened. Nobody wrote any of that down, including him — so the list below is what a
+second pass should still confirm, not a list of known failures.
+
+## What a second pass should still confirm
+
+1. **The handover end to end, from two accounts.** A shared workspace, one person closes the
+   other's task. Settles: does the notice appear for the right person, does ΟΚ remove it, does
+   Ξανάνοιγμα bring the task back for BOTH of them, and does the row leave the closer's list
+   immediately. This is the single most valuable thing left unconfirmed.
 2. ~~The migration itself.~~ **DONE 2026-09-18** — numbers above.
-3. **That no old task comes back.** The first list load after the deploy is the test: all 376
-   already-completed tasks carry `completed_by = NULL` and must stay gone. The counts say they
-   should; nobody has opened the app to confirm the list looks the same as yesterday.
+3. ~~That no old task comes back.~~ **SETTLED 2026-09-19, by absence.** All 376
+   already-completed tasks carry `completed_by = NULL` and had to stay gone; the owner opened
+   the deployed app and reported «ola kala». 376 finished tasks reappearing in his lists is not
+   something he would have described that way. Not a checklist item — a flood that did not
+   happen — but on this particular risk that is the whole of the evidence needed.
 4. **The History screen's dates.** They CHANGE with this deploy: **219 of the 376 completed
    tasks** have a real `completed_at` and will move from their creation date to their true
    completion date, and the «· από την εφαρμογή / από το AI» suffix starts appearing. The other
@@ -201,7 +213,8 @@ looked at in a browser**, by anybody, in any account.
 7. **The avatar now showing on untaken tasks** in a shared room — a face appears on rows that
    had none.
 8. **The notice itself**, and both its buttons. The DESIGN was seen and chosen by the owner as
-   a rendered page; the React version of it has never been on a screen. Ξανάνοιγμα in
+   a rendered page; whether the React version was ever on his screen depends on whether a
+   handover existed to show it, which is item 1. Ξανάνοιγμα in
    particular has no test of its own — it reuses the existing uncomplete action, which is
    covered, but nothing proves the button is wired to it.
 9. **Completed rows in the Calendar**, which should stop showing the swipe tray through
