@@ -24,8 +24,8 @@
     "webhook_manual": "Connected, but the webhook could not be added automatically. Add this URL in Hostaway under Settings → Webhooks, for the event message.received:",
     "tasks_enabled": "Create tasks from messages",
     "tasks_enabled_description": "A new guest message becomes a task.",
-    "auto_close_enabled": "Close the task when you reply",
-    "auto_close_enabled_description": "Replying to a guest closes the task it belongs to, within about two minutes."
+    "auto_close_enabled": "Close simple tasks when you reply",
+    "auto_close_enabled_description": "Only the simple ones (P3) close — «where's a good taverna?». The rest stop notifying you, but stay on the list."
   },
   "calendar": {
     "prev_month": "Previous month",

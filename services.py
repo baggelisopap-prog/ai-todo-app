@@ -46,8 +46,15 @@ HOSTAWAY_ESCALATION_INTERVALS = {
 # wants to watch auto-completion work before trusting it with anything that
 # matters («για αρχή, μην χάσω κανένα τασκ», 2026-08-13). P3 is "where's a
 # good taverna" and "we're out of toilet paper" — a wrong close costs
-# nothing. Add "P2" here when it has been seen working; that is the whole
-# change, both callers read this set.
+# nothing. Re-confirmed 2026-09-20, asked directly: P3 only.
+#
+# Adding "P2" is TWO lines, not one. This set, and the switch's label in
+# frontend/src/locales/{el,en}.json — «Κλείσιμο απλών task όταν απαντάς» /
+# auto_close_enabled_description, which names the priorities out loud. The
+# label used to promise «κλείνει το task του μέσα σε ~2 λεπτά» for every
+# priority while this set said {"P3"}, and the owner lost his own time
+# wondering why his P1 stayed open. tests/test_auto_close_label_matches_the_code.py
+# fails if the two drift again.
 #
 # P1 is not a candidate and should not be added: replying to "I can't find
 # the keys" with "I'm coming in 20 minutes" is an answer, not a fix (design

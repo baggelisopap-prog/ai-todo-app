@@ -24,8 +24,8 @@
     "webhook_manual": "Συνδέθηκε, αλλά δεν μπήκε αυτόματα το webhook. Πρόσθεσε αυτό το URL στο Hostaway, στα Settings → Webhooks, για το event message.received:",
     "tasks_enabled": "Δημιουργία tasks από μηνύματα",
     "tasks_enabled_description": "Κάθε νέο μήνυμα πελάτη γίνεται task.",
-    "auto_close_enabled": "Κλείσιμο task όταν απαντάς",
-    "auto_close_enabled_description": "Όταν απαντάς σε πελάτη, κλείνει το task του μέσα σε ~2 λεπτά."
+    "auto_close_enabled": "Κλείσιμο απλών task όταν απαντάς",
+    "auto_close_enabled_description": "Κλείνει μόνο τα απλά (P3) — π.χ. «πού είναι καλή ταβέρνα;». Τα υπόλοιπα σταματούν να σε ειδοποιούν, αλλά μένουν στη λίστα."
   },
   "calendar": {
     "prev_month": "Προηγούμενος μήνας",
