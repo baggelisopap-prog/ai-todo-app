@@ -915,8 +915,18 @@ function HostawayConnectionView({ onShowToast }) {
       // details" arrived looking like confirmation, and the owner read the
       // tick and not the sentence — three times, across two sessions, while
       // the connection was in fact dead.
+      //
+      // And the sentence itself was only true for a 400. Every other failure
+      // — the server unable to encrypt the secret, a cold start timing out,
+      // no network — got the same words, sending the owner to re-check
+      // credentials that were already correct. api.js attaches the status and
+      // the server's own detail; a 400 really is the credentials, so it keeps
+      // the plain sentence, and anything else says what actually happened.
       console.error('Hostaway connect failed:', err);
-      onShowToast?.(t('hostaway.invalid'), 'error');
+      onShowToast?.(
+        err.status === 400 || !err.detail ? t('hostaway.invalid') : err.detail,
+        'error',
+      );
     } finally {
       setBusy(false);
     }

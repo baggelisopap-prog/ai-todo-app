@@ -110,6 +110,29 @@ def test_no_connection_reports_disconnected(monkeypatch):
     assert main.get_hostaway_status(user_id="user-1")["connected"] is False
 
 
+def test_a_broken_encryption_key_blames_the_server_not_the_user(monkeypatch):
+    """
+    HOSTAWAY_ENCRYPTION_KEY missing or wrong is a server misconfiguration, and
+    it lands AFTER the credentials have already been accepted by Hostaway. It
+    used to escape as a bare 500, which the screen reported as "Hostaway did
+    not accept those details" — sending the owner off to re-check credentials
+    that were provably fine.
+    """
+    state = _wire(monkeypatch)
+    monkeypatch.setattr(main.crypto, "encrypt_secret",
+                        lambda s: (_ for _ in ()).throw(RuntimeError("key not set")))
+
+    with pytest.raises(HTTPException) as caught:
+        main.connect_hostaway(
+            main.HostawayConnectRequest(account_id="147809", client_secret="s3cret"),
+            user_id="user-1",
+        )
+
+    assert caught.value.status_code == 500, "a 400 would read as 'your details are wrong'"
+    assert "HOSTAWAY_ENCRYPTION_KEY" in caught.value.detail
+    assert state["saved"] == [], "a connection was stored without an encrypted secret"
+
+
 def test_a_connection_without_a_webhook_says_so_on_every_read(monkeypatch):
     """
     webhook_id NULL means registration failed: the row exists, and not one

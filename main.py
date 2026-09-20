@@ -2385,8 +2385,25 @@ def connect_hostaway(
         # messages will not arrive until the webhook is added by hand.
         logging.error(f"[hostaway connect] Webhook registration failed for {user_id}: {e}")
 
+    # Encrypting is where a misconfigured environment shows up, and it used to
+    # show up as a bare 500 that the screen reported as "Hostaway did not
+    # accept those details" — blaming the user's credentials for a variable
+    # missing on the server. The secret is checked and good by this point; say
+    # what is actually wrong.
+    try:
+        encrypted = crypto.encrypt_secret(credentials.client_secret)
+    except Exception as e:
+        logging.exception(f"[hostaway connect] Could not encrypt the secret for {user_id}")
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Τα στοιχεία Hostaway είναι σωστά, αλλά ο server δεν μπόρεσε να τα "
+                "αποθηκεύσει με ασφάλεια (HOSTAWAY_ENCRYPTION_KEY). Δεν αποθηκεύτηκε τίποτα."
+            ),
+        ) from e
+
     repository.upsert_hostaway_connection(
-        user_id, credentials.account_id, crypto.encrypt_secret(credentials.client_secret), webhook_id
+        user_id, credentials.account_id, encrypted, webhook_id
     )
     # The category is created HERE and nowhere else — only a user who actually
     # connects Hostaway gets a locked, unrenameable category named after it.
