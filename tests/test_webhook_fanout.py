@@ -5,17 +5,40 @@ Fifteen staff share account 147809 (design §1.2, §9). Whoever answers, every
 copy closes on its own, because each colleague's poller sees the same reply.
 """
 import asyncio
+import base64
+
+import pytest
 
 import main
 from models import Category
 
 
+WEBHOOK_SECRET = "test-webhook-secret"
+
+
+def _authorized_headers():
+    """The Authorization header Hostaway sends on every delivery (2026-09-20).
+    Every test here is about what a REAL delivery does, so it carries valid
+    credentials; test_webhook_auth.py owns the rejection cases."""
+    pair = f"{main.hostaway_integration.HOSTAWAY_WEBHOOK_LOGIN}:{WEBHOOK_SECRET}"
+    return {"authorization": "Basic " + base64.b64encode(pair.encode()).decode()}
+
+
 class _FakeRequest:
-    def __init__(self, payload):
+    def __init__(self, payload, headers=None):
         self._payload = payload
+        self.headers = headers if headers is not None else _authorized_headers()
+        self.client = None
 
     async def json(self):
         return self._payload
+
+
+@pytest.fixture(autouse=True)
+def _webhook_secret(monkeypatch):
+    """Read from the environment at import time, so it is patched on the
+    module rather than through setenv."""
+    monkeypatch.setattr(main, "HOSTAWAY_WEBHOOK_SECRET", WEBHOOK_SECRET)
 
 
 def _post(payload):

@@ -927,9 +927,31 @@ function HostawayConnectionView({ onShowToast }) {
   }
 
   async function handleDisconnect() {
-    await disconnectHostaway();
-    setStatus({ connected: false });
-    setManualUrl(null);
+    // Guarded since 2026-09-20. Unguarded, a disconnect that failed ON THE WAY
+    // BACK — a dropped connection, a Render cold start timing out — left the
+    // two lines below unrun, so the screen kept showing the green tick for a
+    // connection the server had already deleted. The owner hit exactly that:
+    // a failure message and a tick at the same time, and no way to tell which
+    // one was lying. Re-reading the server's own answer is the only honest
+    // ending, whichever way the call went.
+    setBusy(true);
+    try {
+      await disconnectHostaway();
+      setStatus({ connected: false });
+      setManualUrl(null);
+    } catch (err) {
+      console.error('Hostaway disconnect failed:', err);
+      onShowToast?.(t('hostaway.disconnect_failed'));
+      try {
+        setStatus(await getHostawayStatus());
+      } catch {
+        // Even the re-read failed, so the screen cannot claim to know. Say
+        // nothing rather than keep a tick nobody has confirmed.
+        setStatus({ connected: false });
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!status) return null;
@@ -964,15 +986,33 @@ function HostawayConnectionView({ onShowToast }) {
     );
   }
 
+  // A connection whose webhook never registered receives nothing at all. It
+  // used to show the same green tick as a working one, with the truth in grey
+  // underneath — so the screen said "fine" about an integration that was deaf.
+  // The tick is for a connection that actually works; anything else warns.
+  const receiving = status.webhook_registered !== false;
+  const webhookUrl = manualUrl || status.webhook_url;
+
   return (
     <div className="space-y-4">
-      <p className="text-sm font-medium text-[var(--success)]">
-        {t('hostaway.connected')} ✓ · {status.account_id}
-      </p>
+      {receiving ? (
+        <p className="text-sm font-medium text-[var(--success)]">
+          {t('hostaway.connected')} ✓ · {status.account_id}
+        </p>
+      ) : (
+        <div className="space-y-1 rounded-lg border border-[var(--danger)] p-3">
+          <p className="text-sm font-medium text-[var(--danger)]">
+            ⚠️ {t('hostaway.no_webhook')} · {status.account_id}
+          </p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            {t('hostaway.no_webhook_description')}
+          </p>
+        </div>
+      )}
 
-      {manualUrl && (
+      {!receiving && webhookUrl && (
         <p className="text-xs text-[var(--text-secondary)] break-all">
-          {t('hostaway.webhook_manual')} {manualUrl}
+          {t('hostaway.webhook_manual')} {webhookUrl}
         </p>
       )}
 

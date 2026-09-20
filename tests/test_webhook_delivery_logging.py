@@ -10,17 +10,36 @@ and the wrong half of the fix (poll the API on a timer) would have been
 built on it.
 """
 import asyncio
+import base64
 import logging
 
+import pytest
+
 import main
+
+WEBHOOK_SECRET = "test-webhook-secret"
+
+
+def _authorized_headers():
+    """A delivery that got past the 2026-09-20 authentication check. These
+    tests are about what happens AFTER that, so they all carry it."""
+    pair = f"{main.hostaway_integration.HOSTAWAY_WEBHOOK_LOGIN}:{WEBHOOK_SECRET}"
+    return {"authorization": "Basic " + base64.b64encode(pair.encode()).decode()}
 
 
 class _FakeRequest:
     def __init__(self, payload):
         self._payload = payload
+        self.headers = _authorized_headers()
+        self.client = None
 
     async def json(self):
         return self._payload
+
+
+@pytest.fixture(autouse=True)
+def _webhook_secret(monkeypatch):
+    monkeypatch.setattr(main, "HOSTAWAY_WEBHOOK_SECRET", WEBHOOK_SECRET)
 
 
 def _post(payload):

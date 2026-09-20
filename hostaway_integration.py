@@ -215,14 +215,37 @@ def classify_message(message_text: str, user_id: str) -> dict:
 
 HOSTAWAY_WEBHOOK_EVENTS = ["message.received"]
 
+# The username half of the webhook's HTTP Basic credentials. Fixed, and not a
+# secret: Basic auth sends user AND password together, so only the password
+# carries any weight. It exists to give the pair a readable shape in the
+# Hostaway dashboard.
+HOSTAWAY_WEBHOOK_LOGIN = "ai-todo-app"
 
-def hostaway_register_webhook(credentials: HostawayCredentials, callback_url: str) -> Optional[int]:
+
+def hostaway_register_webhook(
+    credentials: HostawayCredentials,
+    callback_url: str,
+    password: Optional[str] = None,
+) -> Optional[int]:
     """
     Points the user's Hostaway account at our webhook, and returns its id.
 
+    `password` is the shared secret Hostaway will send back on every delivery,
+    as HTTP Basic credentials against HOSTAWAY_WEBHOOK_LOGIN — the only thing
+    separating a real guest message from anyone who can spell the URL. The
+    `login`/`password` pair is Hostaway's own documented mechanism for this;
+    the endpoint verifies it in main._hostaway_webhook_authorized.
+
     Looks before creating: reconnecting must not leave a trail of duplicate
-    webhooks all delivering the same guest message. Returns the existing id
-    when one already points at callback_url.
+    webhooks all delivering the same guest message.
+
+    But an existing webhook is reused ONLY if its login already matches. The
+    one registered before this feature existed carries no credentials at all,
+    and reusing it would leave the account permanently unauthenticated while
+    reporting success — the silent failure this whole change exists to remove.
+    A mismatch is deleted and recreated rather than patched: PUT on this
+    endpoint has never been called against a live account, and a delete we can
+    verify beats an update we cannot.
 
     POST here was ASSUMED until 2026-08-14, when it was called once against
     the owner's account: 200, with the new id at result.id (design spec,
@@ -236,18 +259,49 @@ def hostaway_register_webhook(credentials: HostawayCredentials, callback_url: st
     )
     existing.raise_for_status()
     for webhook in existing.json().get("result") or []:
-        if webhook.get("url") == callback_url:
-            logging.info(f"[hostaway] Reusing webhook {webhook['id']} for {credentials.account_id}")
+        if webhook.get("url") != callback_url:
+            continue
+        # Hostaway echoes `login` back on a GET; it never echoes the password,
+        # so this can confirm that SOME credentials are set but never that they
+        # are the current ones. A rotated password therefore needs a
+        # disconnect/reconnect, which deletes the webhook first — see below.
+        if webhook.get("login") == HOSTAWAY_WEBHOOK_LOGIN:
+            logging.info(
+                f"[hostaway] Reusing webhook {webhook['id']} for {credentials.account_id}"
+            )
             return webhook["id"]
+        logging.warning(
+            f"[hostaway] Webhook {webhook['id']} for {credentials.account_id} has no "
+            f"matching login — deleting and re-registering it with credentials"
+        )
+        hostaway_delete_webhook(credentials, webhook["id"])
+        break
+
+    payload = {"url": callback_url, "isEnabled": 1, "events": HOSTAWAY_WEBHOOK_EVENTS}
+    if password:
+        payload["login"] = HOSTAWAY_WEBHOOK_LOGIN
+        payload["password"] = password
+    else:
+        # Registering without a password produces a webhook this app will
+        # refuse on arrival, which looks exactly like Hostaway having gone
+        # quiet. Say so here, where the cause is still visible.
+        logging.error(
+            f"[hostaway] Registering webhook for {credentials.account_id} WITHOUT "
+            f"credentials — HOSTAWAY_WEBHOOK_SECRET is unset, and every delivery "
+            f"will be rejected"
+        )
 
     created = requests.post(
         "https://api.hostaway.com/v1/webhooks/unifiedWebhooks",
         headers=headers, timeout=10,
-        json={"url": callback_url, "isEnabled": 1, "events": HOSTAWAY_WEBHOOK_EVENTS},
+        json=payload,
     )
     created.raise_for_status()
     webhook_id = (created.json().get("result") or {}).get("id")
-    logging.info(f"[hostaway] Registered webhook {webhook_id} for {credentials.account_id}")
+    logging.info(
+        f"[hostaway] Registered webhook {webhook_id} for {credentials.account_id} "
+        f"(authenticated={bool(password)})"
+    )
     return webhook_id
 
 

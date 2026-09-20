@@ -69,6 +69,10 @@ Hostaway messages land **pre-approved**: `main.py`'s webhook calls `service.crea
 
 The research doc says email should land **pending**. That is the right call — a webhook from an authenticated integration is not an open mail address anyone can write to — but it means the app's two inbound channels behave differently. Worth stating in the design rather than discovering later.
 
+> **Correction, 2026-09-20.** The sentence above said "authenticated integration" while the webhook had no authentication at all: no signature, no secret, nothing. Since the URL appears in the app's own Settings screen and `accountId` is a six-digit identifier printed on the user's Hostaway settings page, anyone could POST invented guest messages — each one pre-approved, straight onto the list, one Gemini call apiece. So this paragraph's reasoning was sound and its premise was false, which is the worse of the two ways to be wrong.
+>
+> The premise is now true: `/webhooks/hostaway` verifies HTTP Basic credentials registered with the webhook (`HOSTAWAY_WEBHOOK_SECRET`, checked in `main._hostaway_webhook_authorized`) before it reads the body. **Pre-approved still depends on that check holding** — if the secret is ever removed, this decision has to be revisited, not just the endpoint.
+
 ---
 
 ## 6. Where we stopped

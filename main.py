@@ -14,8 +14,11 @@ Run with: uvicorn main:app --reload
 Interactive docs: http://localhost:8000/docs
 """
 
+import base64
+import binascii
 import logging
 import re
+import secrets as secrets_module  # `secrets` alone shadows the local name in run_scheduler
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File, Form, Depends
@@ -2060,6 +2063,64 @@ def _create_hostaway_task(
         return False
 
 
+HOSTAWAY_WEBHOOK_SECRET = os.getenv("HOSTAWAY_WEBHOOK_SECRET")
+
+
+def _hostaway_webhook_authorized(request: Request) -> bool:
+    """
+    Whether this delivery really came from Hostaway.
+
+    This is the ONLY endpoint in the app without a bearer token, and it cannot
+    have one: Hostaway is a server, with no account here and nobody to log in
+    as. So it authenticates the way the scheduler does — a shared secret — via
+    the `login`/`password` pair Hostaway sends as HTTP Basic credentials on
+    every delivery (hostaway_integration.hostaway_register_webhook sets them).
+
+    Until 2026-09-20 there was no check at all. The URL is visible in the app's
+    own Settings screen and `accountId` is a six-digit identifier printed on
+    the user's Hostaway settings page, not a secret — so anyone could POST
+    invented guest messages, spend the owner's Gemini budget one call per
+    message, and complete real P3 tasks through the outgoing-message path.
+
+    Fails CLOSED, exactly like run_scheduler: an unset HOSTAWAY_WEBHOOK_SECRET
+    rejects everything rather than waving everything through. A missed guest
+    message is loud and gets fixed; an endpoint that is open because a variable
+    was never set is silent and stays open.
+
+    compare_digest, not `==`: a plain comparison stops at the first wrong
+    character, so its duration leaks how much of the secret was right, and the
+    secret can be recovered character by character (a timing attack).
+    """
+    if not HOSTAWAY_WEBHOOK_SECRET:
+        logging.error(
+            "[hostaway webhook] HOSTAWAY_WEBHOOK_SECRET is not set — rejecting this "
+            "delivery. Set it in the environment and reconnect Hostaway."
+        )
+        return False
+
+    header = request.headers.get("authorization") or ""
+    scheme, _, encoded = header.partition(" ")
+    if scheme.lower() != "basic" or not encoded:
+        return False
+
+    try:
+        decoded = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return False
+
+    login, separator, password = decoded.partition(":")
+    if not separator:
+        return False
+
+    # Both halves compared the same way. The login is not a secret, but a
+    # short-circuit here would hand back the same timing signal by another door.
+    login_ok = secrets_module.compare_digest(
+        login, hostaway_integration.HOSTAWAY_WEBHOOK_LOGIN
+    )
+    password_ok = secrets_module.compare_digest(password, HOSTAWAY_WEBHOOK_SECRET)
+    return login_ok and password_ok
+
+
 @app.post("/webhooks/hostaway")
 async def hostaway_webhook(request: Request):
     """
@@ -2069,6 +2130,15 @@ async def hostaway_webhook(request: Request):
     Hostaway doesn't disable the webhook after repeated failures — log
     errors instead of surfacing them as failed deliveries.
     """
+    # FIRST, above the JSON parse and far above the Gemini call: an unproven
+    # caller must not reach anything that costs money or writes a row.
+    if not _hostaway_webhook_authorized(request):
+        logging.warning(
+            f"[hostaway webhook] REJECTED unauthenticated delivery from "
+            f"{request.client.host if request.client else 'unknown'}"
+        )
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         payload = await request.json()
     except Exception as e:
@@ -2258,14 +2328,25 @@ class HostawaySwitchesRequest(BaseModel):
 
 @app.get("/integrations/hostaway")
 def get_hostaway_status(user_id: str = Depends(get_current_user_id)):
-    """The connection as the UI needs it. The secret is never part of that."""
+    """
+    The connection as the UI needs it. The secret is never part of that.
+
+    `webhook_registered` was POST-only until 2026-09-20, so after a reload the
+    screen could not tell a working connection from one that receives nothing:
+    a stored connection with no webhook is not half-connected, it is deaf, and
+    it showed the same green tick as a healthy one. The row knows — it holds
+    the webhook_id, or NULL when registration failed — so the status says so
+    on every read, not just in the seconds after connecting.
+    """
     connection = repository.get_hostaway_connection(user_id)
     if not connection:
-        return {"connected": False, "account_id": None,
+        return {"connected": False, "account_id": None, "webhook_registered": False,
                 "tasks_enabled": False, "auto_close_enabled": False}
     return {
         "connected": True,
         "account_id": connection["account_id"],
+        "webhook_registered": connection.get("webhook_id") is not None,
+        "webhook_url": HOSTAWAY_WEBHOOK_URL,
         "tasks_enabled": bool(connection["tasks_enabled"]),
         "auto_close_enabled": bool(connection["auto_close_enabled"]),
     }
@@ -2296,7 +2377,7 @@ def connect_hostaway(
     webhook_id = None
     try:
         webhook_id = hostaway_integration.hostaway_register_webhook(
-            credentials, HOSTAWAY_WEBHOOK_URL
+            credentials, HOSTAWAY_WEBHOOK_URL, password=HOSTAWAY_WEBHOOK_SECRET
         )
     except Exception as e:
         # The credentials are good; only the webhook failed. Store the

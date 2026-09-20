@@ -41,7 +41,9 @@ def _wire(monkeypatch, existing=None, token_ok=True, webhooks=None):
     )
     monkeypatch.setattr(
         main.hostaway_integration, "hostaway_register_webhook",
-        lambda credentials, callback_url: state["registered"].append(callback_url) or 55555,
+        lambda credentials, callback_url, password=None: (
+            state["registered"].append((callback_url, password)) or 55555
+        ),
     )
     monkeypatch.setattr(
         main.hostaway_integration, "hostaway_delete_webhook",
@@ -97,6 +99,7 @@ def test_the_status_never_returns_the_secret(monkeypatch):
 
     assert status == {
         "connected": True, "account_id": "147809",
+        "webhook_registered": True, "webhook_url": main.HOSTAWAY_WEBHOOK_URL,
         "tasks_enabled": True, "auto_close_enabled": False,
     }
     assert "client_secret_encrypted" not in status
@@ -105,6 +108,27 @@ def test_the_status_never_returns_the_secret(monkeypatch):
 def test_no_connection_reports_disconnected(monkeypatch):
     _wire(monkeypatch, existing=None)
     assert main.get_hostaway_status(user_id="user-1")["connected"] is False
+
+
+def test_a_connection_without_a_webhook_says_so_on_every_read(monkeypatch):
+    """
+    webhook_id NULL means registration failed: the row exists, and not one
+    guest message reaches it. Until 2026-09-20 this was reported only in the
+    POST response, so after a reload the screen showed the same green tick as
+    a working connection — which is how the owner ended up with a connection
+    he believed was fine while Hostaway had no webhook at all.
+    """
+    _wire(monkeypatch, existing={
+        "user_id": "user-1", "account_id": "147809",
+        "client_secret_encrypted": "cipher", "webhook_id": None,
+        "tasks_enabled": True, "auto_close_enabled": True,
+    })
+
+    status = main.get_hostaway_status(user_id="user-1")
+
+    assert status["connected"] is True
+    assert status["webhook_registered"] is False
+    assert status["webhook_url"], "the screen needs the URL to offer the manual fix"
 
 
 def test_a_switch_can_be_changed_alone(monkeypatch):
@@ -169,16 +193,105 @@ def test_connecting_twice_reuses_the_existing_webhook(monkeypatch):
 
     monkeypatch.setattr(hi, "get_access_token", lambda credentials: "tok")
     monkeypatch.setattr(hi.requests, "get", lambda *a, **kw: _Resp(
-        {"result": [{"id": 34986, "url": url, "events": ["message.received"]}]}
+        {"result": [{"id": 34986, "url": url, "events": ["message.received"],
+                     "login": hi.HOSTAWAY_WEBHOOK_LOGIN}]}
     ))
     monkeypatch.setattr(hi.requests, "post", lambda *a, **kw: posted.append(kw) or _Resp(
         {"result": {"id": 99999}}
     ))
 
-    webhook_id = hi.hostaway_register_webhook(hi.HostawayCredentials("147809", "s"), url)
+    webhook_id = hi.hostaway_register_webhook(
+        hi.HostawayCredentials("147809", "s"), url, password="shh"
+    )
 
     assert webhook_id == 34986
     assert posted == [], "a second webhook was created for the same URL"
+
+
+def test_a_webhook_without_credentials_is_replaced_rather_than_reused(monkeypatch):
+    """
+    The webhook registered before authentication existed carries no login.
+    Reusing it would report a successful connection while leaving the account
+    permanently open — the silent failure the whole change exists to remove.
+    """
+    import hostaway_integration as hi
+
+    deleted, sent = [], {}
+    url = "https://ai-todo-app-sdq8.onrender.com/webhooks/hostaway"
+
+    monkeypatch.setattr(hi, "get_access_token", lambda credentials: "tok")
+    monkeypatch.setattr(hi.requests, "get", lambda *a, **kw: _Resp(
+        {"result": [{"id": 34986, "url": url, "events": ["message.received"]}]}
+    ))
+    monkeypatch.setattr(hi.requests, "delete",
+                        lambda u, **kw: deleted.append(u) or _Resp({}, status_code=200))
+
+    def _post(post_url, headers=None, timeout=None, json=None):
+        sent["json"] = json
+        return _Resp({"result": {"id": 99999}})
+
+    monkeypatch.setattr(hi.requests, "post", _post)
+
+    webhook_id = hi.hostaway_register_webhook(
+        hi.HostawayCredentials("147809", "s"), url, password="shh"
+    )
+
+    assert webhook_id == 99999, "the credential-less webhook was reused"
+    assert any("34986" in str(u) for u in deleted), "the old webhook was left behind"
+    assert sent["json"]["password"] == "shh"
+    assert sent["json"]["login"] == hi.HOSTAWAY_WEBHOOK_LOGIN
+
+
+def test_registering_sends_the_credentials(monkeypatch):
+    """Without these two fields Hostaway sends no Authorization header, and
+    every delivery is refused on arrival."""
+    import hostaway_integration as hi
+
+    sent = {}
+    url = "https://ai-todo-app-sdq8.onrender.com/webhooks/hostaway"
+
+    monkeypatch.setattr(hi, "get_access_token", lambda credentials: "tok")
+    monkeypatch.setattr(hi.requests, "get", lambda *a, **kw: _Resp({"result": []}))
+
+    def _post(post_url, headers=None, timeout=None, json=None):
+        sent["json"] = json
+        return _Resp({"result": {"id": 99999}})
+
+    monkeypatch.setattr(hi.requests, "post", _post)
+
+    hi.hostaway_register_webhook(
+        hi.HostawayCredentials("147809", "s"), url, password="the-shared-secret"
+    )
+
+    assert sent["json"]["login"] == hi.HOSTAWAY_WEBHOOK_LOGIN
+    assert sent["json"]["password"] == "the-shared-secret"
+
+
+def test_registering_without_a_secret_sends_no_credentials(monkeypatch):
+    """
+    HOSTAWAY_WEBHOOK_SECRET unset. The webhook is still created — refusing
+    would leave the user with no connection at all — but it carries no
+    credentials, and the endpoint will reject its deliveries. The error log is
+    the only place that says why, so it is part of the behaviour.
+    """
+    import hostaway_integration as hi
+
+    sent = {}
+    url = "https://ai-todo-app-sdq8.onrender.com/webhooks/hostaway"
+
+    monkeypatch.setattr(hi, "get_access_token", lambda credentials: "tok")
+    monkeypatch.setattr(hi.requests, "get", lambda *a, **kw: _Resp({"result": []}))
+
+    def _post(post_url, headers=None, timeout=None, json=None):
+        sent["json"] = json
+        return _Resp({"result": {"id": 99999}})
+
+    monkeypatch.setattr(hi.requests, "post", _post)
+
+    hi.hostaway_register_webhook(hi.HostawayCredentials("147809", "s"), url, password=None)
+
+    assert "login" not in sent["json"]
+    assert "password" not in sent["json"]
 
 
 def test_a_first_connection_creates_the_webhook(monkeypatch):
