@@ -1259,10 +1259,6 @@ def get_tasks_needing_calendar_push(user_id: str) -> list[dict]:
     return needing_push
 
 
-def set_task_calendar_sync_enabled(task_id: str, enabled: bool) -> None:
-    supabase.table("tasks").update({"calendar_sync_enabled": enabled}).eq("id", task_id).execute()
-
-
 def update_task_calendar_sync(task_id: str, google_event_id: str) -> None:
     supabase.table("tasks").update({
         "google_event_id": google_event_id,
@@ -1332,12 +1328,6 @@ def update_calendar_sync_token(user_id: str, sync_token: Optional[str]) -> None:
     supabase.table("google_calendar_connections").update({
         "calendar_sync_token": sync_token,
     }).eq("user_id", user_id).execute()
-
-
-def get_all_connected_calendar_user_ids() -> list[str]:
-    """Users who have an active Google Calendar connection."""
-    result = supabase.table("google_calendar_connections").select("user_id").execute()
-    return [row["user_id"] for row in result.data]
 
 
 # --- Google Calendar foreign events (not created by this app) ---

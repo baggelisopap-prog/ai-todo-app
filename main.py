@@ -932,6 +932,12 @@ def send_test_push(user_id: str = Depends(get_current_user_id)):
     the calling user. Proves the backend can push on demand — actual
     scheduling (e.g. a daily summary) is handled by a future session.
 
+    NO UI CALLS THIS, deliberately (2026-09-20): `sendTestPush` in api.js was
+    removed as dead code, because nothing in the app ever rendered a button
+    for it. The endpoint stays because it is the only way to answer "are my
+    notifications actually working?" without waiting for a real reminder —
+    reached with a bearer token by hand, not from the app.
+
     Now requires auth (added in this phase): the underlying send-to-all
     capability was replaced by a per-user send, so this endpoint needs a
     user_id to target — it structurally could not stay unauthenticated.
@@ -1247,6 +1253,12 @@ def delete_workspace(workspace_id: str, user_id: str = Depends(get_current_user_
     either are SET NULL by the database and become unfiled — deleting a
     container never deletes work. The count is read BEFORE the delete, because
     afterwards the rows are already NULL and the answer would always be zero.
+
+    NO UI CALLS THIS (noted 2026-09-20): the Workspaces screen offers ARCHIVE,
+    which is reversible, and never destroy. `deleteWorkspace` in api.js was
+    removed as dead code. The endpoint stays — it is covered by three tests
+    and is the only way to actually remove a workspace — but anything adding a
+    button for it should ask first whether archive is what the user meant.
     """
     if repository.get_workspace(user_id, workspace_id) is None:
         raise HTTPException(status_code=404, detail="Workspace not found")

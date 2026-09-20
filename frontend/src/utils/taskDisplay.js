@@ -15,19 +15,6 @@ export const CATEGORY_LABEL_KEYS = {
   Hostaway: 'browse.filter_hostaway',
 };
 
-export function categoryColor(category) {
-  switch (category) {
-    case 'Business':
-      return 'var(--category-business)';
-    case 'Personal':
-      return 'var(--category-personal)';
-    case 'Hostaway':
-      return 'var(--category-hostaway)';
-    default:
-      return 'var(--category-unknown)';
-  }
-}
-
 export function categoryLabel(category, t) {
   return CATEGORY_LABEL_KEYS[category] ? t(CATEGORY_LABEL_KEYS[category]) : category;
 }

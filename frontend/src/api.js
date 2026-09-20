@@ -117,13 +117,6 @@ async function request(path, options = {}) {
 }
 
 /**
- * GET /health — confirms the backend is reachable.
- */
-export async function checkHealth() {
-  return request('/health');
-}
-
-/**
  * GET /tasks — retrieves all tasks from the backend.
  * Returns { tasks: [...], count: N }
  */
@@ -264,15 +257,6 @@ export async function agentEditTask(recordId, instruction) {
 }
 
 /**
- * PATCH /tasks/{record_id} — toggles this task's per-task Google Calendar
- * sync opt-in. Thin wrapper over updateTask for a single named field.
- * Returns the updated task object.
- */
-export async function toggleTaskCalendarSync(recordId, enabled) {
-  return updateTask(recordId, { calendar_sync_enabled: enabled });
-}
-
-/**
  * DELETE /tasks/{record_id} — delete a task.
  *
  * Since 2026-09-04 this is a SOFT delete: the task leaves every list and moves
@@ -356,17 +340,6 @@ export async function registerPushSubscription(subscription) {
       endpoint: subJson.endpoint,
       keys: subJson.keys,
     }),
-  });
-}
-
-/**
- * POST /push/send-test — asks the backend to send a real Web Push
- * notification to every registered subscription.
- * Returns { sent, failed, total }.
- */
-export async function sendTestPush() {
-  return request('/push/send-test', {
-    method: 'POST',
   });
 }
 
@@ -661,15 +634,6 @@ export async function updateWorkspace(workspaceId, updates) {
     method: 'PATCH',
     body: JSON.stringify(updates),
   });
-}
-
-/**
- * DELETE /workspaces/{id} — removes the workspace and, by cascade, its
- * categories. Tasks in it are NOT deleted; they become unfiled.
- * Returns { deleted: true, tasks_unfiled: N }.
- */
-export async function deleteWorkspace(workspaceId) {
-  return request(`/workspaces/${workspaceId}`, { method: 'DELETE' });
 }
 
 /** POST /categories — { workspace_id, name, color?, position? }. */
