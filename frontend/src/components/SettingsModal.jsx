@@ -908,8 +908,15 @@ function HostawayConnectionView({ onShowToast }) {
     } catch (err) {
       // The toast says "check your details", which is the common case. The
       // log separates that from a network failure or a 500.
+      //
+      // 'error' is NOT optional here, and leaving it off is not a cosmetic
+      // slip: handleShowToast defaults to 'success', which paints the toast
+      // green and puts a ✓ in front of it. So "Hostaway did not accept those
+      // details" arrived looking like confirmation, and the owner read the
+      // tick and not the sentence — three times, across two sessions, while
+      // the connection was in fact dead.
       console.error('Hostaway connect failed:', err);
-      onShowToast?.(t('hostaway.invalid'));
+      onShowToast?.(t('hostaway.invalid'), 'error');
     } finally {
       setBusy(false);
     }
@@ -941,7 +948,7 @@ function HostawayConnectionView({ onShowToast }) {
       setManualUrl(null);
     } catch (err) {
       console.error('Hostaway disconnect failed:', err);
-      onShowToast?.(t('hostaway.disconnect_failed'));
+      onShowToast?.(t('hostaway.disconnect_failed'), 'error');
       try {
         setStatus(await getHostawayStatus());
       } catch {
