@@ -112,3 +112,48 @@ def test_appending_survives_a_task_with_no_property_block(monkeypatch):
     )
     assert written["description"].startswith("Κάτι.")
     assert "και κάτι ακόμα" in written["description"]
+
+
+# ── a new guest message un-answers the task (bug found 2026-09-20) ──
+
+def test_append_clears_the_answered_mark(monkeypatch):
+    """
+    The task was answered; then the guest wrote again, into the SAME task.
+    Whatever was said before, this new message has not been answered — and
+    hostaway_answered_at is what _check_hostaway_escalations reads to decide
+    whether to stay quiet.
+
+    Leaving the old mark standing made the task silent FOREVER: escalation
+    skips an answered task, and the webhook only re-notifies on a priority
+    escalation, so an equal-priority follow-up produced no push either. The
+    guest was waiting and nothing on the owner's phone ever said so.
+    """
+    written = {}
+    monkeypatch.setattr(main.repository, "update_hostaway_thread_fields",
+                        lambda u, r, updates: written.update(updates))
+
+    main._append_to_hostaway_thread(
+        "user-1",
+        _task(hostaway_answered_at="2026-08-10 14:00:05"),
+        "και δεν βρίσκω ούτε το πάρκινγκ",
+        "2026-08-10 14:00:40",
+        {"summary": "Ούτε το πάρκινγκ.", "priority": "P3"},
+    )
+
+    assert "hostaway_answered_at" in written, "the answered mark was left untouched"
+    assert written["hostaway_answered_at"] is None
+
+
+def test_append_leaves_the_answered_mark_alone_when_there_was_none(monkeypatch):
+    """Writing None over None is harmless, but the field is still cleared on
+    every append — one rule, not a special case that can drift."""
+    written = {}
+    monkeypatch.setattr(main.repository, "update_hostaway_thread_fields",
+                        lambda u, r, updates: written.update(updates))
+
+    main._append_to_hostaway_thread(
+        "user-1", _task(), "κάτι ακόμα", "2026-08-10 14:00:40",
+        {"summary": "Κάτι.", "priority": "P3"},
+    )
+
+    assert written["hostaway_answered_at"] is None

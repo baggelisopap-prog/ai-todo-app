@@ -1913,6 +1913,21 @@ def _append_to_hostaway_thread(
         # "how long since we nagged", and the burst has just been notified
         # (or deliberately not, on an unchanged priority).
         "hostaway_last_notified_at": datetime.now(ZoneInfo("Europe/Athens")).isoformat(),
+        # And it un-answers the task. Whatever was replied before, THIS message
+        # has not been answered, and hostaway_answered_at is exactly what
+        # _check_hostaway_escalations reads to decide whether to stay quiet.
+        #
+        # Left standing, it silenced the task permanently: escalation skips an
+        # answered task, and the webhook above re-notifies only on a priority
+        # escalation — so an equal-priority follow-up produced no push either.
+        # Reachable whenever the poller records a reply inside the 90-second
+        # window, i.e. a fast reply to a guest who is still typing, which is
+        # ordinary rather than exotic. Found 2026-09-20.
+        #
+        # Safe against re-recording the OLD reply: hostaway_last_message_at
+        # moves to this message on the same write, and find_unanswered_human_reply
+        # only counts a reply NEWER than that.
+        "hostaway_answered_at": None,
     }
     repository.update_hostaway_thread_fields(user_id, task.record_id, updates)
     logging.info(

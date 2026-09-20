@@ -1324,11 +1324,25 @@ class TaskService:
         a conversation are answered out of one response.
         """
         connection = repository.get_hostaway_connection(user_id)
-        if not connection or not connection.get("auto_close_enabled"):
-            # No connection, or the user switched auto-completion off. Either
-            # way this costs nothing: the check is above the task scan and
-            # above every HTTP call.
+        if not connection:
+            # Nobody to ask, and nothing to ask about. This is the saving that
+            # makes sense: the check is above the task scan and above every
+            # HTTP call, so a user who never connected Hostaway costs nothing.
             return {"conversations_polled": 0, "replies_found": 0, "tasks_completed": 0}
+
+        # auto_close_enabled is NOT read here, and that is the fix of
+        # 2026-09-20. It used to sit beside the line above, which skipped the
+        # poll entirely — and with it the recording of the reply, not just the
+        # closing. hostaway_answered_at is what _check_hostaway_escalations
+        # reads to stop nagging, so switching off auto-close silently bought an
+        # endless nag: answer the guest, and the task pushes every two hours
+        # forever. The switch says «Κλείσιμο task όταν απαντάς»; it now governs
+        # exactly that and nothing else, further down where the closing happens.
+        #
+        # The cost is one HTTP call per open conversation per tick for a user
+        # who has the switch off — bounded by HOSTAWAY_REPLY_POLL_LIMIT, and
+        # the price of the switch meaning what it says.
+        auto_close = bool(connection.get("auto_close_enabled"))
 
         credentials = hostaway_integration.credentials_from_connection(connection)
 
@@ -1396,8 +1410,15 @@ class TaskService:
                     logger.error(f"[hostaway replies] Failed to send ambiguity notice: {e}")
 
             for task, reply_date in answered:
+                # The reply is recorded whatever the switch says — that is what
+                # stops the escalation nagging, and it is not what the switch is
+                # about. Only the completion below is optional.
                 updates = {"hostaway_answered_at": reply_date}
-                if not ambiguous and task.priority in HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES:
+                if (
+                    auto_close
+                    and not ambiguous
+                    and task.priority in HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES
+                ):
                     updates.update(hostaway_completion_fields())
 
                 try:
@@ -1418,6 +1439,7 @@ class TaskService:
                 outcome = (
                     "completed" if updates.get("is_completed")
                     else "left open (two tasks, one reply)" if ambiguous
+                    else "left open (auto-close switched off)" if not auto_close
                     else f"left open ({task.priority} does not auto-complete)"
                 )
                 logger.info(

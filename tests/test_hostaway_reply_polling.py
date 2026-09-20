@@ -306,12 +306,50 @@ def test_a_user_with_no_connection_makes_no_api_call(monkeypatch):
     assert result["conversations_polled"] == 0
 
 
-def test_auto_close_switched_off_makes_no_api_call(monkeypatch):
-    """Off means off — not 'fetch, then decide not to act'."""
+def test_auto_close_switched_off_still_notices_the_reply(monkeypatch):
+    """
+    Changed 2026-09-20. This test used to read "Off means off — not 'fetch,
+    then decide not to act'", and the switch sat above every HTTP call so a
+    tick cost nothing. That saving had a price nobody had counted.
+
+    The switch is labelled «Κλείσιμο task όταν απαντάς» — it is about
+    CLOSING. But skipping the poll entirely also skipped recording the reply,
+    and hostaway_answered_at is what stops the escalation nagging. So turning
+    off auto-close silently bought an endless one: the owner answers the
+    guest, and the task keeps pushing at him every two hours, forever, with
+    nothing he can do about it but complete a task he has already handled.
+
+    One switch, one meaning. The reply is always recorded; only the closing
+    is optional.
+    """
     calls, result, _ = _run(
         monkeypatch, [_task()], connection=_connection(auto_close_enabled=False)
     )
 
+    assert calls["fetched"] == ["49166048"], "the conversation was not polled at all"
+    record_id, updates = calls["updates"][0]
+    assert updates["hostaway_answered_at"] == HUMAN_REPLY_AT, "the nagging would never stop"
+    assert result["replies_found"] == 1
+
+
+def test_auto_close_switched_off_does_not_complete_the_task(monkeypatch):
+    """The other half: off still means the task stays on the list."""
+    calls, result, _ = _run(
+        monkeypatch, [_task(priority="P3")], connection=_connection(auto_close_enabled=False)
+    )
+
+    _, updates = calls["updates"][0]
+    assert "is_completed" not in updates, "a P3 closed with the switch off"
+    assert "completed_at" not in updates
+    assert result["tasks_completed"] == 0
+
+
+def test_no_connection_still_costs_nothing(monkeypatch):
+    """
+    The saving that DID make sense stays. A user who never connected Hostaway
+    has no conversations to poll and no credentials to poll them with.
+    """
+    calls, result, _ = _run(monkeypatch, [_task()], connection=None)
+
     assert calls["fetched"] == []
-    assert calls["updates"] == []
     assert result["conversations_polled"] == 0
