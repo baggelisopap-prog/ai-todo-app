@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAllTasks, updateTask, connectGoogleCalendar, getProfile, acceptWorkspaceInvite, onBackendWaking } from './api';
 import { supabase } from './supabaseClient';
@@ -7,14 +7,10 @@ import BottomNav from './components/BottomNav';
 import SideNav from './components/SideNav';
 import InboxView from './components/InboxView';
 import TodayView from './components/TodayView';
-import CalendarView from './components/CalendarView';
 import BrowseView from './components/BrowseView';
 import FloatingActionButtons from './components/FloatingActionButtons';
-import AddTaskModal from './components/AddTaskModal';
 import Toast from './components/Toast';
-import SettingsModal from './components/SettingsModal';
 import RecurrenceProvider from './components/RecurrenceProvider';
-import { AgentChatModal } from './components/AgentChatModal';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
 import AppBar from './components/AppBar';
 import WorkspaceProvider from './components/WorkspaceProvider';
@@ -25,6 +21,28 @@ import { useAutoRefresh } from './hooks/useAutoRefresh';
 import { useMediaQuery, DESKTOP_QUERY } from './hooks/useMediaQuery';
 import { filterTasksByWorkspace } from './utils/workspaces';
 import { isVisibleTask } from './utils/taskDisplay';
+
+// Loaded on demand, not in the first download. Each of these is already
+// rendered behind a condition — Calendar only on its tab, the three modals
+// only while open — so nothing here changes WHEN they appear, only when
+// their code arrives.
+//
+// They are the four biggest files in the app (Calendar 1355 lines, Settings
+// 1311, the agent chat 458, add-task 113 plus the extraction machinery it
+// pulls in). Bundling them into the first load meant every cold open on a
+// phone paid for screens most sessions never visit.
+//
+// The fallback is deliberately null: these mount on a tap, the chunk is a
+// few tens of KB over an already-open connection, and a spinner that flashes
+// for 80ms reads as jank rather than progress. A modal that opens a moment
+// late is invisible; a modal that flickers a spinner is not.
+const CalendarView = lazy(() => import('./components/CalendarView'));
+const AddTaskModal = lazy(() => import('./components/AddTaskModal'));
+const SettingsModal = lazy(() => import('./components/SettingsModal'));
+const AgentChatModal = lazy(() =>
+  // Named export, so it needs mapping to the default shape lazy() expects.
+  import('./components/AgentChatModal').then((m) => ({ default: m.AgentChatModal }))
+);
 
 // The AppBar shows the current screen's name, so the title each view used to
 // print inside its own scroll container now lives in one place. Calendar covers
@@ -68,7 +86,11 @@ function TaskViews({ activeTab, viewProps, onTaskCreated }) {
     <TaskFilterProvider tasks={scoped.tasks}>
       {activeTab === 'inbox' && <InboxView {...scoped} />}
       {activeTab === 'today' && <TodayView {...scoped} />}
-      {activeTab === 'calendar' && <CalendarView {...scoped} onTaskCreated={onTaskCreated} />}
+      {activeTab === 'calendar' && (
+        <Suspense fallback={null}>
+          <CalendarView {...scoped} onTaskCreated={onTaskCreated} />
+        </Suspense>
+      )}
       {activeTab === 'browse' && <BrowseView {...scoped} />}
     </TaskFilterProvider>
   );
@@ -575,13 +597,15 @@ function App() {
       </div>
 
       {isAddModalOpen && (
-        <AddTaskModal
-          onClose={() => setIsAddModalOpen(false)}
-          onTasksAdded={(newTasks) => {
-            handleTasksAdded(newTasks);
-            setIsAddModalOpen(false);
-          }}
-        />
+        <Suspense fallback={null}>
+          <AddTaskModal
+            onClose={() => setIsAddModalOpen(false)}
+            onTasksAdded={(newTasks) => {
+              handleTasksAdded(newTasks);
+              setIsAddModalOpen(false);
+            }}
+          />
+        </Suspense>
       )}
 
       {toast && (
@@ -595,16 +619,20 @@ function App() {
       )}
 
       {isSettingsOpen && (
-        <SettingsModal
-          onClose={() => setIsSettingsOpen(false)}
-          onShowToast={handleShowToast}
-          profile={profile}
-          onProfileUpdate={setProfile}
-        />
+        <Suspense fallback={null}>
+          <SettingsModal
+            onClose={() => setIsSettingsOpen(false)}
+            onShowToast={handleShowToast}
+            profile={profile}
+            onProfileUpdate={setProfile}
+          />
+        </Suspense>
       )}
 
       {isAgentOpen && (
-        <AgentChatModal onClose={() => setIsAgentOpen(false)} onTaskConfirmed={handleAgentActionConfirmed} />
+        <Suspense fallback={null}>
+          <AgentChatModal onClose={() => setIsAgentOpen(false)} onTaskConfirmed={handleAgentActionConfirmed} />
+        </Suspense>
       )}
     </div>
     </RecurrenceProvider>
