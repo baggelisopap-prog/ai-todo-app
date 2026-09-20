@@ -18,6 +18,7 @@ import base64
 import binascii
 import logging
 import re
+import time
 import secrets as secrets_module  # `secrets` alone shadows the local name in run_scheduler
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -38,6 +39,7 @@ import task_agent
 import crypto
 import google_calendar
 import hostaway_integration
+import rate_limit
 import hostaway_threading
 import repository
 import access
@@ -953,7 +955,7 @@ def send_test_push(user_id: str = Depends(get_current_user_id)):
 
 
 @app.get("/notifications/run-scheduler")
-def run_scheduler(secret: str):
+def run_scheduler(secret: str, request: Request):
     """
     Triggered externally (e.g. a free cron service) every ~5 minutes.
     Checks for tasks due soon and sends their advance reminder pushes.
@@ -962,6 +964,22 @@ def run_scheduler(secret: str):
     token. (This line read "this app has no auth system" until 2026-08-23,
     untrue since the auth migration.)
     """
+    # Before the secret comparison, and for the same reason as the webhook:
+    # a shared secret in a query string is guessable one attempt at a time,
+    # and the only thing that makes that hopeless is a ceiling on attempts.
+    # A scheduler run is also the most expensive request this app serves —
+    # every user, their tasks, Hostaway, Google Calendar — so a flood here
+    # costs far more than a flood anywhere else.
+    caller = _client_ip(request)
+    if not rate_limit.check_rate_limit(
+        f"run-scheduler:{caller}",
+        time.time(),
+        SCHEDULER_RATE_LIMIT,
+        SCHEDULER_RATE_WINDOW_SECONDS,
+    ):
+        logger.warning(f"[scheduler] RATE LIMITED {caller}")
+        raise HTTPException(status_code=429, detail="Too many requests")
+
     if not SCHEDULER_SECRET or secret != SCHEDULER_SECRET:
         raise HTTPException(status_code=403, detail="Invalid secret")
     try:
@@ -2092,6 +2110,42 @@ def _create_hostaway_task(
 
 HOSTAWAY_WEBHOOK_SECRET = os.getenv("HOSTAWAY_WEBHOOK_SECRET")
 
+# Hostaway delivers one call per guest message, and guest messages arrive at
+# human speed — the owner's busiest day has never come near one a minute. 60
+# is therefore about sixty times what the real caller needs, which is the
+# right shape for this: it cannot inconvenience Hostaway, and it turns
+# "guess the secret a thousand times a second" into "guess it sixty times a
+# minute", where sixty times a minute gets nowhere against 43 random
+# characters.
+HOSTAWAY_WEBHOOK_RATE_LIMIT = 60
+HOSTAWAY_WEBHOOK_RATE_WINDOW_SECONDS = 60.0
+
+# cron-job.org calls the scheduler every ~2 minutes: 10 a minute is five times
+# its real need, and leaves room to trigger a run by hand while debugging.
+SCHEDULER_RATE_LIMIT = 10
+SCHEDULER_RATE_WINDOW_SECONDS = 60.0
+
+
+def _client_ip(request: Request) -> str:
+    """
+    Who to count this request against.
+
+    Render terminates TLS and proxies, so request.client.host is Render's
+    own address for every caller — useless as a bucket key. The real one is
+    the first entry in X-Forwarded-For, which the proxy appends to.
+
+    A caller can spoof that header, and that is fine for what this defends:
+    an attacker who rotates the header rotates their own bucket and gets the
+    full limit each time, but they were never the reason the ceiling exists
+    — an unthrottled loop from one address was. Nothing is AUTHORISED on the
+    strength of this value, so a forged one costs nothing.
+    """
+    forwarded = request.headers.get("x-forwarded-for") or ""
+    first = forwarded.split(",")[0].strip()
+    if first:
+        return first
+    return request.client.host if request.client else "unknown"
+
 
 def _hostaway_webhook_authorized(request: Request) -> bool:
     """
@@ -2157,6 +2211,20 @@ async def hostaway_webhook(request: Request):
     Hostaway doesn't disable the webhook after repeated failures — log
     errors instead of surfacing them as failed deliveries.
     """
+    # Above even the secret check: comparing a secret is cheap, but doing it
+    # ten thousand times a second is not, and a flood that never guesses
+    # right still occupies the one worker this app runs on. Counting is the
+    # cheapest thing in the handler, so it goes first.
+    caller = _client_ip(request)
+    if not rate_limit.check_rate_limit(
+        f"hostaway-webhook:{caller}",
+        time.time(),
+        HOSTAWAY_WEBHOOK_RATE_LIMIT,
+        HOSTAWAY_WEBHOOK_RATE_WINDOW_SECONDS,
+    ):
+        logging.warning(f"[hostaway webhook] RATE LIMITED {caller}")
+        raise HTTPException(status_code=429, detail="Too many requests")
+
     # FIRST, above the JSON parse and far above the Gemini call: an unproven
     # caller must not reach anything that costs money or writes a row.
     if not _hostaway_webhook_authorized(request):
