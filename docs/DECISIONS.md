@@ -1,6 +1,43 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: on a phone the agent is a FIELD, and it does not share the bottom bar with the tabs
+The agent was a small outlined grey button in the top bar. The owner's diagnosis was not "I can't find it" — it was **«Δεν ξεχωρίζει — είναι το κύριο πράγμα»**. So the question was never placement, it was emphasis, and five things give a control emphasis: size, colour, position, label, and being the only one of its kind. The old button won on one of them.
+
+**A field, not a button, and that is the decision.** A button asks whether you would like to open something. An open field asks you to write. It is the difference between a task list with an AI button and an AI app that happens to keep a list. It costs 49px of list height on every screen, permanently, and that cost is the reason the alternatives below were drawn at all.
+
+**Rejected: a fifth, raised centre tab** (the Instagram/TikTok shape) — the best position on a phone, and it puts straight back the problem that `navTabs.js` already records paying to remove. At five columns «Εισερχόμενα» truncates to «Εισερχό…», and the usual escape — dropping labels from inactive tabs — was refused on purpose there, because this app goes to people who did not build it. The mock-up was drawn WITH the truncation visible rather than described, so the cost was seen and not argued about.
+
+**Rejected: an extended labelled pill floating above the nav** — cheap, safe, and it solves the stated problem. It lost to the field for the reason at the top: a pill is still a button.
+
+**Rejected, and this one was the owner's own idea: the agent in the bottom-left corner, opposite the «+».** It is a good instinct and it solves the crowding — each control gets its own corner, nothing stacks, the tabs are untouched, and it costs zero list height. It was built as a mock-up in three weights, and the first weight is what settled it: **two identical circles in two corners say "two equal actions"**. The emphasis he asked for gets split down the middle instead of given. Unequal weights fix that, but then the question becomes which corner deserves the weight — and the bottom-right is both the convention for "the primary action of this screen" and the only corner a right-handed thumb reaches without moving the palm. Which would have meant moving the «+» he had just said should stay put.
+
+**The weight of the field was his call, not a default.** The first version had a red border and a filled red send arrow; he asked for «λιγο ποιο διακριτικο και λεπτο», was shown three weights (40px filled grey / 36px hairline border / 41px borderless, glued to the nav), and took the middle. The red chat glyph survives in all three on purpose: it is the only thing that says "agent" rather than "search", so what thins is everything around it. The floor was named to him explicitly — without a border the bar reads as a label rather than a field, which loses exactly the property he chose it for.
+
+**Desktop keeps the button.** `showAgent={isDesktop}`. That layout renders no dock and no floating controls, so the top-bar button is the only door there; removing it for symmetry would have removed the agent.
+
+### Decision: the ask bar and the bottom nav are one fixed dock, not two things pinned to the same edge
+The bar has to sit directly on top of the tabs. The direct way to say that is `bottom: calc(<nav height> + inset)` — one number, one line, done.
+
+**That number is a lie waiting to happen.** The nav's height is the sum of its icon size, its gap, its label's font size and line height, and its padding. Every one of those is a number somebody may reasonably change while thinking about something else, and nothing would connect that change to a bar floating 62px up. It would fail as a gap or an overlap, on a phone, with no error anywhere.
+
+**So `BottomNav` gave up its own `fixed`, and App wraps both in one fixed element.** The bar sits on the nav because it is the previous sibling, which is what the layout already knows how to do. `pb-safe` stays on the nav rather than moving up to the dock, because the nav is the element actually touching the bottom edge.
+
+The cost is real and was accepted: `BottomNav` can no longer be rendered on its own — it is now a floor, not a building. Nothing else rendered it.
+
+**The two floating controls above it (`FloatingActionButtons`, `VoiceButton`) climb via two NAMED offsets in `index.css`, not inline numbers**, and the comment on each says what it is measuring. Both must move together whenever the dock's height changes; two literals at two call sites would drift the first time only one was updated.
+
+### Decision: the microphone on the ask bar starts listening, rather than looking like it might
+The mock-up drew a microphone in the field, and the copy beside it promised voice was one tap away. When it came to building it, **the agent chat had no dictation at all** — the capability existed (`DictateButton`, used by the per-task editor) but had never been wired there.
+
+Three options, and the owner was given all three rather than the convenient one. **Rejected: draw the mic and have it merely open the chat** — an icon that does not do what it depicts, which is the same class of defect as a toast that paints an error green. **Rejected: leave the mic out until later** — honest, and the smaller change. He chose **«Μπες και στη συνομιλία»**: build the dictation, and have the bar's mic open the chat already listening.
+
+**The transcript goes into the field and is NEVER sent on its own.** This is the same rule `TaskDetailSheet` already follows for the same reason: a misheard word here becomes a real instruction about real tasks. You read it before you send it.
+
+**`autoStart` is guarded by a ref, not by its dependency array.** The effect must fire once. Re-running it on a re-render would reopen the recogniser under someone who had just deliberately stopped it — which is worse than never starting.
+
+**Not verified, and it is the riskiest line in this change**: `AgentChatModal` is lazily loaded, so the first ever mic tap fetches a 129 kB chunk before the component mounts and `start()` runs. Chrome's `SpeechRecognition` does not require a transient user gesture, so it should survive the gap — but nobody has watched it. See CURRENT_TASK.md.
+
 ### Decision: the webhook's missing secret rejects everything, rather than waving everything through
 `/webhooks/hostaway` had no authentication at all until 2026-09-20. Giving it a shared secret was not the decision — there was only one sane mechanism, and Hostaway documents it (`login`/`password` on the webhook, sent back as HTTP Basic). The real choice was what happens when `HOSTAWAY_WEBHOOK_SECRET` is not set.
 

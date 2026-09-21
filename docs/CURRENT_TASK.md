@@ -1,128 +1,160 @@
-ACTIVE TASK — A Hostaway question turned into a full audit: webhook authentication, four screens that lied, two real bugs, and a cleanup. Pushed and partly seen
+ACTIVE TASK — The agent moved out of the top bar and became a standing field above the tabs. Pushed, NOT yet seen on a phone
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
-> **ELEVEN COMMITS PUSHED TO MAIN, `a591050` → `9c73a69`, ALL AUTO-DEPLOYED.**
-> 31 files, +3366 −1278. New files: `rate_limit.py`, four test files. Deleted:
-> `migrate_owner_hostaway.py`. Rewritten: `agent_engine_explain.py`.
+> **ONE COMMIT PUSHED TO MAIN, `10e2b5d`, AUTO-DEPLOYED.**
+> 11 files, +226 −31. New file: `frontend/src/components/AskBar.jsx`.
+> Phone layout only — the desktop layout is byte-for-byte unchanged in behaviour.
 >
-> The previous task (the task row's bottom line, `a9aa78d`) is **finished** and lives in
-> git and in PROJECT_STATUS.md. Nothing here supersedes it.
+> The previous task (the Hostaway audit, `a591050` → `9c73a69`) is **finished** and lives in
+> git and in PROJECT_STATUS.md. Nothing here supersedes it. Its five unwatched items are
+> still unwatched; they were not touched by this work.
 
 ## What was asked
 
-It started as one question about the app's behaviour, 2026-09-20:
+2026-09-21, opening words:
 
-> «γτ οταν απανταω σε ενα μυνημα στην hostaway δεν κλεινει μόνο του?»
+> «ελα να κανουμε ένα Γρήγορο Θέλω στο Κινητό Ui να αλλαξουμε κάτι. Πρώτα θα κανουμε ενα
+> μικρο brainstrom μετα θα το φτιάηεις σε html να το δω και να διαλεξω και τελος προχωράμε»
 
-The answer was that nothing was broken — the SWITCH LABEL promised a close for every
-priority while the code only ever closed P3. He then asked for the sweep:
+Asked which part of the phone screen, he named two:
 
-> «τρεξε και δες υπάρχει εκει καποιο bug? επίσης θελω να τρεξεις ενα μπλήρη elegxo να
-> ψαξεις για bugs η προβληματα που θα εχουμε η άχρηστο κώδικα που τζαμπα υπάρχει»
+> «θελω την κατω μπάρα και επίσης το που ειναι το συνεφακι του agend που γραφεις ask»
+
+Asked what actually bothered him — the WHY, not the fix — he chose one of four offered
+reasons, and it is the sentence the whole change is built on:
+
+> **«Δεν ξεχωρίζει — είναι το κύριο πράγμα»**
+
+Not "I can't find it". The agent is the reason this app exists and it was drawn as the
+least important control on the screen.
 
 ## His decisions, in his words
 
-**Security first**, out of the audit's five findings:
+**Do the UX research rather than be asked to choose blind.** Offered three options for
+what happens to the «+» button, he refused all three and asked for a recommendation:
 
-> «λοιπον πρώτα θα πιασουμε το 4 (γ) γτ ειναι ασφαλεια»
+> «κανε ερευνα σε ux και προτεινε»
 
-**One deploy, accepting the gap** — he was told a staged rollout would lose no messages
-and chose speed:
+**He rejected the entire first round** — a fifth centre tab, the docked field, an extended
+labelled pill — and proposed a fourth placement himself:
 
-> «μονο ο δικος μου λογαριασμος, παμε με την μια δεν με πειραζει να χασω καποια μυνηματα
-> για λιγη ωρα»
+> «κανενα δε μου αρεσε ισως να παει αριστερα απεναντι απο το + ??»
 
-**The env-var question that found dead configuration.** He asked why Hostaway credentials
-were in Render at all, and was right — nothing had read them since the per-user migration:
+**The «+» keeps its size and its colour**, asked while the corner layouts were on screen:
 
-> «πρεπει να υπαρχει στο render env to id and secret key of hostaway? γτ αμα ειναι πχ 1000
-> χρηστες πρεπει αυτοι να το βαζουν και να μενει σε καποια βασει δεδομένω???»
+> «Μένει όπως είναι»
 
-**P3 only.** Asked whether to add P2 to auto-close or fix the label, he chose the label.
-The question was asked rather than assumed because «οχι μονο π3» reads both ways in Greek
-and one reading would have started closing P2 tasks off his list:
+**Then he came back to the docked field he had rejected, with one change.** He quoted the
+whole section back and ended it:
 
-> «οχι μονο π3»
+> «αυτο τελικα μου αρεσε απλα λιγο ποιο διακριτικο και λεπτο»
 
-**Then the remaining four, one at a time:**
+**Of the three weights drawn for "thinner", he took the middle one:**
 
-> «ξεκινατα ενα ενα με επαληθευση και πες μου οταν τα τελειωσεις ολα»
+> «β2»
 
-**And the teaching copy rewritten rather than annotated:**
+**The microphone must do what it says**, choosing the larger of three scopes — which is
+what added dictation to the agent chat, a thing that did not exist at all:
 
-> «ναι ξαναγραψε το explain αρχειο»
+> «Μπες και στη συνομιλία»
+
+**Hide-on-scroll: not now, and not forgotten.**
+
+> «το 1 και βλεπουμε κρατα ανοιχτη την αποφαση σασν να δουμε στο μελλον τι θα το
+> κανου,ε καντα ανεβασε τα και τα docs να κλεισω»
+
+Parked deliberately, written into BACKLOG.md rather than dropped.
 
 ## What changed, where
 
-**Webhook authentication** (`a591050`) — `/webhooks/hostaway` was the only endpoint with
-no bearer token and, until now, nothing in its place. `main._hostaway_webhook_authorized`
-verifies HTTP Basic credentials registered with the webhook, as the first statement in the
-handler. Fails closed. `hostaway_integration.hostaway_register_webhook` deletes and
-recreates a webhook whose `login` does not match rather than reusing it.
+**`components/AskBar.jsx` (new)** — the standing field. 36px tall, hairline border, the
+page's own background behind it, a brand-red chat glyph, the placeholder «Ρώτα με ό,τι
+θες…», and a microphone. 49px in total. It is **not an `<input>`**: tapping it opens
+`AgentChatModal`, which owns the real conversation. Two live text fields for one
+conversation would mean two drafts to keep in sync.
 
-**Four screens that said "fine" when they were not** (`df8a181`, `450c9a1`, `a591050`):
-the green tick on a failure toast (`handleShowToast` defaults to `'success'`), the tick
-that stuck after a failed disconnect, the tick on a connection with no webhook — which
-receives nothing — and the message that blamed the user's credentials for a server error.
+**`App.jsx`** — the phone's bottom is now **one fixed dock with two floors**: `AskBar`
+sitting on `BottomNav`. `openAgent({dictate})` / `closeAgent()` replace the two bare
+`setIsAgentOpen` calls, so the microphone's request to start listening cannot leak into a
+later opening that nobody asked to be voice. `<main>` clearance `pb-48` → `pb-56`.
 
-**Two real Hostaway bugs** (`9c1083e`): a follow-up guest message left
-`hostaway_answered_at` standing, which silenced the task permanently; and
-`auto_close_enabled` off skipped RECORDING the reply, not just the closing, buying an
-endless nag.
+**`components/BottomNav.jsx`** — gave up its own `fixed bottom-0`; it is the dock's lower
+floor now. `pb-safe` stays on it, because it is still the element touching the bottom edge.
 
-**The label** (`1136fcd`), **dead code** (`721d075`), **rate limiting** (`534898d`),
-**the one-off script that had become a trap** (`dfb0e34`), **the bundle split**
-(`27eb246`), **the teaching copy** (`1e7579e`, `9c73a69`).
+**`components/AppBar.jsx`** — new `showAgent` prop, passed `isDesktop`. The Ask button
+survives ONLY on the desktop layout, where it is the only door to the agent.
 
-## Baselines, re-run 2026-09-21 for this entry
+**`components/AgentChatModal.jsx`** — gained dictation, which it had never had, and an
+`autoDictate` prop. The transcript lands in the input and is **never sent on its own**.
+
+**`components/DictateButton.jsx`** — new `autoStart` prop, guarded by a ref so a re-render
+can never reopen the recogniser under someone who has deliberately stopped it.
+
+**`components/FloatingActionButtons.jsx`** and **`components/VoiceButton.jsx`** — both
+climbed to clear the taller dock, via two named offsets in `index.css` so they cannot drift
+apart. At the old offset the «+» sat directly on the ask field.
+
+**`index.css`** — `.bottom-safe-dock` and `.bottom-safe-rec`, both commented with what they
+are measuring.
+
+**`locales/el.json` / `en.json`** — `agent.bar_placeholder`, `agent.ask_by_voice`.
+
+## A bug fixed on the way past
+
+`VoiceButton`'s recording indicator was pinned with a bare `bottom-44`, ignoring the
+home-indicator inset (`env(safe-area-inset-bottom)`) that every other pinned element on
+that screen respects — and that `index.css` says in so many words must be used. It had to
+move anyway; it now moves to a class that handles the inset.
+
+## Baselines — actual command output, 2026-09-21, after the push
 
 ```
-./venv/Scripts/python.exe -m pytest tests/ -q     593 passed in 5.24s        exit 0
-cd frontend && npm run check                      ui-check: OK — 93 files, 46 tokens,
-                                                  544 translation keys / all passed  exit 0
-cd frontend && npm run lint                       ✖ 12 problems (12 errors, 0 warnings)
-cd frontend && npm run build                      ✓ built in 1.16s
-                                                  index-icbjxK_F.js 202.03 kB │ gzip 53.33 kB
+npm run check   → EXIT=0
+                  ui-check: OK — 94 files, 46 tokens, 546 translation keys
+                  all passed (18 suites)
+npm run build   → ✓ 339 modules transformed, built in 492ms, no warnings
+npm run lint    → ✖ 12 problems (12 errors, 0 warnings)
 ```
 
-Tests 545 → **593**. The 12 lint errors are **pre-existing and unrelated** — service-worker
-globals and `set-state-in-effect` warnings that predate this session; `npm run lint` is not
-part of `npm run check` and does not gate the build.
+**The 12 lint errors are pre-existing and none are in the files touched here.** That is not
+an assumption: the working tree was stashed, `npm run lint` re-run on the unchanged tree,
+and it produced **the same 12**. They live in `App.jsx:250`, `SettingsModal.jsx:603`,
+`TodayView.jsx:69` (setState-in-effect), `api.js` (three `preserve-caught-error`), and
+`sw.js` (`clients` undefined, unused vars). Cleaning them is separate work nobody has asked
+for.
 
-Bundle, measured before and after: first load **251 → 182 kB gzip**; the chunk that changes
-per deploy **251 → 53 kB**.
+**`npm run check` alone is not proof for this task.** It does not compile JSX — a broken
+component passes it silently — which is why `npm run build` is quoted above beside it.
 
-## SEEN working by a person
+## What a person has actually SEEN
 
-- **The webhook is live and authenticated.** Asked Hostaway's own API after he reconnected:
-  webhook `36768`, `login='ai-todo-app'`, `isEnabled=1`, and one matching row in
-  `hostaway_connections`. The old `34986` is gone.
-- **The rate limit, against a running server.** 70 POSTs from one address: 60×401 then
-  10×429, a second address still 401, and the same address still reached the scheduler.
-- **The 401 on the live deploy.** A POST with no credentials to the real Render URL → 401.
-- **The toast colour, by the owner:** «το πρασινο εφτιαξε».
-- **The bundle split, in a browser** against `vite preview`: renders, console clean of app
-  errors, network shows exactly five files and none of the four lazy chunks.
+- Nothing of this, in the real app.
+- The four HTML mock-ups were seen and judged by the owner, on his own phone, and that is
+  what drove every choice above. **A mock-up is not the app**: it used the real tokens from
+  `index.css` at the real sizes, but it had no Suspense boundary, no lazy chunk, no keyboard
+  opening over it, and no microphone permission prompt.
 
-## NOT seen by anyone
+## What NOBODY has watched — the whole of it
 
-- **A real guest message arriving through the authenticated webhook.** Everything says it
-  should work — the webhook is registered with credentials and the endpoint accepts them —
-  but no actual Hostaway message has arrived since. **This is the one that matters.**
-  Settled by: a guest writes, and a task appears.
-- **Either Hostaway bug fix in real use.** Both are proven by tests that fail without the
-  fix; neither has been watched with a real conversation. The append fix needs a guest who
-  writes twice within 90 seconds.
-- **The new switch label on his screen.** Tested for consistency with the code, not looked at.
-- **The four lazy modals.** They sit behind a login this session had no account for, so
-  Calendar, Settings, the agent chat and add-task were never opened after the split. A
-  broken lazy import would show as a modal that does not open.
-- **Rate limiting in production.** Verified locally; Render was never flooded on purpose.
-
-## Still open, deliberately
-
-- **`HOSTAWAY_CLIENT_ID` / `HOSTAWAY_CLIENT_SECRET` are still in Render.** Nothing reads
-  them. He was asked to delete them; not confirmed done.
-- **`AIRTABLE_TOKEN` and `migrate_to_supabase.py`** — the same shape as the script deleted
-  in `dfb0e34`, and worse if run (it would re-import old Airtable tasks over the live
-  database). Left because BACKLOG.md records keeping them as his deliberate choice.
+1. **The ask bar on a real phone.** Whether 49px is what it looked like in the mock-up, and
+   whether the hairline border holds up in dark mode on a real screen — the owner was
+   explicitly warned about that one and chose Β2 anyway. Settles it: open the app on his
+   phone in both themes.
+2. **The microphone path, end to end.** Tap the mic on the bar → the agent chat opens →
+   it is already listening. This is the highest-risk item here, for a mechanical reason:
+   `AgentChatModal` is lazily loaded, so the first ever tap fetches a 129 kB chunk before
+   the component mounts and `start()` runs. Chrome's `SpeechRecognition` does not require a
+   transient user gesture, so this SHOULD be fine — but "should" is the word, and nobody has
+   watched it. Settles it: tap the mic, twice (cold chunk, then warm).
+3. **Dictation inside the agent chat at all.** It is new. The transcript anchoring
+   (speaking adds to a half-typed question instead of wiping it) is copied from
+   `TaskDetailSheet`, where it works, but it has not been run here.
+4. **The two climbed controls.** That the «+» and the recording indicator clear the dock
+   and each other on a real device with a home indicator. Arithmetic says 13px and 16px of
+   gap; arithmetic is not a screenshot.
+5. **Whether losing 49px of list is actually felt.** The mock-up showed five identical tasks
+   in every variant so the cost was visible. On his real list, with his real task lengths,
+   it may read differently.
+6. **The desktop layout.** It should be unchanged — `showAgent={isDesktop}` keeps the Ask
+   button there and no dock is rendered above 1024px — but "should be unchanged" is exactly
+   the claim that deserves one look at a wide window.
