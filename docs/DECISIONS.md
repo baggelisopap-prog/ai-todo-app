@@ -1,6 +1,55 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: the webhook's missing secret rejects everything, rather than waving everything through
+`/webhooks/hostaway` had no authentication at all until 2026-09-20. Giving it a shared secret was not the decision — there was only one sane mechanism, and Hostaway documents it (`login`/`password` on the webhook, sent back as HTTP Basic). The real choice was what happens when `HOSTAWAY_WEBHOOK_SECRET` is not set.
+
+**Fail CLOSED: an unset secret rejects every delivery.** A missed guest message is loud. The owner notices within the hour, because a guest is waiting and nothing appeared on his phone — and this session proved exactly that feedback loop works, twice. An endpoint left open because a variable was never set is silent, and stays open for as long as nobody looks. Between a failure that announces itself and one that hides, the app already had a precedent: `run_scheduler` refuses every call when `SCHEDULER_SECRET` is missing, and has since the auth migration.
+
+**Rejected: accept deliveries when no secret is configured.** It is the friendlier default and the reason it was considered at all — local development needs no setup, and a deploy that forgets the variable keeps working. That last clause is the whole problem: "keeps working" means "keeps accepting anything from anyone", and nothing would ever have said so. The cost of the choice we made is real and was paid immediately: the owner had to set the variable in Render before the deploy, and messages would have been dropped if he had not.
+
+**The check sits ABOVE the JSON parse and far above the Gemini call**, which is a smaller decision with the same shape. An unproven caller must not reach anything that costs money or writes a row, and a body that is never parsed cannot be a parser's problem.
+
+### Decision: the auto-close switch governs closing only — the reply is always recorded
+`_check_hostaway_replies` read `auto_close_enabled` at the very top, above the task scan and above every HTTP call, and ARCHITECTURE.md defended that in so many words: "this tick runs for every user every ~2 minutes, so 'off' has to cost nothing". The saving was real. Its price had not been counted.
+
+Skipping the poll skipped RECORDING the reply, not just the closing. `hostaway_answered_at` is what stops the escalation nagging, so turning off auto-close silently bought an endless one: answer the guest, and the task pushes every two hours, forever, escapable only by completing a task already handled. The switch is labelled «Κλείσιμο task όταν απαντάς» — it is about CLOSING, and it was quietly also about noticing.
+
+**So the switch now governs exactly the completion step.** The reply is recorded either way. **The cost, stated plainly: one HTTP call per open conversation per tick for a user with the switch off, where it used to be zero** — bounded by `HOSTAWAY_REPLY_POLL_LIMIT`, and the price of a switch meaning what its label says. The early return for a user with NO connection stays; that is the saving that always made sense.
+
+This **supersedes** the 2026-08-14 shape of that early return. `test_auto_close_switched_off_makes_no_api_call` asserted the old behaviour and was replaced by two tests asserting the new one, with the reasoning in their docstrings rather than only here.
+
+### Decision: P3 stays the only priority that auto-closes; the label changes instead
+This is the question the whole session started from — «γτ οταν απανταω σε ενα μυνημα στην hostaway δεν κλεινει μόνο του?» — and the answer was that nothing was broken. The screen promised «Όταν απαντάς σε πελάτη, κλείνει το task του μέσα σε ~2 λεπτά» while `HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES` has always been `{"P3"}`. He was waiting on a close that was never coming.
+
+Two repairs were possible and both were honest: add P2 so the promise becomes true, or rewrite the promise. **He chose the label: «οχι μονο π3».**
+
+That answer was ASKED rather than assumed, and the asking mattered: in Greek the phrase reads both ways — "not only P3" and "no, only P3" — and the two readings are opposites. The wrong one would have started closing P2 tasks off his list, which is work disappearing rather than work merely lingering. Where a misreading costs deleted work in one direction and nothing in the other, the question is cheap.
+
+P1 was never a candidate and should not become one: replying to "I can't find the keys" with "I'm coming in 20 minutes" is an answer, not a fix.
+
+**`tests/test_auto_close_label_matches_the_code.py` now binds the two.** It reads the constant and both locale files and fails if they disagree — every priority that closes must be named in the label, and no priority that stays open may be. They live in different files, different languages and different halves of the repo, which is exactly how they drifted. Adding "P2" was described in the constant's own comment as a one-line change; it is two, and the comment now says so.
+
+### Decision: rate limiting is written here rather than added as a dependency
+The app had no ceiling anywhere on how fast one caller may hit an endpoint. That matters on the two a stranger can reach, because a shared secret is guessable one attempt at a time and only a cap on attempts makes that hopeless.
+
+**Rejected: slowapi**, the obvious library. It would mean editing `requirements.txt` — UTF-16LE with a BOM, and documented as not-to-be-edited, a rule that exists because that encoding has already caused trouble. Adding a dependency to gain a feature set nobody needs, by touching the one file with a standing rule about it, is a poor trade.
+
+**So `rate_limit.py`: a sliding window in memory, no new dependency.** Sliding rather than fixed, because a fixed window resets on a clock boundary and lets 2×limit through either side of it. Buckets are `"<endpoint>:<ip>"`, so a flood at the scheduler cannot spend the same address's webhook budget — that is where real guest messages arrive.
+
+**What it does NOT do, stated so nobody mistakes it for more.** It counts per process: Render runs a single uvicorn worker, so today that is every process, but with N workers the ceiling loosens to N×limit — never tightens, never locks a real caller out. A restart forgives every counter. And `_client_ip` reads `X-Forwarded-For`, which a caller can spoof; that is acceptable because nothing is AUTHORISED on it, and a rotating spoofer gets one full limit per identity while the unthrottled single-address loop this exists to stop does not.
+
+Limits are sized so they cannot inconvenience the real caller: 60/min on the webhook against Hostaway traffic that has never neared one a minute, 10/min on the scheduler against a cron that fires every two minutes.
+
+### Decision: the teaching copy is rewritten AND ratcheted, not one or the other
+`agent_engine_explain.py` had drifted six weeks: of 55 names, 16 matched, 10 had different bodies — `ask_agent` and `search_tasks` among them — and 11 were missing. It is the file the owner reads to learn his own system, which makes it the one place where being WRONG is worse than being absent.
+
+The first pass deliberately did NOT rewrite it. Re-deriving ~21 pieces with a comment per line is enough work to deserve his decision rather than being swept into a cleanup, and a hand-copy rewritten that day drifts again by November. So it got an accurate ΠΡΟΣΟΧΗ header naming every stale piece, plus `tests/test_explain_copy_is_current.py` — a ratchet that fails when a NEW gap opens. He then asked for the rewrite: **«ναι ξαναγραψε το explain αρχειο»**.
+
+**Both were right, and the order was right.** The ratchet is what keeps the rewrite from becoming the next stale copy; the rewrite is what makes the ratchet's lists empty, which turns it from a tolerance into a plain equality check. Either alone would have decayed.
+
+**The long slices were appended PROGRAMMATICALLY from the real sources**, not retyped. The system instruction alone is a 90-line string; hand-copying it is precisely how a teaching copy starts lying, and this session had already proved that failure mode the hard way — a 64-character API key transcribed by eye lost a character and cost the owner three attempts at a connection that was fine.
+
 ### Decision: History opens the SAME sheet, with every door to a write closed
 The owner asked to tap a History row and see details. Three answers were real, and the question put to him was the one that separates them — «διαβάζεις ή πειράζεις;». His answer decided it: **«οπως οταν ειναι ανοιχτο απλα να μην εχχει επεξεργασία»**.
 
