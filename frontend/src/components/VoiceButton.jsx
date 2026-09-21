@@ -262,7 +262,10 @@ const VoiceButton = forwardRef(function VoiceButton({ onComplete, renderIdleButt
       className={
         renderIdleButton
           ? 'relative flex flex-col items-center gap-1'
-          : 'fixed bottom-44 right-4 z-40 flex flex-col items-center gap-1'
+          // Climbs with the capture button it stacks above (see
+          // .bottom-safe-rec), and picks up the home-indicator inset the old
+          // bare `bottom-44` was ignoring.
+          : 'fixed bottom-safe-rec right-4 z-40 flex flex-col items-center gap-1'
       }
     >
       {voiceError && (

@@ -7,14 +7,22 @@ import { TABS } from './navTabs';
  * Rendered only below 1024px — above that App swaps in SideNav, which reads
  * the same TABS. The icons and the tab list used to live in this file; they
  * moved to icons.jsx and navTabs.js when the second navigation needed them.
+ *
+ * NOT pinned to the bottom itself any more. AskBar now sits directly on top of
+ * it, and App wraps the pair in one fixed dock — so this is the dock's lower
+ * floor and takes its position from it. The alternative was leaving this fixed
+ * and pinning AskBar "62px up", a number that depends on this file's fonts and
+ * label heights and would have broken silently the first time either changed.
  */
 function BottomNav({ activeTab, onTabChange, inboxCount = 0 }) {
   const { t } = useTranslation();
 
   return (
-    // pb-safe: on a phone with a home indicator the nav is the bottom-most
-    // element on screen, so without the inset its labels sit underneath it.
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-card)] border-t border-[var(--border-subtle)] shadow-[0_-1px_3px_rgba(0,0,0,0.03)] pb-safe">
+    // pb-safe: on a phone with a home indicator the nav is still the
+    // bottom-most element on screen, so without the inset its labels sit
+    // underneath it. It stays here rather than moving up to the dock, because
+    // this is the element actually touching the bottom edge.
+    <nav className="bg-[var(--bg-card)] border-t border-[var(--border-subtle)] shadow-[0_-1px_3px_rgba(0,0,0,0.03)] pb-safe">
       <div className="flex justify-around max-w-3xl mx-auto">
         {TABS.map(({ id, labelKey, Icon }) => {
           const isActive = activeTab === id;

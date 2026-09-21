@@ -4,6 +4,7 @@ import { useModalBehavior } from '../hooks/useModalBehavior';
 import Markdown from 'react-markdown';
 import { askAgent, confirmAgentAction, cancelAgentAction } from '../api';
 import AgentHistoryView from './AgentHistoryView';
+import DictateButton from './DictateButton';
 
 // Maps a proposed action's field name to the app's existing field-label
 // translation key, so cards never hardcode English field names.
@@ -181,7 +182,14 @@ function ProposalCard({ action, t, onConfirm, onCancel }) {
   );
 }
 
-export function AgentChatModal({ onClose, onTaskConfirmed }) {
+/**
+ * `autoDictate` — true when this was opened by the microphone on the phone's
+ * AskBar. You already asked for the microphone out there; being handed a
+ * second one to tap in here would be the app forgetting what you just did.
+ * The transcript lands in the input and is NOT sent on its own: a misheard
+ * word would otherwise become a real instruction about real tasks.
+ */
+export function AgentChatModal({ onClose, onTaskConfirmed, autoDictate = false }) {
   useModalBehavior(onClose);
   const { t } = useTranslation();
   const [messages, setMessages] = useState([]);
@@ -197,6 +205,11 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
   const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef(null);
   const inFlightActionIds = useRef(new Set());
+  // Dictation anchors to whatever is already typed, so speaking adds to a
+  // half-written question instead of wiping it. Cleared the moment the engine
+  // commits a final result, so the next utterance anchors afresh.
+  const dictationBaseRef = useRef(null);
+  const [voiceError, setVoiceError] = useState(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -238,6 +251,15 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
       e.preventDefault();
       handleSend();
     }
+  }
+
+  function handleTranscript(text, { isFinal }) {
+    setVoiceError(null);
+    if (dictationBaseRef.current === null) {
+      dictationBaseRef.current = input ? `${input.trim()} ` : '';
+    }
+    setInput(dictationBaseRef.current + text);
+    if (isFinal) dictationBaseRef.current = null;
   }
 
   // Shared by the X close button and "New conversation": un-confirmed
@@ -431,7 +453,10 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
               ))}
             </div>
           )}
-          <div className="p-3 flex gap-2">
+          {voiceError && (
+            <p className="px-3 pt-2 text-xs text-[var(--danger)]">{voiceError}</p>
+          )}
+          <div className="p-3 flex items-center gap-2">
             <input
               type="text"
               value={input}
@@ -439,12 +464,21 @@ export function AgentChatModal({ onClose, onTaskConfirmed }) {
               onKeyDown={handleKeyDown}
               placeholder={t('agent.input_placeholder')}
               disabled={isLoading}
-              className="flex-1 px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] bg-[var(--bg-card)] disabled:opacity-50"
+              className="flex-1 min-w-0 px-3 py-2 rounded-md border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] bg-[var(--bg-card)] disabled:opacity-50"
+            />
+            {/* The transcript goes into the field, never straight to the agent:
+                a misheard word here becomes a real instruction about real
+                tasks. You read it before you send it. */}
+            <DictateButton
+              onTranscript={handleTranscript}
+              onError={() => setVoiceError(t('voice.permission_denied'))}
+              disabled={isLoading}
+              autoStart={autoDictate}
             />
             <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium disabled:opacity-50"
+              className="px-4 py-2 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white font-medium disabled:opacity-50 shrink-0"
             >
               {t('agent.send')}
             </button>

@@ -212,6 +212,21 @@ body {
 .bottom-safe-24 {
   bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
 }
+/* The phone's dock has two floors now — AskBar sitting on BottomNav — so
+   anything floating above it has further to climb than the 6rem that cleared
+   the nav on its own. The dock is ~111px (49 + 62); this is that plus a 13px
+   gap. Named rather than inlined at the two call sites so they cannot drift
+   apart: if the bar's height ever changes, it changes here, once. */
+.bottom-safe-dock {
+  bottom: calc(7.75rem + env(safe-area-inset-bottom, 0px));
+}
+/* The recording indicator stacks ABOVE the capture button, so it climbs by the
+   same amount the button did, keeping the 16px that used to separate them.
+   It was a bare `bottom-44`, which quietly ignored the home-indicator inset
+   that every other pinned element on this screen respects. */
+.bottom-safe-rec {
+  bottom: calc(12.75rem + env(safe-area-inset-bottom, 0px));
+}
 
 /* --- Tap targets -------------------------------------------------------
    Grows the region that accepts a thumb WITHOUT changing anything visible.

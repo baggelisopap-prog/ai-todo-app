@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSpeechInput, isSpeechInputSupported } from '../hooks/useSpeechInput';
 import {
@@ -30,15 +30,27 @@ import { MicIcon, StopIcon } from './icons';
  * Renders nothing where the browser has no recognition (Firefox today), rather
  * than a control that cannot work.
  */
-function DictateButton({ onTranscript, onError, disabled = false }) {
+function DictateButton({ onTranscript, onError, disabled = false, autoStart = false }) {
   const { t, i18n } = useTranslation();
   const [langCode, setLangCode] = useState(() => resolveDictationLang(i18n.resolvedLanguage));
 
-  const { isListening, stop, toggle } = useSpeechInput({
+  const { isListening, start, stop, toggle } = useSpeechInput({
     lang: dictationTagFor(langCode),
     onResult: onTranscript,
     onError,
   });
+
+  // `autoStart` is for the caller that arrived here having already asked for
+  // the microphone — tapping the mic on the phone's AskBar opens the agent
+  // chat, and it would be absurd to make you tap a second mic once you got
+  // here. Guarded by a ref rather than the dependency array: a re-render must
+  // never reopen the recogniser under someone who has deliberately stopped it.
+  const hasAutoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || hasAutoStarted.current || !isSpeechInputSupported()) return;
+    hasAutoStarted.current = true;
+    start();
+  }, [autoStart, start]);
 
   if (!isSpeechInputSupported()) return null;
 

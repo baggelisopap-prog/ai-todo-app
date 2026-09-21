@@ -4,6 +4,7 @@ import { getAllTasks, updateTask, connectGoogleCalendar, getProfile, acceptWorks
 import { supabase } from './supabaseClient';
 import { LoginScreen } from './components/LoginScreen';
 import BottomNav from './components/BottomNav';
+import AskBar from './components/AskBar';
 import SideNav from './components/SideNav';
 import InboxView from './components/InboxView';
 import TodayView from './components/TodayView';
@@ -158,6 +159,20 @@ function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  // Set only by the microphone on AskBar, and cleared on close so the NEXT
+  // opening — from the field, or from the desktop's top bar — does not
+  // inherit a request to start listening that nobody made.
+  const [agentAutoDictate, setAgentAutoDictate] = useState(false);
+
+  function openAgent({ dictate = false } = {}) {
+    setAgentAutoDictate(dictate);
+    setIsAgentOpen(true);
+  }
+
+  function closeAgent() {
+    setIsAgentOpen(false);
+    setAgentAutoDictate(false);
+  }
   const [toast, setToast] = useState(null); // { message, variant, action?, duration? }
 
   const [session, setSession] = useState(null);
@@ -539,9 +554,12 @@ function App() {
       <AppBar
         title={t(TAB_TITLE_KEYS[activeTab])}
         profile={profile}
-        onOpenAgent={() => setIsAgentOpen(true)}
+        onOpenAgent={() => openAgent()}
         onOpenSettings={() => setIsSettingsOpen(true)}
         showProfile={!isDesktop}
+        // The agent's door lives in AskBar on a phone. Up here it would be a
+        // second entrance to the same room — and the worse of the two.
+        showAgent={isDesktop}
         wide={isDesktop && activeTab === 'calendar'}
         // On a phone the title slot IS the room picker, which is what removed
         // the chip row that used to sit under this bar and cost ~40px on every
@@ -556,9 +574,11 @@ function App() {
           from under two fixed circular buttons; AppBar is sticky and in flow,
           so it takes its own space.
 
-          pb-48 is clearance for the phone's bottom nav and its floating
-          button. Neither is rendered on a desktop, so neither is the gap. */}
-      <main className={`flex-1 ${isDesktop ? 'pb-8' : 'pb-48'}`}>
+          pb-56 is clearance for the phone's bottom dock and its floating
+          button. Neither is rendered on a desktop, so neither is the gap. It
+          was pb-48 while the dock was the nav alone; AskBar added a second
+          floor, and without the extra the last task sat under it. */}
+      <main className={`flex-1 ${isDesktop ? 'pb-8' : 'pb-56'}`}>
         {isLoading && (
           <div className="max-w-3xl mx-auto p-4 text-[var(--text-muted)] text-sm italic">
             {t('app.loading_tasks')}
@@ -591,8 +611,16 @@ function App() {
         />
       )}
 
+      {/* The phone's dock: one fixed element, two floors. AskBar has no
+          position of its own and BottomNav gave its up — pinning the bar
+          "one nav height from the bottom" would have meant hardcoding a
+          number that depends on the nav's fonts and labels, and that breaks
+          silently the first time either changes. */}
       {!isDesktop && (
-        <BottomNav activeTab={activeTab} onTabChange={handleTabChange} inboxCount={pendingCount} />
+        <div className="fixed bottom-0 left-0 right-0 z-40">
+          <AskBar onOpen={openAgent} />
+          <BottomNav activeTab={activeTab} onTabChange={handleTabChange} inboxCount={pendingCount} />
+        </div>
       )}
       </div>
 
@@ -631,7 +659,11 @@ function App() {
 
       {isAgentOpen && (
         <Suspense fallback={null}>
-          <AgentChatModal onClose={() => setIsAgentOpen(false)} onTaskConfirmed={handleAgentActionConfirmed} />
+          <AgentChatModal
+            onClose={closeAgent}
+            onTaskConfirmed={handleAgentActionConfirmed}
+            autoDictate={agentAutoDictate}
+          />
         </Suspense>
       )}
     </div>

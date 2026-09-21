@@ -43,7 +43,16 @@ import { getInitials } from '../utils/profile';
  * sticky, that line stays on screen while a long list scrolls under it, so the
  * signal survives without a single pixel of chrome.
  */
-function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = true, wide = false, roomPicker = false, tasks }) {
+/**
+ * `showAgent` — true only on the desktop layout, where this button is the
+ * ONLY door to the agent: that layout has no floating controls and no AskBar,
+ * so removing it here would remove the agent entirely. On a phone the agent
+ * moved to AskBar, a standing field above the tabs, and a second entrance up
+ * here would be two doors to one room — with the worse of the two, an outlined
+ * grey button in the corner a thumb reaches last, sitting beside the title it
+ * was already truncating.
+ */
+function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = true, showAgent = true, wide = false, roomPicker = false, tasks }) {
   const { t } = useTranslation();
   const { workspaces, activeId } = useWorkspaces();
 
@@ -74,18 +83,20 @@ function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = tru
           </h1>
         )}
 
-        <button
-          type="button"
-          onClick={onOpenAgent}
-          className="tap-44 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
-          aria-label={t('agent.open')}
-        >
-          <ChatIcon className="w-4 h-4" />
-          {/* The label is the point, and it is not hidden at any width. This is
-              the app's distinguishing feature and it spent its life as an
-              unlabelled grey circle. The title beside it truncates instead. */}
-          <span className="text-sm font-medium">{t('agent.short_label')}</span>
-        </button>
+        {showAgent && (
+          <button
+            type="button"
+            onClick={onOpenAgent}
+            className="tap-44 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+            aria-label={t('agent.open')}
+          >
+            <ChatIcon className="w-4 h-4" />
+            {/* The label is the point, and it is not hidden at any width. This is
+                the app's distinguishing feature and it spent its life as an
+                unlabelled grey circle. The title beside it truncates instead. */}
+            <span className="text-sm font-medium">{t('agent.short_label')}</span>
+          </button>
+        )}
 
         {showProfile && (
           <button
