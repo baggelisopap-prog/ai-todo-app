@@ -22,6 +22,16 @@ _Single source of truth for the technical shape. Verify against real code when C
 - **Legacy Airtable base id** (read-only backup only): `appltfhiUjBTEsd9w`.
 - `requirements.txt` is UTF-16LE with BOM — preserve encoding; don't edit in plain Notepad. The `websockets==16.0` pin was removed (dependency conflict: google-genai needs <17, supabase/realtime needs <16 → pip resolves 15.0.1).
 
+## agent_engine_explain.py — the teaching copy (2026-09-21)
+
+Not part of the program; nothing imports it. It exists so the owner, who is not a programmer, can read his own agent with Greek commentary. That makes it the one file where being WRONG is worse than being absent.
+
+**Rewritten in full on 2026-09-21** and now matches the real code exactly — all 55 names present, all 34 function bodies structurally identical to `agent_engine.py` + `agent_tools.py`. The previous version was six weeks stale (16 of 55 correct). The long slices were appended PROGRAMMATICALLY from the real sources rather than retyped, because hand-copying a 90-line prompt string is how a teaching copy starts lying; the Greek commentary is written around those exact slices.
+
+One deliberate difference, documented in the file itself: `client = None` instead of `genai.Client(api_key=...)`, so the file can be opened without a GOOGLE_API_KEY. Verified with ruff that nothing else is undefined.
+
+`tests/test_explain_copy_is_current.py` holds it there. Both `KNOWN_GAPS` sets are now EMPTY, so the tests are plain equality rather than a tolerance: any new function, or any changed body, fails the suite and names the piece. A fourth test demands a ΠΡΟΣΟΧΗ warning in the file's header whenever a gap is recorded, so a deliberate deferral can never be silent. Verified by changing `PRIORITY_ORDER` in the real code: the suite fails on exactly that.
+
 ## Frontend bundle shape (2026-09-20)
 
 One 900 KB file (251 KB gzip) until this date, and every cold open on a phone paid for all of it. Split two ways:

@@ -31,34 +31,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 REAL_SOURCES = ("agent_engine.py", "agent_tools.py")
 COPY_SOURCE = "agent_engine_explain.py"
 
-# Recorded 2026-09-20. Every name here is a place the copy is known to be
-# out of date. Shrinking this list is the point; growing it needs a reason.
-KNOWN_GAPS_DIFFERENT = {
-    "_finish",
-    "ask_agent",
-    "build_system_instruction",
-    "build_time_context",
-    "build_tool_functions",
-    "build_write_proposal_tools",
-    "is_open_task",
-    "propose_complete_task",
-    "propose_update_task",
-    "search_tasks",
-}
+# EMPTY as of 2026-09-21 — the copy was rewritten and every gap closed. That
+# is the state to keep it in: an empty set means the teaching copy and the real
+# code agree about all 55 names, and the two tests below are then a plain
+# equality check rather than a tolerance.
+#
+# Adding a name here is allowed but never silent — it is a written admission
+# that the file teaches something the code does not do, and the header warning
+# test below will demand the reader be told.
+KNOWN_GAPS_DIFFERENT: set[str] = set()
 
-KNOWN_GAPS_MISSING = {
-    "STEM_MIN_WORD_LENGTH",
-    "STEM_PREFIX_LENGTH",
-    "_PENDING_ERROR",
-    "_match_with",
-    "_scan",
-    "_unjustified_target",
-    "build_conversation_refs_block",
-    "build_vocabulary_block",
-    "is_disposed_of",
-    "render_task_rows",
-    "stem_words",
-}
+KNOWN_GAPS_MISSING: set[str] = set()
 
 
 def _names(path: pathlib.Path) -> dict:
