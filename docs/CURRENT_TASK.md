@@ -1,162 +1,159 @@
-ACTIVE TASK — The agent moved out of the top bar and became a standing field above the tabs. Pushed, and SEEN WORKING by the owner
+ACTIVE TASK — The agent got a permanent, draggable column on the desktop. Pushed; driven in a real browser, but not yet on the deployed app
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
-> **ONE COMMIT PUSHED TO MAIN, `10e2b5d`, AUTO-DEPLOYED.**
-> 11 files, +226 −31. New file: `frontend/src/components/AskBar.jsx`.
-> Phone layout only — the desktop layout is byte-for-byte unchanged in behaviour.
+> **ONE COMMIT PUSHED TO MAIN, `12c0e53`, AUTO-DEPLOYED.**
+> 6 files, +388 −12. New file: `frontend/src/components/AgentPanel.jsx`.
+> Desktop layout only — the phone is untouched by this commit.
 >
-> The previous task (the Hostaway audit, `a591050` → `9c73a69`) is **finished** and lives in
-> git and in PROJECT_STATUS.md. Nothing here supersedes it. Its five unwatched items are
-> still unwatched; they were not touched by this work.
+> The previous task (the phone's AskBar, `10e2b5d`) is **finished**, was seen
+> working by the owner, and lives in PROJECT_STATUS.md. Nothing here supersedes it.
 
 ## What was asked
 
-2026-09-21, opening words:
+2026-09-22, after the phone work was accepted. He asked to look at the desktop screen,
+and after seeing what was there:
 
-> «ελα να κανουμε ένα Γρήγορο Θέλω στο Κινητό Ui να αλλαξουμε κάτι. Πρώτα θα κανουμε ενα
-> μικρο brainstrom μετα θα το φτιάηεις σε html να το δω και να διαλεξω και τελος προχωράμε»
+> «σε πρώτησ φάση να πιάσουμε το ask me»
 
-Asked which part of the phone screen, he named two:
+Shown the current state and three directions, he chose the permanent column and added a
+requirement of his own:
 
-> «θελω την κατω μπάρα και επίσης το που ειναι το συνεφακι του agend που γραφεις ask»
+> «α αλλα να μπορεί και να μεγαλωσει μικρινει με συρσημω καταλαβες πω΄ς εννοώ?»
 
-Asked what actually bothered him — the WHY, not the fix — he chose one of four offered
-reasons, and it is the sentence the whole change is built on:
+After feeling the drag in an interactive mock-up:
 
-> **«Δεν ξεχωρίζει — είναι το κύριο πράγμα»**
+> «τελειο»
 
-Not "I can't find it". The agent is the reason this app exists and it was drawn as the
-least important control on the screen.
+Then, on the implementation plan:
 
-## His decisions, in his words
+> «jekina»
 
-**Do the UX research rather than be asked to choose blind.** Offered three options for
-what happens to the «+» button, he refused all three and asked for a recommendation:
+And, after seeing it running locally:
 
-> «κανε ερευνα σε ux και προτεινε»
+> «ενταξει ειναι ανεβασε»
 
-**He rejected the entire first round** — a fifth centre tab, the docked field, an extended
-labelled pill — and proposed a fourth placement himself:
+## The problem, stated properly
 
-> «κανενα δε μου αρεσε ισως να παει αριστερα απεναντι απο το + ??»
+The desktop agent was **the phone's sheet enlarged**: a 512×600 dialog on a `bg-black/40`
+backdrop. Nobody chose that for a desktop — a second shape was simply never written. It
+has two costs, and the second is the one that matters:
 
-**The «+» keeps its size and its colour**, asked while the corner layouts were on screen:
+1. The entry point was a small outlined grey button in the top-right corner.
+2. **You asked a question about your tasks and the answer covered your tasks.** Seeing
+   both meant closing the conversation and reopening it for the next question.
 
-> «Μένει όπως είναι»
+## His decisions, and two of mine
 
-**Then he came back to the docked field he had rejected, with one change.** He quoted the
-whole section back and ended it:
+**The column, not a field.** Of three directions drawn (permanent column / ask-field above
+the list / ask-field in the sidebar), only the column fixes the covering. The other two
+are doors to the same dialog.
 
-> «αυτο τελικα μου αρεσε απλα λιγο ποιο διακριτικο και λεπτο»
+**Draggable — his requirement, and testing proved it was not a flourish.** Which of the
+list and the conversation should give way changes within the same hour, so the split
+belongs to whoever is looking at it rather than to a constant chosen in the code.
 
-**Of the three weights drawn for "thinner", he took the middle one:**
+**Mine, stated to him before building and not objected to:** the width is remembered in
+`localStorage` (a property of one screen — the same reasoning `SwipeHint` already uses, so
+it does not travel to the phone), and below 1280px the panel starts *collapsed, not
+absent* — one rule rather than a second code path.
 
-> «β2»
-
-**The microphone must do what it says**, choosing the larger of three scopes — which is
-what added dictation to the agent chat, a thing that did not exist at all:
-
-> «Μπες και στη συνομιλία»
-
-**Hide-on-scroll: not now, and not forgotten.**
-
-> «το 1 και βλεπουμε κρατα ανοιχτη την αποφαση σασν να δουμε στο μελλον τι θα το
-> κανου,ε καντα ανεβασε τα και τα docs να κλεισω»
-
-Parked deliberately, written into BACKLOG.md rather than dropped.
+**Also flagged to him before building, because both are real:** the conversation now
+survives as long as the page is open (it used to die when the dialog closed; «Νέα
+συζήτηση» still clears it), and on desktop the agent's 129 kB chunk is fetched whenever the
+panel is expanded rather than only when a dialog opens.
 
 ## What changed, where
 
-**`components/AskBar.jsx` (new)** — the standing field. 36px tall, hairline border, the
-page's own background behind it, a brand-red chat glyph, the placeholder «Ρώτα με ό,τι
-θες…», and a microphone. 49px in total. It is **not an `<input>`**: tapping it opens
-`AgentChatModal`, which owns the real conversation. Two live text fields for one
-conversation would mean two drafts to keep in sync.
+**`components/AgentPanel.jsx` (new)** — the column and its handle: drag, limits, collapse,
+remembered width. The limits are measured, not picked: **300px** because below it the chat
+bubbles and the Send button start wrapping; **250px** is where a drag stops squeezing and
+closes instead; the maximum is whatever leaves the list 480px, which is not a constant —
+it grows with the window.
 
-**`App.jsx`** — the phone's bottom is now **one fixed dock with two floors**: `AskBar`
-sitting on `BottomNav`. `openAgent({dictate})` / `closeAgent()` replace the two bare
-`setIsAgentOpen` calls, so the microphone's request to start listening cannot leak into a
-later opening that nobody asked to be voice. `<main>` clearance `pb-48` → `pb-56`.
+**`components/AgentChatModal.jsx`** — keeps its name, gains `variant`. This is the split
+`FloatingActionButtons` already uses for its round button and its sidebar row. In panel
+shape it does **not** lock page scroll (the list beside it is meant to be scrolled while
+you talk) and Escape does **not** close it (Escape dismisses something that interrupted
+you; a permanent column never did).
 
-**`components/BottomNav.jsx`** — gave up its own `fixed bottom-0`; it is the dock's lower
-floor now. `pb-safe` stays on it, because it is still the element touching the bottom edge.
+**`App.jsx`** — the panel is a sibling of the middle column, not an overlay. The phone's
+dialog is now guarded by `!isDesktop` as well, so narrowing a window cannot leave a
+dimming dialog on top of the column that does the same job. The AppBar's «Ρώτα» button
+became the panel's show/hide.
 
-**`components/AppBar.jsx`** — new `showAgent` prop, passed `isDesktop`. The Ask button
-survives ONLY on the desktop layout, where it is the only door to the agent.
+**`index.css`** — `.agent-grip`: a 1px rule with a 9px grab zone, thickening to the brand
+colour on hover, focus and drag.
 
-**`components/AgentChatModal.jsx`** — gained dictation, which it had never had, and an
-`autoDictate` prop. The transcript lands in the input and is **never sent on its own**.
+**`locales/el.json` / `en.json`** — three strings under `agent.panel`.
 
-**`components/DictateButton.jsx`** — new `autoStart` prop, guarded by a ref so a re-render
-can never reopen the recogniser under someone who has deliberately stopped it.
+## Three defects the build could never have caught
 
-**`components/FloatingActionButtons.jsx`** and **`components/VoiceButton.jsx`** — both
-climbed to clear the taller dock, via two named offsets in `index.css` so they cannot drift
-apart. At the old offset the «+» sat directly on the ask field.
+All three passed `npm run check` and `npm run build` cleanly, and all three were found by
+driving the running app in a browser. They are the reason that step is not optional here.
 
-**`index.css`** — `.bottom-safe-dock` and `.bottom-safe-rec`, both commented with what they
-are measuring.
+1. **The handle did not drag at all.** The pointermove was gated on the browser having
+   granted pointer capture. A refused capture therefore made the handle *silently dead*
+   rather than merely less smooth. It is now gated on whether you pressed; capture is a
+   convenience allowed to fail.
+2. **Dragging past the threshold killed the gesture.** Collapsing mid-drag unmounted the
+   very handle under the pointer, so overshooting inwards left you unable to pull it back
+   out — the only way back was releasing and clicking the strip. The drag now clamps at
+   the minimum and stays alive; collapsing is decided once, on release.
+3. **Closing it by shoving also shrank it.** The shove had clamped the width on its way
+   past, so the panel reopened narrower than it was left. The width at pointer-down is
+   restored instead.
 
-**`locales/el.json` / `en.json`** — `agent.bar_placeholder`, `agent.ask_by_voice`.
-
-## A bug fixed on the way past
-
-`VoiceButton`'s recording indicator was pinned with a bare `bottom-44`, ignoring the
-home-indicator inset (`env(safe-area-inset-bottom)`) that every other pinned element on
-that screen respects — and that `index.css` says in so many words must be used. It had to
-move anyway; it now moves to a class that handles the inset.
-
-## Baselines — actual command output, 2026-09-21, after the push
+## Baselines — actual output, 2026-09-22
 
 ```
 npm run check   → EXIT=0
-                  ui-check: OK — 94 files, 46 tokens, 546 translation keys
+                  ui-check: OK — 95 files, 46 tokens, 549 translation keys
                   all passed (18 suites)
-npm run build   → ✓ 339 modules transformed, built in 492ms, no warnings
-npm run lint    → ✖ 12 problems (12 errors, 0 warnings)
+npm run build   → ✓ 339 modules, clean
+npm run lint    → not re-run for this commit; it stood at 12 pre-existing
+                  errors on 2026-09-21, none in files touched here
 ```
 
-**The 12 lint errors are pre-existing and none are in the files touched here.** That is not
-an assumption: the working tree was stashed, `npm run lint` re-run on the unchanged tree,
-and it produced **the same 12**. They live in `App.jsx:250`, `SettingsModal.jsx:603`,
-`TodayView.jsx:69` (setState-in-effect), `api.js` (three `preserve-caught-error`), and
-`sw.js` (`clients` undefined, unused vars). Cleaning them is separate work nobody has asked
-for.
+## Measured in the running app, not observed and hoped
 
-**`npm run check` alone is not proof for this task.** It does not compile JSX — a broken
-component passes it silently — which is why `npm run build` is quoted above beside it.
+Driven at `localhost:5173`, logged in as the owner, viewport 2400×1218 CSS px:
 
-## What a person has actually SEEN
+| Check | Result |
+|---|---|
+| Default width | 400 |
+| Widened to 620, released | stays 620, persisted |
+| Shoved past the edge | clamps to 300, gesture survives |
+| Dragged back out mid-gesture | returns to 400 |
+| Released past the edge | collapses |
+| Strip reopens it | at **620**, not 300 |
+| After reload | 620 |
+| AppBar «Ρώτα» button | closes, then reopens |
+| Keyboard | +16, −64 with Shift, Home → 400 |
+| SideNav and panel heights | 1219 each = one viewport, sticky at top; the list scrolls beneath |
 
-**THIS SECTION USED TO SAY «Nothing of this, in the real app.»** It was true when written,
-on 2026-09-21, and it stopped being true the next day.
+## What NOBODY has watched
 
-- **The owner opened the deployed app and accepted it, 2026-09-22: «μια χαρα ειναι πέρνα και
-  προχωράμε».** He had been handed a four-step checklist just above that message — open the
-  app, tap the bar, tap the microphone twice (cold chunk then warm), look at it in dark
-  theme — and answered with one verdict rather than four. So **the feature is confirmed
-  working as a whole; which individual steps he ran is not recorded**, and the list below is
-  narrowed to exactly that difference rather than being emptied.
-- The four HTML mock-ups were seen and judged by him, on his own phone, and that is what
-  drove every choice above. **A mock-up is not the app**: it used the real tokens from
-  `index.css` at the real sizes, but it had no Suspense boundary, no lazy chunk, no keyboard
-  opening over it, and no microphone permission prompt.
+1. **Any of this on the deployed app.** Everything above is the local dev copy.
+2. **A narrow window.** The browser tool could not resize the window, so the breakpoint was
+   never seen. The guard is the same `isDesktop` flag that already switches SideNav and
+   BottomNav, and the phone's dialog now carries `!isDesktop` too — but that is reasoning,
+   not a screenshot. **Settles it: narrow the window.** The column should vanish, the
+   bottom dock with AskBar should appear, and no dimmed dialog should be left behind.
+3. **The panel on a genuinely small laptop screen**, where `COMFORTABLE_WIDTH` decides it
+   starts collapsed. Only ever run on a 2400px-wide viewport.
+4. **A real conversation held in the panel** — asking something, getting an answer, and
+   confirming a proposed change with the task visible beside it. That is the entire
+   argument for the design and it has not been done once.
 
-## What is still not separately confirmed
+## A separate finding, measured and deliberately not acted on
 
-Nothing here is suspected broken — he would have said. These are things his one-line
-approval does not by itself evidence.
+**The panel does not fix the empty width.** With the column open, the task list is still
+capped at 768px and floats with **484px of dead space on each side**. That cap is its own
+problem — a `max-w-3xl` on the list column — and nothing here touched it. Raised with the
+owner; no decision taken.
 
-1. **The microphone path, end to end**, and specifically the cold case: the first ever tap
-   fetches a 129 kB lazy chunk before `AgentChatModal` mounts and `start()` runs. Chrome's
-   `SpeechRecognition` needs no transient user gesture, so it should survive the gap. If it
-   ever fails it will fail **only on the first tap of a fresh session** and work on the
-   second — which is exactly the shape of bug that gets reported as "sometimes it doesn't
-   hear me". Worth knowing before chasing it as something else.
-2. **Dictation inside the agent chat.** New here. The transcript anchoring — speaking adds
-   to a half-typed question instead of wiping it — is copied from `TaskDetailSheet`, where
-   it works, but has not been run in this modal in front of anyone.
-3. **Whether losing 49px of list is actually felt.** Needs a week of his real list, not a
-   look. This is the open question behind the parked hide-on-scroll (BACKLOG.md).
-4. **The desktop layout.** Should be unchanged — `showAgent={isDesktop}` keeps the Ask
-   button there and no dock renders above 1024px — and he was on a phone.
+**A correction, out loud:** while presenting the mock-up I told him "16 pixels are missing"
+and that the list and the agent could not both fit. That arithmetic was for a 1440px
+viewport. His actual viewport is 2400px, where there is room to spare. The drag handle is
+still right — he asked for it, and it earns its place on narrow windows — but the claim as
+stated was wrong.

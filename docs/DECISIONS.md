@@ -1,6 +1,38 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: on a desktop the agent is a wall of the window, not a card floating over it
+The desktop agent was a 512×600 dialog on a `bg-black/40` backdrop — the phone's sheet, enlarged. That was never a desktop decision; a second shape was simply never written. Its cost is not mainly that the entry point was a small grey button. It is that **you asked a question about your tasks and the answer covered your tasks**: seeing both meant closing the conversation and reopening it for the next question. On a phone that trade is forced — there is no room for two things. On this window there were about 480px of empty gutter on each side of the list doing nothing at all.
+
+**So the conversation became a third column, permanently present.** `AgentChatModal` keeps its name and takes a `variant`, which is the split `FloatingActionButtons` has used since it grew a sidebar shape: one component, one behaviour, two boxes. Two behaviours are deliberately OFF in panel shape. It does not lock page scroll — the list beside it is meant to be scrolled while you talk, which is the entire reason the panel exists. And Escape does not close it: Escape dismisses something that interrupted you, and a permanent column never did.
+
+**Rejected: an ask-field above the list**, the phone's answer moved up. It is the smallest change and gives one idea across both screens — but it is a door, and behind it opens the same dialog that covers everything. It fixes one of the two costs and leaves the one that matters.
+
+**Rejected: an ask-field in the left sidebar**, beside «Νέα εργασία». The two things you do in this app standing together is tidy, but that column is NAVIGATION: a text field among links reads as *search within the menu*, and there is already a real search a little to the right. Two fields that look alike and do different things is worse than an unfixed problem.
+
+**Two consequences were named before building, not discovered afterwards.** The conversation now lives as long as the page is open rather than dying with the dialog («Νέα συζήτηση» still clears it). And the agent's 129 kB chunk is fetched whenever the panel is expanded, instead of only when a dialog opens — which partly spends, on the desktop only, the bundle split made on 2026-09-20. A collapsed panel still costs nothing: the chat element is created but never rendered, so `lazy()` never fetches.
+
+### Decision: the desktop column is DRAGGED to size, and the limits are measured rather than chosen
+The owner asked for it: «να μπορεί και να μεγαλωσει μικρινει με συρσημω». Building it proved the request was not a preference.
+
+**A constant would be wrong half of every day.** Which of the list and the conversation should give way depends on whether you are reading or asking, and that changes within the hour. There is no number to choose here — only a person to hand the choice to. On narrow windows it is sharper still: at 1440px there is genuinely not room for a full-width list and a comfortable column at once.
+
+**The limits are measurements.** 300px is where the chat bubbles and the Send button begin wrapping onto extra lines. 250px is where a drag stops squeezing the panel into something useless and closes it instead. The maximum is whatever leaves the list 480px — not a constant, because it grows with the window, which is why it is recomputed on resize.
+
+**Width lives in localStorage, per screen** — the same reasoning `SwipeHint` already uses. A split chosen on a 27-inch monitor is not one anyone wants on a laptop, and syncing it would carry the wrong answer between them.
+
+**Below 1280px the panel starts collapsed, not absent.** One rule instead of a second code path, and the strip is always there: nothing decides on your behalf that you cannot want the agent on a small screen.
+
+**Three things were learned only by driving it, and each is now a rule.**
+
+*Do not gate a drag on pointer capture.* The first version ignored pointermove unless `hasPointerCapture` was true. Capture is allowed to fail, and when it did the handle was **silently dead** rather than merely less smooth. What decides whether a drag is happening is whether the pointer went down; capture is a convenience layered on top.
+
+*Do not change the structure under a gesture.* Collapsing mid-drag unmounted the very handle the pointer was holding, which ended the drag — so overshooting inwards left you unable to pull the panel back out, with no way back but releasing and clicking the strip. The drag now clamps at the minimum and stays alive; whether to collapse is decided once, on release.
+
+*Closing must not also resize.* Shoving the panel shut had clamped its width on the way past, so it reopened narrower than it was left. The width recorded at pointer-down is restored instead.
+
+All three passed `npm run check` and `npm run build` without a mark. That is the standing argument for driving UI changes in a browser rather than trusting a green suite.
+
 ### Decision: on a phone the agent is a FIELD, and it does not share the bottom bar with the tabs
 The agent was a small outlined grey button in the top bar. The owner's diagnosis was not "I can't find it" — it was **«Δεν ξεχωρίζει — είναι το κύριο πράγμα»**. So the question was never placement, it was emphasis, and five things give a control emphasis: size, colour, position, label, and being the only one of its kind. The old button won on one of them.
 
