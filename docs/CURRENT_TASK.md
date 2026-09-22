@@ -1,4 +1,4 @@
-ACTIVE TASK — The agent moved out of the top bar and became a standing field above the tabs. Pushed, NOT yet seen on a phone
+ACTIVE TASK — The agent moved out of the top bar and became a standing field above the tabs. Pushed, and SEEN WORKING by the owner
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **ONE COMMIT PUSHED TO MAIN, `10e2b5d`, AUTO-DEPLOYED.**
@@ -128,33 +128,35 @@ component passes it silently — which is why `npm run build` is quoted above be
 
 ## What a person has actually SEEN
 
-- Nothing of this, in the real app.
-- The four HTML mock-ups were seen and judged by the owner, on his own phone, and that is
-  what drove every choice above. **A mock-up is not the app**: it used the real tokens from
+**THIS SECTION USED TO SAY «Nothing of this, in the real app.»** It was true when written,
+on 2026-09-21, and it stopped being true the next day.
+
+- **The owner opened the deployed app and accepted it, 2026-09-22: «μια χαρα ειναι πέρνα και
+  προχωράμε».** He had been handed a four-step checklist just above that message — open the
+  app, tap the bar, tap the microphone twice (cold chunk then warm), look at it in dark
+  theme — and answered with one verdict rather than four. So **the feature is confirmed
+  working as a whole; which individual steps he ran is not recorded**, and the list below is
+  narrowed to exactly that difference rather than being emptied.
+- The four HTML mock-ups were seen and judged by him, on his own phone, and that is what
+  drove every choice above. **A mock-up is not the app**: it used the real tokens from
   `index.css` at the real sizes, but it had no Suspense boundary, no lazy chunk, no keyboard
   opening over it, and no microphone permission prompt.
 
-## What NOBODY has watched — the whole of it
+## What is still not separately confirmed
 
-1. **The ask bar on a real phone.** Whether 49px is what it looked like in the mock-up, and
-   whether the hairline border holds up in dark mode on a real screen — the owner was
-   explicitly warned about that one and chose Β2 anyway. Settles it: open the app on his
-   phone in both themes.
-2. **The microphone path, end to end.** Tap the mic on the bar → the agent chat opens →
-   it is already listening. This is the highest-risk item here, for a mechanical reason:
-   `AgentChatModal` is lazily loaded, so the first ever tap fetches a 129 kB chunk before
-   the component mounts and `start()` runs. Chrome's `SpeechRecognition` does not require a
-   transient user gesture, so this SHOULD be fine — but "should" is the word, and nobody has
-   watched it. Settles it: tap the mic, twice (cold chunk, then warm).
-3. **Dictation inside the agent chat at all.** It is new. The transcript anchoring
-   (speaking adds to a half-typed question instead of wiping it) is copied from
-   `TaskDetailSheet`, where it works, but it has not been run here.
-4. **The two climbed controls.** That the «+» and the recording indicator clear the dock
-   and each other on a real device with a home indicator. Arithmetic says 13px and 16px of
-   gap; arithmetic is not a screenshot.
-5. **Whether losing 49px of list is actually felt.** The mock-up showed five identical tasks
-   in every variant so the cost was visible. On his real list, with his real task lengths,
-   it may read differently.
-6. **The desktop layout.** It should be unchanged — `showAgent={isDesktop}` keeps the Ask
-   button there and no dock is rendered above 1024px — but "should be unchanged" is exactly
-   the claim that deserves one look at a wide window.
+Nothing here is suspected broken — he would have said. These are things his one-line
+approval does not by itself evidence.
+
+1. **The microphone path, end to end**, and specifically the cold case: the first ever tap
+   fetches a 129 kB lazy chunk before `AgentChatModal` mounts and `start()` runs. Chrome's
+   `SpeechRecognition` needs no transient user gesture, so it should survive the gap. If it
+   ever fails it will fail **only on the first tap of a fresh session** and work on the
+   second — which is exactly the shape of bug that gets reported as "sometimes it doesn't
+   hear me". Worth knowing before chasing it as something else.
+2. **Dictation inside the agent chat.** New here. The transcript anchoring — speaking adds
+   to a half-typed question instead of wiping it — is copied from `TaskDetailSheet`, where
+   it works, but has not been run in this modal in front of anyone.
+3. **Whether losing 49px of list is actually felt.** Needs a week of his real list, not a
+   look. This is the open question behind the parked hide-on-scroll (BACKLOG.md).
+4. **The desktop layout.** Should be unchanged — `showAgent={isDesktop}` keeps the Ask
+   button there and no dock renders above 1024px — and he was on a phone.
