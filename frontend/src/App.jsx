@@ -5,6 +5,7 @@ import { supabase } from './supabaseClient';
 import { LoginScreen } from './components/LoginScreen';
 import BottomNav from './components/BottomNav';
 import AskBar from './components/AskBar';
+import AgentPanel, { useAgentPanel } from './components/AgentPanel';
 import SideNav from './components/SideNav';
 import InboxView from './components/InboxView';
 import TodayView from './components/TodayView';
@@ -163,6 +164,10 @@ function App() {
   // opening — from the field, or from the desktop's top bar — does not
   // inherit a request to start listening that nobody made.
   const [agentAutoDictate, setAgentAutoDictate] = useState(false);
+
+  // Desktop shows the agent as a permanent column instead of a modal, so
+  // "open the agent" means two different things depending on the width.
+  const agentPanel = useAgentPanel();
 
   function openAgent({ dictate = false } = {}) {
     setAgentAutoDictate(dictate);
@@ -554,7 +559,10 @@ function App() {
       <AppBar
         title={t(TAB_TITLE_KEYS[activeTab])}
         profile={profile}
-        onOpenAgent={() => openAgent()}
+        // Two shapes, one button: on a desktop this SHOWS AND HIDES the
+        // agent's column, which is always there; on a phone the agent lives in
+        // AskBar and this button is not rendered at all.
+        onOpenAgent={() => agentPanel.setCollapsed(!agentPanel.isCollapsed)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         showProfile={!isDesktop}
         // The agent's door lives in AskBar on a phone. Up here it would be a
@@ -624,6 +632,29 @@ function App() {
       )}
       </div>
 
+      {/* The desktop's third column. A SIBLING of the middle column rather than
+          something floating over it — that is the whole point: the list beside
+          it stays visible and scrollable while you talk about it.
+
+          The chat is passed as children, so while the panel is collapsed this
+          element is created but never rendered — and because AgentChatModal is
+          lazy, its 129 kB chunk is not fetched either. A closed panel costs
+          nothing but the strip. */}
+      {isDesktop && (
+        <AgentPanel
+          isCollapsed={agentPanel.isCollapsed}
+          onCollapsedChange={agentPanel.setCollapsed}
+        >
+          <Suspense fallback={null}>
+            <AgentChatModal
+              variant="panel"
+              onClose={() => agentPanel.setCollapsed(true)}
+              onTaskConfirmed={handleAgentActionConfirmed}
+            />
+          </Suspense>
+        </AgentPanel>
+      )}
+
       {isAddModalOpen && (
         <Suspense fallback={null}>
           <AddTaskModal
@@ -657,7 +688,10 @@ function App() {
         </Suspense>
       )}
 
-      {isAgentOpen && (
+      {/* The phone's shape. Guarded by !isDesktop as well as isAgentOpen so
+          that narrowing a window with the modal open cannot leave a dimming
+          dialog sitting on top of the column that now does the same job. */}
+      {!isDesktop && isAgentOpen && (
         <Suspense fallback={null}>
           <AgentChatModal
             onClose={closeAgent}

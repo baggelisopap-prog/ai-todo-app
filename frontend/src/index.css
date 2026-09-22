@@ -292,6 +292,50 @@ body {
   color: color-mix(in srgb, var(--ws-color) 72%, var(--text-primary));
 }
 
+/* --- The agent panel's drag handle -------------------------------------
+   Same idea as .tap-44 below, for a pointer instead of a thumb: what the eye
+   sees is a 1px rule, what the mouse can grab is 9px wide. A handle you have
+   to aim at is a handle nobody uses, and a 9px visible bar would be a seam
+   down the middle of the app.
+
+   It thickens and takes the brand colour on hover, focus and drag, which is
+   the only thing telling anyone the line is draggable at all — there is no
+   room for a label. `cursor: col-resize` says the rest. */
+.agent-grip {
+  position: relative;
+  width: 9px;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  /* Without this a drag on a touch screen scrolls the page instead. */
+  touch-action: none;
+}
+.agent-grip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--border-subtle);
+  transition: background-color 0.12s, width 0.12s, left 0.12s;
+}
+.agent-grip:hover::before,
+.agent-grip:focus-visible::before,
+.agent-grip.is-dragging::before {
+  width: 3px;
+  left: 3px;
+  background: var(--brand-primary);
+}
+/* The thickened rule IS the focus indicator, so the default ring — which would
+   draw a 9px rounded box down the full height of the window — is replaced
+   rather than merely suppressed. */
+.agent-grip:focus-visible {
+  outline: none;
+}
+
 .tap-44,
 .tap-40 {
   position: relative;

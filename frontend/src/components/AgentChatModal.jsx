@@ -188,9 +188,27 @@ function ProposalCard({ action, t, onConfirm, onCancel }) {
  * second one to tap in here would be the app forgetting what you just did.
  * The transcript lands in the input and is NOT sent on its own: a misheard
  * word would otherwise become a real instruction about real tasks.
+ *
+ * `variant` picks the SHAPE, never the behaviour — the same split
+ * FloatingActionButtons already uses for its round button and its sidebar row:
+ *   'modal' — the phone's sheet, and the desktop's centred dialog before the
+ *             panel existed. Dims the app behind it.
+ *   'panel' — a column inside AgentPanel, on a desktop. No backdrop, no
+ *             shadow, no rounded corners: it is a wall of the room, not a card
+ *             floating in it.
+ *
+ * Two behaviours are deliberately OFF in panel shape. It does not lock the
+ * page's scroll — the list beside it is meant to be scrolled while you talk,
+ * which is the entire reason the panel exists. And Escape does not close it:
+ * Escape dismisses something that interrupted you, and a permanent column
+ * never did. The ✕ in its header collapses it instead, via the same onClose.
+ *
+ * The file keeps its name. `AgentChatModal` is now one of two shapes rather
+ * than the only one, and renaming it would touch every import for nothing.
  */
-export function AgentChatModal({ onClose, onTaskConfirmed, autoDictate = false }) {
-  useModalBehavior(onClose);
+export function AgentChatModal({ onClose, onTaskConfirmed, autoDictate = false, variant = 'modal' }) {
+  const isPanel = variant === 'panel';
+  useModalBehavior(isPanel ? undefined : onClose, { lockScroll: !isPanel });
   const { t } = useTranslation();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -342,14 +360,19 @@ export function AgentChatModal({ onClose, onTaskConfirmed, autoDictate = false }
     });
   }
 
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 animate-fade-in flex items-end md:items-center justify-center p-4"
-      onClick={handleClose}
-    >
+  // One body, two boxes. Everything below this line is identical in both
+  // shapes; only the wrapper differs, and the modal's wrapper is added at the
+  // very bottom of this function.
+  const body = (
       <div
-        className="w-full md:max-w-lg h-[80vh] md:h-[600px] bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        className={
+          isPanel
+            ? 'h-full flex flex-col bg-[var(--bg-card)]'
+            : 'w-full md:max-w-lg h-[80vh] md:h-[600px] bg-[var(--bg-modal)] md:rounded-lg rounded-t-2xl shadow-[var(--shadow-modal)] flex flex-col'
+        }
+        // Only the modal needs this: its backdrop closes on click, so a click
+        // INSIDE must not bubble out and close it. A panel has no backdrop.
+        onClick={isPanel ? undefined : (e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('agent.title')}</h2>
@@ -368,7 +391,15 @@ export function AgentChatModal({ onClose, onTaskConfirmed, autoDictate = false }
                 {t('agent.new_conversation')}
               </button>
             )}
-            <button onClick={handleClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]" aria-label={t('actions.cancel')}>
+            {/* Same control, two truthful names: it dismisses a modal, and it
+                collapses a panel. The panel is still there afterwards, as a
+                strip, so calling that "cancel" would be a small lie to anyone
+                using a screen reader. */}
+            <button
+              onClick={handleClose}
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              aria-label={isPanel ? t('agent.panel.collapse') : t('actions.cancel')}
+            >
               ✕
             </button>
           </div>
@@ -487,6 +518,16 @@ export function AgentChatModal({ onClose, onTaskConfirmed, autoDictate = false }
         </>
         )}
       </div>
+  );
+
+  if (isPanel) return body;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 animate-fade-in flex items-end md:items-center justify-center p-4"
+      onClick={handleClose}
+    >
+      {body}
     </div>
   );
 }

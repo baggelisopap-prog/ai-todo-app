@@ -351,6 +351,11 @@
     "short_label": "Ask",
     "bar_placeholder": "Ask me anything…",
     "ask_by_voice": "Ask using your voice",
+    "panel": {
+      "collapse": "Collapse the panel",
+      "expand": "Open the assistant panel",
+      "resize": "Assistant panel width"
+    },
     "title": "Ask",
     "empty_hint": "Ask me anything about your tasks — e.g. \"what do I have today?\" or \"show my appointments this week\"",
     "input_placeholder": "Type a question...",
