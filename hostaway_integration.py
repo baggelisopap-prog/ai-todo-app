@@ -193,6 +193,19 @@ def classify_message(message_text: str, user_id: str) -> dict:
                     system_instruction=system_instruction,
                     response_mime_type="application/json",
                     response_schema=_MessageClassification,
+                    # Thinking OFF (2026-09-25), as the three extractors in
+                    # ai_engine.py already had it: gemini-3.5-flash thinks by
+                    # default, and here that was ~437 thinking tokens per message
+                    # at output price for a ~38-token verdict — 82% of the
+                    # classification's cost and a third of the app's whole AI
+                    # bill over the 30 days before (token_usage_log).
+                    # Measured before switching, on 60 real guest threads run
+                    # both ways: 55/60 identical priorities; 4 of the 5
+                    # differences made the message MORE urgent, and the fifth (a
+                    # pre-arrival complaint) matched what thinking itself had
+                    # stored the first time — thinking-on disagreed with its own
+                    # earlier verdicts on 6/60. $0.0056 -> $0.0009 per message.
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
             if response and response.text:

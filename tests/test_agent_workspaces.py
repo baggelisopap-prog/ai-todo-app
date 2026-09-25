@@ -181,13 +181,16 @@ def test_the_day_view_is_still_only_my_own_work():
     assert "t-evi-open" not in view           # Evi's, due today: not mine
 
 
-def test_the_day_view_says_who_gave_me_a_task():
+def test_the_day_view_no_longer_carries_a_given_by_column():
+    """REMOVED 2026-09-25. Its "-" filler was copied by the real model into
+    descriptions it proposed to write back («…σελίδα Finan | -»), and the model
+    answered «ποια μου έδωσε η Εύη» from it without searching, missing whatever
+    was not due today. Who assigned what is now always a search."""
     tasks = _tasks()
     view = agent_tools.build_day_view(tasks, TODAY, "12:00", _ctx(tasks))
-    row = next(line for line in view.splitlines() if line.startswith("t-evi-gave-me"))
 
-    assert row.endswith("| evi_ karv")
-    assert "given_by" in view.splitlines()[0]
+    assert "given_by" not in view
+    assert not any(line.rstrip().endswith("| -") for line in view.splitlines())
 
 
 # ------------------------------------------------------ workspaces by name
@@ -365,7 +368,8 @@ def test_a_relaxed_search_never_slips_someone_elses_task_into_mine():
     result = _search(date_from=TODAY, date_to=TODAY, priority="P1")
 
     for row in result.get("relaxed_matches", []):
-        assert row.get("assigned_to") in (None, "you")
+        # the user's own: assigned to them, or created by them and taken by nobody
+        assert row.get("assigned_to") == "you" or row.get("created_by") == "you" or "assigned_to" not in row
 
 
 # ----------------------------------------- no user id ever reaches the model
@@ -570,7 +574,11 @@ def test_a_zero_explained_by_other_peoples_work_is_not_called_empty():
 
     assert late["total_matches"] == 0
     assert late["others_excluded"] == 1
-    assert "never answer that there are none" in late["others_hint"]
+    # Since 2026-09-25 the colleague's rows come back in the same call — the user
+    # has none of their own, so nothing can be mixed, and a second search cost a
+    # whole round on the real model.
+    assert [row["record_id"] for row in late["others"]] == ["t-evi-late"]
+    assert "NO matching tasks of their own" in late["others_hint"]
     assert "relaxed_matches" not in late and "over_filtered_hint" not in late
     assert "no_matches_hint" not in late
 
@@ -692,7 +700,9 @@ def test_the_closer_filter_is_never_relaxed_away():
 
 def test_the_closer_name_is_checked_like_every_other_name():
     assert "error" in _closer_search(closed_by="Κώστας")
-    assert "error" in _closer_search(closed_by="nobody")
+    # "closed by nobody" is simply "not closed" (2026-09-25): refusing it cost the
+    # real model a round to arrive at the same search.
+    assert "error" not in _closer_search(closed_by="nobody")
 
 
 def test_who_closed_a_named_task_is_answered_in_one_search():

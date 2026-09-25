@@ -79,7 +79,7 @@ function describeFilters(t, filters) {
   const parts = [];
   const {
     keyword, workspace, category, person, assigned_by: assignedBy, closed_by: closedBy, priority,
-    date_from: from, date_to: to, undated_only: undated, include_completed: done,
+    date_from: from, date_to: to, undated_only: undated, include_completed: done, inbox,
   } = filters;
 
   if (keyword) parts.push(t('agent.searched_filter_keyword', { value: keyword }));
@@ -107,6 +107,7 @@ function describeFilters(t, filters) {
   }
   if (priority) parts.push(t('agent.searched_filter_priority', { value: priority }));
   if (undated) parts.push(t('agent.searched_filter_undated'));
+  if (inbox) parts.push(t('agent.searched_filter_inbox'));
   // A single-day search is the common case and reads badly as "from X until X".
   if (from && to && from === to) parts.push(t('agent.searched_filter_on', { value: from }));
   else {

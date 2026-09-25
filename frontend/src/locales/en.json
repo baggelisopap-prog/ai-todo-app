@@ -398,6 +398,7 @@
     "searched_filter_to": "until {{value}}",
     "searched_filter_on": "on {{value}}",
     "searched_filter_undated": "without a due date",
+    "searched_filter_inbox": "in the Inbox (awaiting approval)",
     "searched_filter_completed": "including completed",
     "history": {
       "open": "History",

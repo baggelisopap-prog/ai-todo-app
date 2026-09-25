@@ -219,13 +219,20 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
             # a part of what the user can see, never something beside it.
             cached_tasks = repository.get_tasks_for_user(user_id=user_id)
             workspaces = repository.get_workspaces(user_id)
-            categories = repository.get_categories(user_id)
+            # The workspaces just read, not a second get_workspaces inside
+            # get_categories — the same rooms, three fewer queries (2026-09-25).
+            categories = repository.get_categories_for_workspaces(
+                [w.record_id for w in workspaces if w.record_id]
+            )
             people, assigners = _load_people(user_id, cached_tasks)
         except Exception as e:
             logging.error(f"[agent] Failed to fetch tasks: {e}")
             raise RuntimeError(f"Could not load task data: {e}")
 
-        ctx = agent_tools.build_agent_context(user_id, workspaces, categories, people, assigners)
+        # tasks= turns on the short task aliases ("t12" for a UUID) — see
+        # build_agent_context.
+        ctx = agent_tools.build_agent_context(user_id, workspaces, categories, people, assigners,
+                                              tasks=cached_tasks)
 
         # The user's own workspace, category and people names, APPENDED to the
         # constant instruction rather than interpolated into it — see
@@ -258,11 +265,30 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
             for r in (past_run.get("refs") or [])
             if r.get("record_id")
         }
+        # The last answer's tasks IN ORDER (2026-09-25), so the write guard can
+        # say which one «το δεύτερο» means.
+        recent_refs = next(
+            ([r.get("record_id") for r in past_run["refs"]]
+             for past_run in reversed(history) if past_run.get("refs")),
+            [],
+        )
+        # The day view's scopes, so «βάλε τα ληξιπρόθεσμα για αύριο» can reach
+        # overdue tasks the conversation never named one by one.
+        day_overdue, day_today, day_pending = agent_tools.day_view_tasks(cached_tasks, today_iso, ctx)
+        day_scopes = {"overdue": {t.record_id for t in day_overdue},
+                      "today": {t.record_id for t in day_today}}
 
-        search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks, ctx, question=question)
+        # This conversation's earlier questions AND answers: what can carry a
+        # filter or a changed field the current question does not repeat.
+        earlier_turns = [text for past_run in history
+                         for text in (past_run.get("question") or "", past_run.get("answer") or "")]
+        search_tasks, get_task_details = agent_tools.build_tool_functions(
+            cached_tasks, ctx, question=question, earlier_turns=earlier_turns,
+        )
         propose_complete_task, propose_update_task, propose_create_task = agent_tools.build_write_proposal_tools(
             proposed_actions, cached_tasks,
             question=question, conversation_refs=conversation_refs, ctx=ctx,
+            recent_refs=recent_refs, day_scopes=day_scopes, earlier_turns=earlier_turns,
         )
         all_tools = [
             search_tasks, get_task_details,
@@ -289,13 +315,13 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         # must never carry its own (now-stale) time header or day view. Those
         # attach ONLY to the current, last user turn below: two versions of
         # "today" in one prompt is exactly the hallucination surface this avoids.
-        history_contents = agent_tools.build_history_contents(history)
+        history_contents = agent_tools.build_history_contents(history, ctx)
         run["history_messages"] = len(history_contents)
 
         # Refs go ABOVE the day view deliberately: the measured failure was the
         # model resolving "it" to a day-view row, so what the conversation is
         # actually about must be read first — see build_conversation_refs_block.
-        refs_block = agent_tools.build_conversation_refs_block(history)
+        refs_block = agent_tools.build_conversation_refs_block(history, ctx)
         current_turn_text = (
             f"{time_header}\n\n"
             + (f"{refs_block}\n\n" if refs_block else "")
@@ -325,10 +351,19 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
             memory, replacing the old two-message save. Returns the result
             dict including conversation_id.
             """
-            if len(seen_tasks) <= agent_tools.HISTORY_MAX_REFS:
-                refs = [{"task_name": name, "record_id": rid} for rid, name in seen_tasks.items()]
-            else:
-                refs = []
+            # The tasks the ANSWER named, in the order it named them (2026-09-25)
+            # — including day-view tasks, which were never remembered before, so
+            # «τι έχω σήμερα;» followed by «το πρώτο βάλ' το για αύριο» had no
+            # refs, no guard, and measured on the current code reached a task
+            # that was not the first one listed. Falls back to what the tools
+            # returned when the answer names none of them.
+            candidates = list(seen_tasks.items()) + [
+                (t.record_id, t.task_name) for t in day_overdue + day_today + day_pending
+            ]
+            refs = agent_tools.refs_from_answer(answer, candidates)
+            if not refs:
+                refs = [{"task_name": name, "record_id": rid}
+                        for rid, name in list(seen_tasks.items())[:agent_tools.HISTORY_MAX_REFS]]
 
             logging.info(f"[agent] history: {len(history_contents)} messages replayed, {len(refs)} refs stored")
 
@@ -452,8 +487,11 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
                 # A refused search (an unknown workspace or person name) is not a
                 # search: showing it under the answer as "0 results" would be a lie.
                 if fc.name == "search_tasks" and isinstance(result, dict) and "error" not in result:
-                    for t in result.get("tasks", []):
-                        rid = t.get("record_id")
+                    # Every row the model was shown — its own, other people's,
+                    # relaxed — since the answer may name any of them. Rows carry
+                    # aliases; refs keep real ids.
+                    for t in result.get("tasks", []) + result.get("others", []) + result.get("relaxed_matches", []):
+                        rid = agent_tools.real_record_id(ctx, t.get("record_id"))
                         if rid:
                             seen_tasks[rid] = t.get("task_name")
                     # Only the filters actually passed — an omitted filter is not a
@@ -469,7 +507,7 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
                         "total_matches": result.get("total_matches", 0),
                     })
                 elif fc.name == "get_task_details" and isinstance(result, dict) and result.get("record_id"):
-                    seen_tasks[result["record_id"]] = result.get("task_name")
+                    seen_tasks[agent_tools.real_record_id(ctx, result["record_id"])] = result.get("task_name")
 
             contents.append(types.Content(role="user", parts=function_response_parts))
 

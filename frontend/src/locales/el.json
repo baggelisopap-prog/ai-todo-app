@@ -398,6 +398,7 @@
     "searched_filter_to": "έως {{value}}",
     "searched_filter_on": "στις {{value}}",
     "searched_filter_undated": "χωρίς προθεσμία",
+    "searched_filter_inbox": "στο Inbox (αναμονή έγκρισης)",
     "searched_filter_completed": "μαζί με ολοκληρωμένα",
     "history": {
       "open": "Ιστορικό",

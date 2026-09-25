@@ -2498,6 +2498,30 @@ def get_categories(user_id: str) -> list[Category]:
     return [_supabase_row_to_category(row) for row in (response.data or [])]
 
 
+def get_categories_for_workspaces(workspace_ids: list[str]) -> list[Category]:
+    """
+    The categories of these rooms, in ONE read — for a caller that has just
+    read the user's workspaces itself. get_categories(user_id) would read them
+    all over again first (get_visible_workspace_ids -> get_workspaces: three
+    queries), which the agent paid on every question until 2026-09-25.
+
+    The caller passes rooms from get_workspaces(user_id), which is the scoping.
+    Same order as get_categories; [] for an empty input rather than
+    `workspace_id.in.()`, a syntax error in PostgREST.
+    """
+    if not workspace_ids:
+        return []
+    response = (
+        supabase.table("categories")
+        .select("*")
+        .in_("workspace_id", workspace_ids)
+        .order("position", desc=False)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return [_supabase_row_to_category(row) for row in (response.data or [])]
+
+
 def get_categories_for_workspace(user_id: str, workspace_id: str) -> list[Category]:
     """One workspace's categories. Filtered in Python off the user's full set
     rather than queried per workspace, because every caller here already needs
