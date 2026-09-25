@@ -78,7 +78,7 @@ def office():
     CLEAN, ACC, HOST = (c.record_id for c in cats)
     members = [WorkspaceMember(workspace_id=w, user_id=OWNER, role="owner") for w in (B, O, H)]
     members += [WorkspaceMember(workspace_id=O, user_id=EVI), WorkspaceMember(workspace_id=O, user_id=KOSTAS)]
-    profiles = {OWNER: {"display_name": "Βαγγέλης"}, EVI: {"display_name": "Εύη Καρβούνη"},
+    profiles = {OWNER: {"display_name": "Βαγγέλης"}, EVI: {"display_name": "Εύη Ζιάκα"},
                 KOSTAS: {"display_name": "Κώστας Ζαχαρίου"}}
     r = lambda n: f"b1000000-0000-4000-8000-{n:012d}"  # noqa: E731
     tasks = [

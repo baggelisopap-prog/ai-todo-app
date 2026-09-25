@@ -48,7 +48,7 @@ MEMBERS = [
 ]
 PROFILES = {
     ME: {"display_name": "Βαγγέλης", "email": "me@example.com"},
-    EVI: {"display_name": "evi_ karv", "email": "evi@example.com"},
+    EVI: {"display_name": "evi_ ziak", "email": "evi@example.com"},
 }
 
 
@@ -253,11 +253,11 @@ def test_everyone_in_a_workspace_is_labelled_with_who_is_involved():
     nobody taken». An untaken task now says so, and names its creator."""
     rows = {row["record_id"]: row for row in _search(workspace="Personal", person="everyone")["tasks"]}
 
-    assert rows["t-evi-open"] == {**rows["t-evi-open"], "assigned_to": "nobody", "created_by": "evi_ karv"}
+    assert rows["t-evi-open"] == {**rows["t-evi-open"], "assigned_to": "nobody", "created_by": "evi_ ziak"}
     assert "assigned_by" not in rows["t-evi-open"]
     assert rows["t-evi-gave-me"]["assigned_to"] == "you"
-    assert rows["t-evi-gave-me"]["assigned_by"] == "evi_ karv"
-    assert rows["t-i-gave-evi"]["assigned_to"] == "evi_ karv"
+    assert rows["t-evi-gave-me"]["assigned_by"] == "evi_ ziak"
+    assert rows["t-i-gave-evi"]["assigned_to"] == "evi_ ziak"
     assert rows["t-i-gave-evi"]["assigned_by"] == "you"
     assert all("responsible" not in row for row in rows.values())
 
@@ -280,7 +280,7 @@ def test_what_did_i_give_evi():
 
 
 def test_what_does_evi_have():
-    assert _ids(_search(person="evi_ karv")) == {"t-evi-open", "t-i-gave-evi"}
+    assert _ids(_search(person="evi_ ziak")) == {"t-evi-open", "t-i-gave-evi"}
 
 
 def test_what_has_nobody_taken():
@@ -291,7 +291,7 @@ def test_an_unknown_person_is_refused_never_guessed():
     result = _search(person="Κώστας")
 
     assert "tasks" not in result
-    assert "evi_ karv" in result["error"]
+    assert "evi_ ziak" in result["error"]
     assert "never pick someone yourself" in result["error"]
 
 
@@ -321,7 +321,7 @@ def test_the_exact_name_wins_over_a_partial_one():
 
 def test_two_people_with_the_same_name_get_different_labels():
     members = MEMBERS + [WorkspaceMember(workspace_id="ws-personal", user_id=GONE)]
-    profiles = {**PROFILES, GONE: {"display_name": "EVI_ KARV"}}
+    profiles = {**PROFILES, GONE: {"display_name": "EVI_ ZIAK"}}
     labels = agent_tools.build_people_directory(ME, members, profiles)["labels"]
 
     assert len({agent_tools.fold_name(label) for label in labels.values()}) == 2
@@ -418,8 +418,8 @@ def test_a_proposal_on_someone_elses_task_says_whose_it_is():
 
     result = complete("t-evi-open")
 
-    assert proposals[-1]["responsible"] == "evi_ karv"
-    assert "evi_ karv" in result["owner_note"]
+    assert proposals[-1]["responsible"] == "evi_ ziak"
+    assert "evi_ ziak" in result["owner_note"]
 
 
 def test_a_proposal_on_my_own_task_carries_no_owner():
@@ -456,8 +456,8 @@ def test_a_solo_account_looks_exactly_as_before():
 def test_the_people_rules_are_only_paid_for_when_there_are_people():
     shared = agent_tools.build_vocabulary_block(WS, CATS, _ctx()["people"])
 
-    assert "PEOPLE THE USER SHARES WORKSPACES WITH: evi_ karv" in shared
-    assert "Personal (shared with: evi_ karv)" in shared
+    assert "PEOPLE THE USER SHARES WORKSPACES WITH: evi_ ziak" in shared
+    assert "Personal (shared with: evi_ ziak)" in shared
 
 
 # ---------------------------------------------- the reads behind the names
@@ -607,7 +607,7 @@ def test_what_i_gave_someone_includes_what_is_already_done():
     ctx = agent_tools.build_agent_context(ME, WS, CATS, people, agent_tools.assigners_from_log(log, tasks))
     search_tasks, _ = agent_tools.build_tool_functions(tasks, ctx)
 
-    result = search_tasks(person="evi_ karv", assigned_by="me")
+    result = search_tasks(person="evi_ ziak", assigned_by="me")
 
     assert _ids(result) == {"t-gave-done"}
     assert "already-completed" in result["completed_only_note"]
@@ -626,7 +626,7 @@ def test_a_completed_row_says_who_closed_it_and_unknown_when_nobody_is_on_record
 
     rows = {row["record_id"]: row for row in search_tasks(person="everyone", include_completed=True)["tasks"]}
 
-    assert rows["t-a"]["completed_by"] == "evi_ karv"
+    assert rows["t-a"]["completed_by"] == "evi_ ziak"
     assert rows["t-b"]["completed_by"] == "unknown"
 
 
@@ -715,7 +715,7 @@ def test_who_closed_a_named_task_is_answered_in_one_search():
     rows = {row["record_id"]: row for row in search_tasks(closed_by="everyone")["tasks"]}
 
     assert set(rows) == {"evi-closed-hers", "nobody-on-record", "evi-closed-mine", "i-closed-hers"}
-    assert rows["evi-closed-mine"]["completed_by"] == "evi_ karv"   # my own task, her hand
+    assert rows["evi-closed-mine"]["completed_by"] == "evi_ ziak"   # my own task, her hand
     assert rows["nobody-on-record"]["completed_by"] == "unknown"
 
 

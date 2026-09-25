@@ -240,7 +240,7 @@ NO_WORKSPACE_LABEL = "no workspace"
 OTHER_WORKSPACE_LABEL = "a workspace no longer in the user's list"
 PERSON_LABEL_MAX_CHARS = 40
 # The query must be at least this long to match the START of a word in a name
-# rather than the whole word: "evi" finds "evi karv", "e" finds nobody.
+# rather than the whole word: "evi" finds "evi ziak", "e" finds nobody.
 PERSON_PREFIX_MIN_CHARS = 3
 
 # Every set below is compared AFTER fold_name, so accents, case and Greek vs
@@ -258,7 +258,7 @@ GREEK_DIGRAPHS = (("ευ", "ev"), ("αυ", "av"), ("ου", "ou"))
 def fold_name(text) -> str:
     """A name reduced to what a person means by it: lowercase, no accents, Greek
     in Latin letters, only letters and digits, single spaces. "Εύη", "ΕΥΗ" and
-    "evi" all become "evi"; "evi_ karv" becomes "evi karv". Used on BOTH sides
+    "evi" all become "evi"; "evi_ ziak" becomes "evi ziak". Used on BOTH sides
     of every name comparison, so neither side can be spelled differently."""
     text = unicodedata.normalize("NFD", str(text or "").lower())
     text = "".join(ch for ch in text if not unicodedata.combining(ch))

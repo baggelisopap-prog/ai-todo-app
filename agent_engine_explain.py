@@ -406,7 +406,7 @@ def build_time_context() -> tuple[str, str, str]:
 #
 #   2. ΤΟ AI ΔΕΝ ΒΛΕΠΕΙ ΠΟΤΕ USER ID. Το user id είναι ο εσωτερικός κωδικός
 #      κάθε λογαριασμού — ένας μακρύς αριθμός χωρίς νόημα για άνθρωπο. Το AI
-#      βλέπει ΜΟΝΟ ονόματα («you», «evi_ karv»), και ονόματα μας ξαναδίνει.
+#      βλέπει ΜΟΝΟ ονόματα («you», «evi_ ziak»), και ονόματα μας ξαναδίνει.
 #      Η μετάφραση «όνομα -> ποιος λογαριασμός» γίνεται εδώ, στον δικό μας
 #      κώδικα. Όνομα που δεν ταιριάζει σε κανέναν, ή ταιριάζει σε δύο,
 #      ΑΠΟΡΡΙΠΤΕΤΑΙ — δεν μαντεύεται ποτέ. Ένα λάθος μάντεμα θα έβαζε τη
@@ -420,7 +420,7 @@ NOBODY_LABEL = "nobody"                            # δεν το έχει πάρ
 NO_WORKSPACE_LABEL = "no workspace"                # task χωρίς workspace
 OTHER_WORKSPACE_LABEL = "a workspace no longer in the user's list"        # αρχειοθετημένο, ή workspace απ' όπου έφυγες
 PERSON_LABEL_MAX_CHARS = 40                        # μέγιστο μήκος ονόματος που βλέπει το AI
-PERSON_PREFIX_MIN_CHARS = 3                        # από 3 γράμματα και πάνω, το «evi» βρίσκει το «evi karv» — το «e» δεν βρίσκει κανέναν
+PERSON_PREFIX_MIN_CHARS = 3                        # από 3 γράμματα και πάνω, το «evi» βρίσκει το «evi ziak» — το «e» δεν βρίσκει κανέναν
 
 # Όλες οι λέξεις παρακάτω συγκρίνονται ΑΦΟΥ περάσουν από το fold_name, άρα
 # τόνοι, κεφαλαία και ελληνικά/λατινικά δεν παίζουν ρόλο: το «εγώ» φτάνει
@@ -438,7 +438,7 @@ GREEK_DIGRAPHS = (("ευ", "ev"), ("αυ", "av"), ("ου", "ou"))
 def fold_name(text) -> str:
     """A name reduced to what a person means by it: lowercase, no accents, Greek
     in Latin letters, only letters and digits, single spaces. "Εύη", "ΕΥΗ" and
-    "evi" all become "evi"; "evi_ karv" becomes "evi karv". Used on BOTH sides
+    "evi" all become "evi"; "evi_ ziak" becomes "evi ziak". Used on BOTH sides
     of every name comparison, so neither side can be spelled differently."""
     # ΣΤΑ ΕΛΛΗΝΙΚΑ: «ξεβγάζει» ένα όνομα ώσπου να μείνει μόνο αυτό που εννοεί
     # ο άνθρωπος. Εφαρμόζεται και στις ΔΥΟ πλευρές κάθε σύγκρισης — σε αυτό
@@ -532,7 +532,7 @@ def person_label(people: dict, user_id) -> Optional[str]:
 def _name_matches(query: str, folded: str) -> bool:
     """Every word of the query is a whole word of the name, or — from
     PERSON_PREFIX_MIN_CHARS letters up — the start of one."""
-    # ΣΤΑ ΕΛΛΗΝΙΚΑ: «evi» ταιριάζει με «evi karv» (αρχή λέξης, 3+ γράμματα).
+    # ΣΤΑ ΕΛΛΗΝΙΚΑ: «evi» ταιριάζει με «evi ziak» (αρχή λέξης, 3+ γράμματα).
     # Το «e» δεν ταιριάζει με τίποτα — πολύ λίγο για να σημαίνει κάποιον.
     if not query or not folded:
         return False
@@ -1408,7 +1408,7 @@ def build_vocabulary_block(workspaces, categories, people: dict = None) -> str:
     # θα τον έκανε λάθος.
     #
     # ΑΠΟ 23/09/2026 ΛΕΕΙ ΚΑΙ ΠΟΙΟΣ ΕΙΝΑΙ ΜΕΣΑ: δίπλα σε κάθε κοινό workspace
-    # γράφει «(shared with: evi_ karv)», και από κάτω τους κανόνες για τους
+    # γράφει «(shared with: evi_ ziak)», και από κάτω τους κανόνες για τους
     # ανθρώπους. Αυτοί οι κανόνες μπαίνουν ΜΟΝΟ αν μοιράζεσαι workspace με
     # κάποιον — ένας λογαριασμός χωρίς κοινά workspaces δεν τους πληρώνει.
     if not workspaces:
