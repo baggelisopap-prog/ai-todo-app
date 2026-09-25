@@ -122,3 +122,56 @@ def test_a_webhook_task_is_still_created_when_the_category_is_missing(monkeypatc
     assert captured["task_name"].startswith("Hostaway:")
     assert captured["category_id"] is None
     assert captured["workspace_id"] is None
+
+
+# --- what is STORED, not only what is sent (2026-09-25) ----------------------
+#
+# The two tests above capture what the webhook HANDS to create_task_manual,
+# and both passed for 24 days while every guest task was stored with no
+# category at all: create_task_manual built its TaskRecord without
+# workspace_id/category_id. These go one layer lower — to save_task — which is
+# the only place the answer to "where does this task live" becomes true.
+
+
+def test_the_category_the_webhook_asks_for_is_the_one_that_is_stored(monkeypatch):
+    stored = []
+    monkeypatch.setattr(main.repository, "get_system_category", lambda u, k: _HOSTAWAY_CAT)
+    monkeypatch.setattr(main.service, "send_push_to_user", lambda *a, **kw: {"sent": 1})
+    monkeypatch.setattr(main.service.repository, "save_task",
+                        lambda user_id, task: stored.append(task) or task)
+
+    main._create_hostaway_task(
+        user_id="user-1",
+        classification={"summary": "asks about check-in", "priority": "P3"},
+        listing_name="Apartment A",
+        reservation_details={"guest_name": "Μαρία", "arrival_date": "2026-09-02",
+                             "departure_date": "2026-09-05"},
+        message_body="What time is check-in?",
+        message_date="2026-09-01T10:00:00Z",
+        conversation_id="conv-1",
+    )
+
+    assert len(stored) == 1
+    assert stored[0].category_id == "cat-h"
+    assert stored[0].workspace_id == "ws-1"
+    # ...and therefore escalation and the reply poller can see it — the whole
+    # reason the category matters.
+    monkeypatch.setattr(repository, "get_system_category", lambda u, k: _HOSTAWAY_CAT)
+    assert repository.get_active_hostaway_tasks("user-1", tasks=stored) == stored
+
+
+def test_manual_create_stores_the_workspace_it_is_given_and_none_when_given_none():
+    """POST /tasks validates a workspace and category and then hands them here;
+    recurrence occurrences and the agent's create pass none, and must still
+    get none."""
+    import services
+
+    stored = []
+    fake_repo = type("R", (), {"save_task": lambda self, user_id, task: stored.append(task) or task})()
+    service = services.TaskService(repository=fake_repo)
+
+    service.create_task_manual("user-1", {"task_name": "Filed", "workspace_id": "ws-1", "category_id": "cat-h"})
+    service.create_task_manual("user-1", {"task_name": "Unfiled"})
+
+    assert (stored[0].workspace_id, stored[0].category_id) == ("ws-1", "cat-h")
+    assert (stored[1].workspace_id, stored[1].category_id) == (None, None)

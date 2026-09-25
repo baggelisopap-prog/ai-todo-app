@@ -560,6 +560,18 @@ class TaskService:
             hostaway_thread=fields.get("hostaway_thread"),
             recurrence_rule_id=fields.get("recurrence_rule_id"),
             occurrence_date=fields.get("occurrence_date"),
+            # Where it lives. MISSING FROM 2026-09-01 TO 2026-09-25, and silent:
+            # the Hostaway webhook asked for its system category on every guest
+            # message and this constructor dropped it, so all 65 guest tasks of
+            # that period were stored unfiled — invisible to escalation and to
+            # the reply poller, which both find guest tasks by exactly this
+            # category_id (repository.get_active_hostaway_tasks). Not one of the
+            # 65 auto-closed on a reply; 18 of the 126 before it had. POST
+            # /tasks lost a workspace the same way, after validating it.
+            # Callers that pass none (recurrence occurrences, the agent's
+            # create) still get None, which is unchanged.
+            workspace_id=fields.get("workspace_id"),
+            category_id=fields.get("category_id"),
         )
         return self.repository.save_task(user_id, task)
 
