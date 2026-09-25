@@ -1,9 +1,15 @@
-ACTIVE TASK — The agent audit: nothing the user did not ask for reaches a card, the Inbox and closing dates are searchable, −17% tokens, Hostaway triage stops thinking. Committed as `2670562`, NOT pushed; checked on the real model; not used by the owner
+ACTIVE TASK — The agent audit: nothing the user did not ask for reaches a card, the Inbox and closing dates are searchable, −17% tokens, Hostaway triage stops thinking. Pushed 2026-09-25 (`2670562`), auto-deployed; checked on the real model; not yet used by the owner
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
-> **ONE CODE COMMIT ON MAIN, `2670562`, NOT PUSHED.** Pushing deploys it live, so it waits for
-> the owner's go. 13 files, +2363 −556. New: `tests/test_agent_audit.py` (34 tests),
-> `evals/agent_suite.py`, `evals/hostaway_thinking_replay.py`.
+> **ONE CODE COMMIT ON MAIN, `2670562`, PUSHED 2026-09-25 AND AUTO-DEPLOYED** — on the owner's
+> «κανε ολα τα κομιτ και ποθσ». _Until then this said «NOT PUSHED — it waits for the owner's go»._
+> 13 files, +2363 −556. New: `tests/test_agent_audit.py` (34 tests), `evals/agent_suite.py`,
+> `evals/hostaway_thinking_replay.py`.
+>
+> **Pushed with it, `c6e8e39`**: the tests' colleague had carried a real person's display name
+> from the live account since 2026-09-23, in a PUBLIC repository; it is invented now, at the
+> owner's «ναι αλλαξε το». The older commits on GitHub still carry the real one — removing it
+> from history means rewriting what is already published (a force push), which was not done.
 >
 > The previous task — workspaces and people (`02ce7b0`), who closed it (`75175ba`), and the
 > Hostaway placement fix (`ca43a43`) — is finished as far as code goes. What nobody has watched
@@ -173,7 +179,8 @@ npm run lint       -> ✖ 13 problems (13 errors, 0 warnings) — unchanged: the
 
 ## What a person has actually SEEN
 
-Nothing in the real app — it is not pushed. The owner has read the reports in the conversation.
+Nothing in the real app yet — pushed 2026-09-25, not used since. The owner has read the reports in
+the conversation.
 
 ## What NOBODY has watched
 
