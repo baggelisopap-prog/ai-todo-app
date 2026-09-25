@@ -144,10 +144,62 @@ asked the deployed agent a question since the push.
    only shared workspace has none open. Settles it: the colleague assigns him a test task,
    then «ποια μου έχει δώσει η Εύη;».
 3. **«Ανήκει σε: …» on a real confirmation card**, and the new filter labels under an answer — rendered by code nobody has looked at in a browser.
-4. **«τι έχει κλείσει η Εύη»** — still wrong. It lists Εύη's completed tasks as ones SHE
-   closed; on live data two of those four have no closer on record (closed before
-   `completed_by` existed). The rows now carry `completed_by: unknown`; the model ignored it.
-   Parked with the proper fix in BACKLOG.md.
+4. ~~**«τι έχει κλείσει η Εύη»** — still wrong.~~ **FIXED 2026-09-25, `75175ba`** — see
+   "Who closed it" below. _This item used to say it lists Εύη's completed tasks as ones SHE
+   closed and was parked in BACKLOG.md; the owner asked for it the next day._
+
+## Who closed it — `closed_by`, 2026-09-25 (`75175ba`)
+
+Asked for after the report above: «ενταξει τωρα φτιαξε το τι εκλεισε η Εύη (με προτεινες
+αυτο τι ειναι αυτο?)», and, on the explanation, «ναι προχώρα αλλα πες μου μεγάλωσες πολύ
+to promt του agent?? γτ σκοπός ειναι να ειναι και οικονομικός».
+
+**What it does.** `search_tasks(closed_by=…)`: a name or "me" returns only tasks that person
+is RECORDED as closing (`completed_by`), and lifts the default «your own work» scope —
+«τι έκλεισα εγώ» includes a colleague's task he closed. It is never relaxed away by the
+over-filtered fallback. Unrecorded older closes of THAT person (created or assigned to them)
+get one sentence — "recorded only since 2026-09-18" — and are never listed or attributed.
+`closed_by="everyone"` means «ποιος έκλεισε το Χ;»: completed tasks, any closer, each row
+saying who. On accounts with colleagues a completed OWN task now says who closed it too.
+
+**Two things the first version got wrong, both caught before the owner saw them:**
+- The unrecorded closes were COUNTED. On live data that was 336 for «τι έκλεισε η Εύη» —
+  mostly the owner's own tasks, which she could never have seen. Now scoped to her tasks,
+  and not a number at all.
+- `closed_by="everyone"` was refused. The real model reached for it unprompted on «ποιος
+  έκλεισε το Ψώνια;» and spent 5 rounds / ~24k tokens getting there another way (answer
+  correct, cost five-fold). It is accepted now, with no prompt text added; the model's own
+  first call, replayed offline on live data, now answers in that one search.
+
+**Six real-model questions (the number he approved), all correct:** «τι έχει κλείσει η
+Εύη;» live → exactly the two «Τεστ» she closed, plus the 18/09 sentence; «ποιος έκλεισε το
+Ψώνια;» live → no record (5 rounds — the refusal fixed above); synthetic: Εύη's closes
+including a task of HIS she closed; «τι έκλεισα εγώ από τα tasks του Κώστα;» → the right
+one; «ποιος έκλεισε την αλλαγή λαμπτήρων;» → Εύη (5 rounds, same refusal); and «τι έχουμε
+στο Γραφείο;» re-run as a regression check → all 8, correctly labelled.
+**Not re-run against the model after the "everyone" fix** — the six were spent; the
+offline replay is the evidence. Settles it: «ποιος έκλεισε το Ψώνια;» in 2 rounds.
+
+**The prompt-size question, measured rather than estimated** (characters of what the model
+is sent, his account, before `02ce7b0` vs after this commit):
+
+```
+static instruction      7,840 → 8,756 chars   (+916,   everyone)
+vocabulary + people       281 → 2,216         (+1,935, only accounts with colleagues)
+search_tasks schema       986 → 1,443         (+457,   everyone)
+day view, 16 rows       1,710 → 1,824         (+114)
+≈ +830 tokens per round on his account (~+26% of a ~3,150-token fixed part),
+≈ +340 on a solo account; real agent_runs agree (~+750 measured on round 1).
+closed_by itself: +148 chars, ~37 tokens.
+In money at $0.25/M input: ~$0.0004 per two-round question.
+```
+
+**Offered, not decided:** tightening the people rules — the largest single addition, and
+written more verbosely than it needs to be. Every line in it was added to fix a measured
+failure, so shortening it needs a re-run of those questions to prove nothing comes back.
+
+Baselines after `75175ba`: `pytest` 646 passed; `npm run check` EXIT=0, `ui-check: OK — 95
+files, 46 tokens, 562 translation keys`; build clean; `AgentChatModal.jsx` lints clean.
 
 ## Found on the way — FIXED the next day (`ca43a43` + data repair)
 
