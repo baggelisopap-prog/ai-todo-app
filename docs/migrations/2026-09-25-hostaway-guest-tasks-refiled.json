@@ -1,0 +1,526 @@
+{
+ "what": "Guest-message tasks refiled into the Hostaway system category after the create_task_manual fix (ca43a43). Undo: set workspace_id and category_id back to null for these ids.",
+ "approved_by_owner": "2026-09-25 — «2 ναι εφόσον θα βελτιώσουν την εφαρμογή»",
+ "rows": [
+  {
+   "id": "008dfadc-2e4f-4bc9-957f-c424e999d7b4",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "3195fb14-d4b2-40cf-a8f8-e94751ae3e20",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "f50d911f-29c7-4ced-9644-bc84a9ee4ee6",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "9be8ceb4-5230-441d-808a-a6655072baf2",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "3971b140-3b44-43f4-9efe-4844fecd5e45",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "baaff59a-fc38-4c9a-ad01-3b7aadf84a1a",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "3e36d160-bc1e-4d7b-a64a-f12a39f91f32",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "af91d967-b081-4136-8da9-8404a965fde3",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "f291e717-d00c-422f-96b5-4078e9c5449b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "0b5d2a92-8bb9-416f-b99d-9758fed8fdb0",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "a683becc-e61a-4c3f-9342-ef24885ff85b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "47742229-39a1-4387-b96a-7e3a900772a0",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "5cad9c2f-7c37-46dc-a4de-a0ef21bcdefc",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "2aa13e80-3618-4076-8362-b5590fe5d993",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "9176c1f8-bdd5-44b9-9eae-bda30016b4b7",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "71a8f7a3-1204-4193-b528-77571f36d620",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "accbe937-02e3-418e-8d2e-e1b52b86bc3e",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "7a5cb884-502e-4003-880a-83b070456ec5",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "6bbb54df-f5f5-4499-8db5-3fe9416e8ca9",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "819c705d-f242-497b-9ce1-3e9a0ed7bcfe",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "63d7b177-55e5-44af-9e9d-d49b1f1f64be",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "40bd5e27-24be-494e-ad48-3349fe920db2",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "4974a34b-6c9c-4162-b3e8-93a91f7366d5",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "b6139997-bb9e-4c61-92cb-ce3e620e38c0",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "b8d9d7d0-a418-434e-9de4-55c528b1831c",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "51a5513c-9d48-4d66-a657-f7179c221964",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "e1e1dd7d-7d45-4294-9020-511e1b3cc1bd",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "c6932fb3-03ab-4d1b-acdb-585c65b95511",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "a40ac6f2-8f32-4b1f-80b3-ff4b7fe02754",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "1c2156c5-f871-4961-89d8-35263ee625d1",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "a0b8f665-0eb7-4e4d-bfd3-f1a3ca5d6610",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "ad53f7da-524e-435e-a5cb-58732d49a0fa",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "6274af66-60ab-4328-bdfb-2f8e310b20f0",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "d84a5677-0784-4b65-b9ce-7a03dbc926e5",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "496bc852-4a8b-4a18-b492-931825a7f6e2",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "d3d7bd9d-54c8-4654-9cd6-8671585b22de",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "75909659-2869-451f-b40e-5606f603c02a",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "d0eb73a9-66bd-4c1f-b93f-7b3fda96d0e2",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "dc41f0e1-a05b-4aee-b7ee-e4debd62a4a2",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "fb8dfaec-3799-4737-bd66-e930c4f15507",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "8ee9d31d-3ddd-4099-95cf-ecc4c8f14c69",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "58562c0f-4fc8-4d29-a597-d103fc441765",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "9c0a68de-25de-449a-8434-a09b8274cb9b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "72d44cfe-1cf9-4b0b-b8f2-ef88c55ff6e0",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "c5632068-26fa-4486-8bce-5544543c340c",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "6264dc31-0f96-42d8-8b97-2a2836fba69e",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "9d266ac4-9ce8-4440-8016-960738da2f3a",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "c5a6bcc1-5e66-42ca-b4fd-0008e9d85e15",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "b7e9382b-eef1-4e91-915e-3ba568c73cb1",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "8846af97-e0e0-4104-919d-dbf7bcad2e88",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "9c3c8cf1-506d-4189-a689-5b8787fdac0b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "5efde269-3227-4706-a873-6c9705882668",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "39c40d52-4948-482b-829f-8a59d22f1a7b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "9d5fa93f-2b51-4e55-81b2-d9b37cac781b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "0269ddb5-faf9-4f5e-8a6f-c19eac901b3b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "8e361cae-170b-4289-8fdb-f0834fd868e5",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "fb76ed4f-b293-423b-9279-22773a295d4f",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "3a9acb28-1ff6-4212-9946-607819903f5a",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "fc0a2f0d-c76a-43b3-8f9b-6828fc1e700c",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "ff4d4965-3a35-4b7f-bdf1-9c64a6786629",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "a7b52c9e-92f0-4074-92d4-8976b9ae6cf0",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "d67d1195-1c61-4804-8edb-07ee95f7ec2e",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "509dd5b2-23b9-4186-a43a-aa0e0719214b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "5c5d7554-4d20-47e3-ae37-827798c8f72b",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  },
+  {
+   "id": "abc8d5b3-3545-4157-818c-5d8585ed0337",
+   "user_id": "fdedc7be-964b-4e75-b4a0-bd16cb6b05e7",
+   "workspace_id_before": null,
+   "category_id_before": null,
+   "workspace_id_after": "58b022fb-7df8-49d5-8d9b-b0f6b4b01dcb",
+   "category_id_after": "7f1b1825-6d58-49e9-9bda-410e1ac98434"
+  }
+ ]
+}

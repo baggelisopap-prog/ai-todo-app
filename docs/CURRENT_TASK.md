@@ -8,8 +8,9 @@ _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" fi
 > what nobody has watched of it moved into its own bullet in PROJECT_STATUS.md, because
 > this file no longer carries it.
 >
-> **Next, waiting on the owner:** the Hostaway placement bug at the bottom of this file. He
-> said yes to fixing it; the explanation of exactly what changes comes first.
+> **Followed on 2026-09-25 by `ca43a43` and a data repair** — the Hostaway placement bug found
+> during this work, at the bottom of this file. Done and verified in the database; its own
+> entry is at the top of PROJECT_STATUS.md.
 
 ## What was asked
 
@@ -148,7 +149,7 @@ asked the deployed agent a question since the push.
    `completed_by` existed). The rows now carry `completed_by: unknown`; the model ignored it.
    Parked with the proper fix in BACKLOG.md.
 
-## Found on the way, and NOT acted on — the next task
+## Found on the way — FIXED the next day (`ca43a43` + data repair)
 
 **Hostaway guest-message tasks are created with no workspace and no category.**
 `services.create_task_manual` builds its `TaskRecord` without `workspace_id` or `category_id`,
@@ -165,6 +166,25 @@ The same function serves `POST /tasks` (the calendar's empty-slot create), whose
 model accepts `workspace_id` / `category_id` and even validates them before they are
 dropped. (The agent's confirmed «create» goes through it too, but never passes a workspace
 in the first place — a separate, smaller gap.)
+
+**What was done, 2026-09-25**, after the owner's «1 ναι 2 ναι εφόσον θα βελτιώσουν την
+εφαρμογή θα λύσουν τα προβλήματα και δεν θα δημιουργηθούν νέα προβληματα»:
+
+- The measured size of it: **65 guest tasks, 2026-09-01 → 09-24, every one unfiled.** None
+  auto-closed on a reply and none was marked answered — against 18 and 46 of the 126 before
+  them. So his 2026-09-20 question «γτ οταν απανταω σε ενα μυνημα στην hostaway δεν κλεινει
+  μόνο του?» had this second cause, which the audit then did not find. Corrected in DECISIONS.md.
+- `create_task_manual` now passes `workspace_id` / `category_id` through. Two new tests assert
+  what `save_task` receives; run against the unfixed code, both failed. `638 passed`.
+- The 65 were refiled into Business / Hostaway. Dry run first (65, all completed, one account,
+  0 in a person-chosen workspace), then `updated: 65   skipped: 0`, then an independent read:
+  **191 of 191 guest tasks carry the category; open guest tasks escalation sees: 0** — so the
+  repair sent no push and closed nothing. The first attempt to write was blocked by Claude
+  Code's safety check on live data; the owner then gave explicit permission: «κάν' το εσύ, σου
+  δίνω άδεια». Undo list: `docs/migrations/2026-09-25-hostaway-guest-tasks-refiled.json`.
+
+**Not watched yet: a new guest message after `ca43a43`.** Settles it: it appears under
+Business / Hostaway, and a reply to a P3 in Hostaway closes it within ~2 minutes.
 
 Also found, parked in BACKLOG.md: the agent's write tools still offer the four old category
 words, so «άλλαξε κατηγορία» writes the old column.
