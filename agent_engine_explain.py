@@ -760,9 +760,16 @@ def people_fields(task, ctx: dict) -> dict:
     # κανείς. Στη δοκιμή, το AI το διάβασε σαν «ανατέθηκε στην Εύη» — και στο
     # «τι δεν έχει αναλάβει κανείς;» πέταξε ακριβώς αυτό το task. Τώρα του
     # λέμε τι ΕΓΙΝΕ, και το «ποιανού δουλειά είναι» το υπολογίζει ο κώδικας.
-    if not task.assigned_to and task.created_by == ctx["me"]:
-        return {}
     people = ctx["people"]
+    if not task.assigned_to and task.created_by == ctx["me"]:
+        # The user's own task — but on an account with colleagues, a colleague
+        # may have closed it, so a completed one still says who did.
+        # (ΣΤΑ ΕΛΛΗΝΙΚΑ: δικό σου task, αλλά αν μοιράζεσαι workspace μπορεί να το
+        # έκλεισε άλλος — άρα το κλειστό γράφει ποιος. Χωρίς κοινά workspaces: τίποτα.)
+        if task.is_completed and people["labels"]:
+            closer = getattr(task, "completed_by", None)
+            return {"completed_by": person_label(people, closer) if closer else UNKNOWN_ASSIGNER_LABEL}
+        return {}
     if task.assigned_to:
         assigner = ctx["assigners"].get(task.record_id)
         fields = {
@@ -1176,6 +1183,7 @@ def build_vocabulary_block(workspaces, categories, people: dict = None) -> str:
             + f"  \"τι έχω στο {shared};\" -> workspace=\"{shared}\", person=null" + newline
             + "  \"τι μου έδωσε η X;\" -> person=null, assigned_by=\"X\"" + newline
             + "  \"τι έδωσα στην X;\" -> person=\"X\", assigned_by=\"me\"" + newline
+            + "  \"τι έκλεισε η X;\" -> closed_by=\"X\"" + newline
             + "  \"κλείσε το <task>\" -> keyword=\"<task>\", person=\"everyone\", then propose it" + newline
             + "- Any question about another person or about who assigned what REQUIRES search_tasks: "
               "the day view holds only today's and overdue work." + newline
@@ -1440,6 +1448,7 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
         category: str = None,               # ΑΛΛΑΞΕ: δική σου κατηγορία, όχι μία από τις 4 παλιές λέξεις
         person: str = None,                 # ΝΕΟ: ποιανού η δουλειά — κενό = η δική σου
         assigned_by: str = None,            # ΝΕΟ: ποιος την ανέθεσε
+        closed_by: str = None,              # ΝΕΟ (25/09): ποιος το ΕΚΛΕΙΣΕ — άλλο από το ποιανού ήταν
         priority: Literal["P1", "P2", "P3"] = None,
         keyword: str = None,
         include_completed: bool = False,
@@ -1455,6 +1464,7 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
             category: One of the user's category names, exactly. Omit for all.
             person: Whose work. Omit for the user's own; "everyone" for all of it; "nobody" for untaken tasks; or a person's name.
             assigned_by: Only tasks this person assigned — a person's name, or "me". Omit for any.
+            closed_by: Only completed tasks this person closed — a name, or "me". Omit for any.
             priority: Filter by priority. Omit for all.
             undated_only: Return ONLY tasks with no due date ("what has no deadline?"). Ignores date_from/date_to.
             keyword: Case-insensitive free text matched against name and description. Omit for none.
@@ -1463,7 +1473,7 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
         Returns:
             tasks (max 30, descriptions cut to 100 chars), total_matches, truncated, undated_matches_excluded.
         """
-        logging.info(f"[agent] search_tasks called: date_from={date_from}, date_to={date_to}, workspace={workspace}, category={category}, person={person}, assigned_by={assigned_by}, priority={priority}, keyword={keyword}, include_completed={include_completed}, undated_only={undated_only}")
+        logging.info(f"[agent] search_tasks called: date_from={date_from}, date_to={date_to}, workspace={workspace}, category={category}, person={person}, assigned_by={assigned_by}, closed_by={closed_by}, priority={priority}, keyword={keyword}, include_completed={include_completed}, undated_only={undated_only}")
 
         # "What has no deadline?" had no way to be expressed, so the model went
         # looking for it category by category — 5 rounds and 28k tokens for a
@@ -1508,7 +1518,14 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
         person_defaulted = not person_folded
         person_everyone = person_folded in PERSON_EVERYONE_WORDS
         person_nobody = person_folded in PERSON_NOBODY_WORDS
-        person_id = me if person_defaulted else None
+        # None, not `me`, when defaulted: the default scope is applied by
+        # `default_mine` below, which a closer lifts — a `me` here would have
+        # quietly re-imposed it through the explicit-person branch.
+        #
+        # ΣΤΑ ΕΛΛΗΝΙΚΑ: το «μόνο τα δικά σου» εφαρμόζεται σε ΕΝΑ σημείο
+        # (default_mine). Εδώ ήταν ένα δεύτερο, κρυφό, που το βρήκε τεστ: το
+        # «τι έκλεισα εγώ» δεν έβλεπε task της Εύης που έκλεισες εσύ.
+        person_id = None
         if not (person_defaulted or person_everyone or person_nobody):
             person_id, problem = resolve_person(people, person)
             if not problem and question:
@@ -1528,14 +1545,55 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
             if problem:
                 return {"error": problem}
 
-        def _in_scope(task, active: set = None, everyone: bool = False) -> bool:
+        # WHO CLOSED IT (2026-09-25) — a different fact from whose task it was,
+        # which is all the model could search by before. Measured on the owner's
+        # live data: «τι έχει κλείσει η Εύη;» listed four of Εύη's completed
+        # tasks as closed by her; two of them had no closer on record at all.
+        # A closer means completed tasks, and it lifts the default «your own
+        # work» scope: «τι έκλεισα εγώ» includes a colleague's task I closed.
+        closer_id = None
+        # closed_by="everyone" is «ποιος έκλεισε το X;» — completed tasks, any
+        # closer, each row saying who. Measured on the real model: it reached
+        # for exactly that argument unprompted, was refused, and spent five
+        # rounds (~24k tokens) finding the answer another way. Accepting it
+        # costs no prompt text at all.
+        #
+        # ΣΤΑ ΕΛΛΗΝΙΚΑ: «ποιος έκλεισε το Χ;» -> το AI γράφει «έκλεισε από: όλοι».
+        # Στη δοκιμή, το εργαλείο το απέρριπτε και το AI έψαχνε αλλιώς για 5 γύρους
+        # (πενταπλάσιο κόστος). Τώρα το «όλοι» σημαίνει «κλειστά tasks, όποιος κι
+        # αν τα έκλεισε» — μία αναζήτηση, και καμία λέξη παραπάνω στις οδηγίες.
+        closed_by_anyone = False
+        if closed_by:
+            if fold_name(closed_by) in PERSON_EVERYONE_WORDS:
+                closed_by_anyone = True
+            elif fold_name(closed_by) in PERSON_NOBODY_WORDS:
+                return {"error": "closed_by takes a person's name, \"me\" or \"everyone\". Leave it out for any."}
+            else:
+                closer_id, problem = resolve_person(people, closed_by)
+                if not problem and question:
+                    problem = ambiguous_in_question(people, closer_id, question)
+                if problem:
+                    return {"error": problem}
+            include_completed = True
+        default_mine = person_defaulted and not closed_by
+        # ΣΤΑ ΕΛΛΗΝΙΚΑ — «ΠΟΙΟΣ ΤΟ ΕΚΛΕΙΣΕ» (25/09/2026): ένα φίλτρο για το ποιος
+        # ΕΚΛΕΙΣΕ ένα task, ξεχωριστό από το ποιανού ήταν. Στα δεδομένα σου, στο
+        # «τι έχει κλείσει η Εύη;» ο agent έδινε τα κλειστά tasks ΤΗΣ Εύης — και
+        # για τα 2 από τα 4 δεν υπάρχει καταγραφή ποιος τα έκλεισε. Όταν δίνεται
+        # «ποιος το έκλεισε», φέρνει μόνο κλειστά tasks, και ΟΛΩΝ (όχι μόνο τα
+        # δικά σου): το «τι έκλεισα εγώ» περιλαμβάνει και task της Εύης που
+        # έκλεισες εσύ.
+
+        def _in_scope(task, active: set = None, everyone: bool = False, unknown_closer: bool = False) -> bool:
             """Workspace, category, person and assigner in one place, so every
             pass below — the search, its fallbacks, the relaxations, the hints —
             narrows by exactly the same rule. `active` names the filters the
             model chose that a relaxation may drop (None = all of them). The
             DEFAULT person scope is not one of them: it is never relaxed, so a
             relaxation can never slip another person's task into «τι έχω».
-            `everyone` lifts it, and only others_hint uses that."""
+            `everyone` lifts it, and only others_hint uses that. `unknown_closer`
+            swaps "closed by that person" for "closed by nobody on record" —
+            only unknown_closer_hint uses that."""
             # ΣΤΑ ΕΛΛΗΝΙΚΑ: ΕΝΑΣ έλεγχος για workspace, κατηγορία, άνθρωπο και
             # «ποιος ανέθεσε», που τον χρησιμοποιούν ΟΛΑ τα περάσματα πιο κάτω.
             # Το σημαντικό: η «δεύτερη ευκαιρία» (χαλάρωση φίλτρων) μπορεί να
@@ -1548,7 +1606,7 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
                 return False
             if on("category") and category_ids is not None and task.category_id not in category_ids:
                 return False
-            if person_defaulted:
+            if default_mine:
                 if not everyone and responsible_for(task) != me:
                     return False
             elif on("person"):
@@ -1558,6 +1616,21 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
                     return False
             if on("assigned by") and assigner_id is not None and assigners.get(task.record_id) != assigner_id:
                 return False
+            # Never relaxed, unlike the filters above: a relaxation that dropped
+            # it would hand back tasks somebody ELSE closed, beside a question
+            # about who closed them.
+            if closed_by_anyone and not task.is_completed:
+                return False
+            if closer_id is not None:
+                closer = getattr(task, "completed_by", None) if task.is_completed else False
+                if closer != (None if unknown_closer else closer_id):
+                    return False
+                # A close with no record could be anybody's only among tasks
+                # this person was part of — created or assigned. Without this,
+                # «τι έκλεισε η Εύη» on live data counted 336 such tasks, most of
+                # them the owner's own, which she could never have seen.
+                if unknown_closer and closer_id not in (task.created_by, task.assigned_to):
+                    return False
             return True
 
         valid_priorities = ["P1", "P2", "P3"]
@@ -1579,7 +1652,7 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
         ]
         keyword_stems = stem_words(keyword_lower)
 
-        def _scan(with_completed: bool, everyone: bool = False):
+        def _scan(with_completed: bool, everyone: bool = False, unknown_closer: bool = False):
             """One filtering pass over cached_tasks, returning
             (exact_matches, word_level_matches, undated_excluded).
 
@@ -1594,7 +1667,7 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
                     continue
                 if undated_only and task.due_date:
                     continue
-                in_scope = _in_scope(task, everyone=everyone)   # workspace/κατηγορία/άνθρωπος — δες _in_scope
+                in_scope = _in_scope(task, everyone=everyone, unknown_closer=unknown_closer)   # workspace/κατηγορία/άνθρωπος — δες _in_scope
 
                 if keyword:
                     task_haystack = f"{task.task_name} {task.description or ''}".lower()
@@ -1763,7 +1836,7 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
         # τα κρύβει σιωπηλά: τα μετράει και του λέει «υπάρχουν κι άλλα Ν, αν
         # ρώτησε για το workspace ή την ομάδα ψάξε ξανά με person='everyone'».
         # Σε λογαριασμό χωρίς κοινά workspaces δεν τρέχει καν.
-        if person_defaulted and people["labels"]:
+        if default_mine and people["labels"]:
             pool, _, _ = _scan(include_completed, everyone=True)
             if not pool and keyword:
                 pool = _scan(include_completed, everyone=True)[1]
@@ -1779,6 +1852,28 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None):
                     f"user asked only about their own work ('I', 'my', 'έχω', 'μου'), search again "
                     f"NOW with person='everyone' before answering. Either way, never answer that "
                     f"there are none while this hint is present."
+                )
+
+        # Completed tasks of THIS person that would have matched but have nobody
+        # on record as their closer — everything closed before completed_by
+        # existed (2026-09-18), and whatever the system closed. Never returned:
+        # returning them beside «τι έκλεισε η Εύη» is exactly the misattribution
+        # this filter exists to end. Not counted either — a number of old
+        # unrecorded closes is noise; that the record starts on 09-18 is the fact.
+        #
+        # ΣΤΑ ΕΛΛΗΝΙΚΑ: κλειστά tasks ΑΥΤΟΥ του ανθρώπου χωρίς καταγραφή για το
+        # ποιος τα έκλεισε (πριν τις 18/09, ή τα έκλεισε το σύστημα). ΔΕΝ τα
+        # δίνουμε — ήταν ακριβώς το λάθος. Ούτε τα μετράμε: η πρώτη εκδοχή έλεγε
+        # «336 χωρίς καταγραφή» ακόμα και για την Εύη, που δεν θα μπορούσε ποτέ
+        # να έχει κλείσει τα δικά σου. Του λέμε μόνο το γεγονός: η καταγραφή
+        # ξεκινά 18/09.
+        if closer_id is not None:
+            unknown_exact, unknown_word_level, _ = _scan(True, unknown_closer=True)
+            if unknown_exact or (keyword and unknown_word_level):
+                result["unknown_closer_hint"] = (
+                    "Who closed a task is recorded only since 2026-09-18. Some older completed "
+                    "tasks of this person have no such record and are not listed — say so briefly, "
+                    "and never attribute them to anyone."
                 )
 
         # Kills the "blind neighbouring-date retry" loop — the single most expensive

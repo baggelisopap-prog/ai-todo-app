@@ -78,7 +78,7 @@ function describePerson(t, person) {
 function describeFilters(t, filters) {
   const parts = [];
   const {
-    keyword, workspace, category, person, assigned_by: assignedBy, priority,
+    keyword, workspace, category, person, assigned_by: assignedBy, closed_by: closedBy, priority,
     date_from: from, date_to: to, undated_only: undated, include_completed: done,
   } = filters;
 
@@ -97,6 +97,13 @@ function describeFilters(t, filters) {
     parts.push(PERSON_ME.includes(String(assignedBy).trim().toLowerCase())
       ? t('agent.searched_filter_assigned_by_me')
       : t('agent.searched_filter_assigned_by', { value: assignedBy }));
+  }
+  if (closedBy) {
+    const closer = String(closedBy).trim().toLowerCase();
+    if (PERSON_ME.includes(closer)) parts.push(t('agent.searched_filter_closed_by_me'));
+    // «ποιος έκλεισε το Χ;» — completed tasks, whoever closed them.
+    else if (PERSON_EVERYONE.includes(closer)) parts.push(t('agent.searched_filter_closed_by_anyone'));
+    else parts.push(t('agent.searched_filter_closed_by', { value: closedBy }));
   }
   if (priority) parts.push(t('agent.searched_filter_priority', { value: priority }));
   if (undated) parts.push(t('agent.searched_filter_undated'));

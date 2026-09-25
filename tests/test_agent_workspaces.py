@@ -620,3 +620,99 @@ def test_a_completed_row_says_who_closed_it_and_unknown_when_nobody_is_on_record
 
     assert rows["t-a"]["completed_by"] == "evi_ karv"
     assert rows["t-b"]["completed_by"] == "unknown"
+
+
+# ----------------------------------------------- who closed it (2026-09-25)
+
+
+def _closed(record_id, created_by, completed_by, **kw):
+    task = _task(record_id, created_by=created_by, workspace_id="ws-personal", is_completed=True, **kw)
+    task.completed_by = completed_by
+    return task
+
+
+def _closer_tasks():
+    return [
+        _closed("evi-closed-hers", EVI, EVI),
+        _closed("nobody-on-record", EVI, None),      # closed before completed_by existed
+        _closed("evi-closed-mine", ME, EVI),          # my task, her hand
+        _closed("i-closed-hers", EVI, ME),
+    ]
+
+
+def _closer_search(**kwargs):
+    tasks = _closer_tasks()
+    search_tasks, _ = agent_tools.build_tool_functions(tasks, _ctx(tasks), question=kwargs.pop("question", None))
+    return search_tasks(**kwargs)
+
+
+def test_what_evi_closed_is_what_she_closed_not_what_was_hers():
+    """The live failure: «τι έχει κλείσει η Εύη;» listed her completed tasks,
+    two of which nobody is on record as closing. Whose task it was and who
+    closed it are different facts, and the search now asks the second."""
+    result = _closer_search(closed_by="Εύη", question="τι έχει κλείσει η Εύη;")
+
+    assert _ids(result) == {"evi-closed-hers", "evi-closed-mine"}
+
+
+def test_a_close_with_no_record_is_mentioned_and_never_attributed():
+    result = _closer_search(closed_by="Εύη")
+
+    assert "nobody-on-record" not in _ids(result)
+    assert "never attribute them" in result["unknown_closer_hint"]
+
+
+def test_the_no_record_note_is_only_about_tasks_that_person_was_part_of():
+    """First version: «τι έκλεισε η Εύη» on live data reported 336 unrecorded
+    closes — mostly the owner's own tasks, which she could never have seen.
+    Only a task she created or was assigned could have been closed by her."""
+    tasks = [_closed("mine-no-record", ME, None), _closed("evi-closed-hers", EVI, EVI)]
+    search_tasks, _ = agent_tools.build_tool_functions(tasks, _ctx(tasks))
+
+    result = search_tasks(closed_by="Εύη")
+
+    assert _ids(result) == {"evi-closed-hers"}
+    assert "unknown_closer_hint" not in result
+
+
+def test_what_i_closed_includes_a_colleagues_task():
+    """A closer lifts the default «your own work» scope — the task I closed
+    was Εύη's, and it is still something I closed."""
+    assert _ids(_closer_search(closed_by="me")) == {"i-closed-hers"}
+
+
+def test_the_closer_filter_is_never_relaxed_away():
+    """An empty result must not come back with tasks somebody ELSE closed,
+    beside a question about who closed them."""
+    result = _closer_search(closed_by="Εύη", priority="P1", keyword="nothing-like-this")
+
+    for key in ("tasks", "relaxed_matches"):
+        assert _ids(result, key) <= {"evi-closed-hers", "evi-closed-mine"}
+
+
+def test_the_closer_name_is_checked_like_every_other_name():
+    assert "error" in _closer_search(closed_by="Κώστας")
+    assert "error" in _closer_search(closed_by="nobody")
+
+
+def test_who_closed_a_named_task_is_answered_in_one_search():
+    """The real model asked «ποιος έκλεισε το Ψώνια;» with closed_by="everyone",
+    was refused, and spent five rounds getting there another way. "everyone"
+    now means: completed tasks, any closer, each row saying who."""
+    tasks = _closer_tasks() + [_task("still-open", created_by=EVI, workspace_id="ws-personal")]
+    search_tasks, _ = agent_tools.build_tool_functions(tasks, _ctx(tasks))
+
+    rows = {row["record_id"]: row for row in search_tasks(closed_by="everyone")["tasks"]}
+
+    assert set(rows) == {"evi-closed-hers", "nobody-on-record", "evi-closed-mine", "i-closed-hers"}
+    assert rows["evi-closed-mine"]["completed_by"] == "evi_ karv"   # my own task, her hand
+    assert rows["nobody-on-record"]["completed_by"] == "unknown"
+
+
+def test_a_solo_account_still_pays_nothing_for_who_closed_it():
+    solo_members = [m for m in MEMBERS if m.user_id == ME]
+    task = _closed("mine-done", ME, ME)
+    people = agent_tools.build_people_directory(ME, solo_members, {})
+    ctx = agent_tools.build_agent_context(ME, WS, CATS, people, {})
+
+    assert agent_tools.people_fields(task, ctx) == {}
