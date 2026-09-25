@@ -1,242 +1,205 @@
-ACTIVE TASK — The agent sees workspaces and people, and only what the owner can see. Pushed; checked with 47 real-model questions; not yet used by the owner in the real app
+ACTIVE TASK — The agent audit: nothing the user did not ask for reaches a card, the Inbox and closing dates are searchable, −17% tokens, Hostaway triage stops thinking. Committed as `2670562`, NOT pushed; checked on the real model; not used by the owner
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
-> **ONE COMMIT PUSHED TO MAIN, `02ce7b0`, AUTO-DEPLOYED.**
-> 9 files, +2412 −180. New file: `tests/test_agent_workspaces.py`.
+> **ONE CODE COMMIT ON MAIN, `2670562`, NOT PUSHED.** Pushing deploys it live, so it waits for
+> the owner's go. 13 files, +2363 −556. New: `tests/test_agent_audit.py` (34 tests),
+> `evals/agent_suite.py`, `evals/hostaway_thinking_replay.py`.
 >
-> The previous task (the desktop agent column, `12c0e53`) is finished as far as code goes;
-> what nobody has watched of it moved into its own bullet in PROJECT_STATUS.md, because
-> this file no longer carries it.
->
-> **Followed on 2026-09-25 by `ca43a43` and a data repair** — the Hostaway placement bug found
-> during this work, at the bottom of this file. Done and verified in the database; its own
-> entry is at the top of PROJECT_STATUS.md.
+> The previous task — workspaces and people (`02ce7b0`), who closed it (`75175ba`), and the
+> Hostaway placement fix (`ca43a43`) — is finished as far as code goes. What nobody has watched
+> of it moved into its own PROJECT_STATUS.md bullets, because this file no longer carries it.
 
 ## What was asked
 
-2026-09-23:
+2026-09-25, right after the who-closed-it work:
 
-> «o agent δεν βλεπει καθόλου workspaces. το χρειάζομαι δλδ να του λέω τι έχουμε στο χ workspace και να μου λεει»
+> «ενέργησε σαν agent expert. δες ότι χρειάζεσαι απο τον agent και βρες (εαν υπάρχουν λάθοι, bugs, λογικη που μπορεί να μας δίνει λάθος αποτελέσματα, και σπατάλει tokens) για σοβαρά νούμερα οχι 50 και 100 συνολικα»
 
-Shown the cause and a three-part fix, plus the question of whose tasks «έχουμε» covers:
+Shown the findings, he took all of them and set the test budget himself:
 
-> «το 1 με 3 το ξερεις καλύτερα εσυ το άλλο θέλω να βλέπει μόνο ότι μπορώ να δώ και εγώ δεν θέλω να μου δώσει task απο άλλο user αν δεν γίνεται να το δω εγώ. επίσης θέλω να μπει και ποια μου έχει δώσει ο τάδε πχ. κατανοοώ ότι ταράζουμε νερά αλλα δεν θέλω με τίποτα να μπλέξουμε user id. και να ειναι bulletproof»
+> «ολα και κάνε όσα τεστ θέλεις μέχρι 1κκ τοκενσ ώστε να είναι σωστότερο. γτ πολλά απο τα αποτελέσματα είναι απο παλιότερες εκδόσεις οπότε ίσως έχουμε λάθοι εκεί. οπότε πάμε»
 
-Asked whether «μην μπλέξουμε user id» meant *the model never sees an id and never confuses
-who is who*, and whether the agent may propose changes to a colleague's task:
+His second sentence was right, and it set the method: several findings came from runs on older
+versions, so **nothing was fixed until it had been reproduced on the current code, on the real
+model**. That run also found one failure that was mine, two days old: the given_by column added
+to the day view on 2026-09-23 (below).
 
-> «το 1 ναι οπως το είπες το 2 α όμως στο κοινό workspace εγω μπορώ να αλλάζω μόνο αν κάτι εχει ανατεθει σε εμέναη μπερδέυομαι?»
+## How it was measured
 
-He was mistaken about the rule, and told so with the code: `access.can_write` lets any member
-change anything in a shared workspace — his own decision of 2026-09-17 («θέλω να φευγει
-τελειος σε αυτών αλλά αυτός που το έκανε asign να βλεπει ένα μύνημα»). The agent has no rule
-of its own: every confirmed proposal goes through the same `access.require_write` as the
-screen, so any future tightening applies to both.
+One suite of 23 questions, saved as `evals/agent_suite.py`: 12 on his live account — read-only,
+the agent only proposes — and 11 on a synthetic shared workspace «Γραφείο» with two invented
+colleagues, held in memory. Every question tagged `#s…`, so none shows in his agent history.
+Only invented times are checked automatically; every answer was READ against what a correct one
+does. Run on the code as it was, then after each round of fixes the re-runs demanded:
 
-Then, on testing:
+```
+run        questions   tokens    times nobody gave, on cards
+baseline   23          245,048   8
+after      23          213,080   0     <- the shortened instruction invented filters in 8/23
+after2      8           70,974   0
+final      23          204,883   0
+final2      4           32,291   0     (L03 O02 O09 O10, re-run after the last three fixes)
+Hostaway replay, 60 real threads x 2 configurations:   78,376
+spent: 844,652 of the 1,000,000 he allowed (~$0.61)
+```
 
-> «κανε οσες ερωτησεις χρειαζεσαι εως 50 θελω τα καλυτερα αποτελέσματα»
+## Baseline: 10 of 23 wrong or unsafe
 
-And on pushing and fixing the Hostaway bug next: «nai».
+**Unsafe — a card that, confirmed, writes what nobody asked for:**
+- «βάλε τα ληξιπρόθεσμα για αύριο» (live) → 6 cards, **every one** with time 19:48 — the clock at
+  the moment of asking — and every description rewritten as the day view's copy of it followed
+  by «| -» (the filler of the given_by column added on 2026-09-23), one of them also cut short at
+  «…τη σελίδα Finan». Four also carried
+  `category: "My App"`, which the confirm endpoint refuses with a 422: those cards could not
+  even be confirmed.
+- «μετέφερε το AI brainstorming για την Παρασκευή» (live) → time 00:00.
+- «τι έχω σήμερα;» → «το πρώτο βάλ' το για μεθαύριο» (office) → a task that was not the first
+  one listed, and 00:00.
+- «βάλε τον έλεγχο θερμοσίφωνα για αύριο» (office) → a NEW task «έλεγχο θερμοσίφωνα» beside the
+  existing one, instead of moving it.
 
-## The problem, measured on his live data
-
-`search_tasks` could filter only by the OLD `category` column — four fixed words that no
-longer say where a task lives — while the vocabulary block appended to the instruction told
-the model to pass a `workspace` argument **that did not exist**. On 2026-09-23:
-
-- «τι έχουμε στο My App» — unanswerable. Its 4 open tasks carried the old words Personal ×2 and Business ×2.
-- «τι έχουμε στο Business» — answered with confidence from the wrong eight: 6 of Business's 8, plus 2 of My App's.
+**Wrong:**
+- «τι περιμένει έγκριση στο inbox;» (live) → «24 in total», and only those. The Inbox held 38; 24
+  was the day view's due-today-or-late slice. «τι περιμένει έγκριση;» (office) → «none»: both
+  Inbox tasks were undated or due later, so the day view never showed them.
+- «τι έκανα χθες;» (office) → «none», with a task closed yesterday but due five days earlier.
+  The model's call was right (`closed_by="me"` + yesterday); the code read those dates as the
+  DUE date. The live version of the question listed his closed tasks that were due yesterday.
+- «ποια μου έδωσε η Εύη;» (office) → 1 of 2, answered from the day view's given_by column
+  without searching; the other was due in five days.
+- «τι έχω σήμερα;» → «το δεύτερο βάλ' το για αύριο» (live) → reached for an Inbox task; the
+  first answer had given only counts, so there was no "second" to count.
 
 ## What changed, where
 
-**`agent_engine.py`** — reads `repository.get_tasks_for_user`, the same method `GET /tasks`
-reaches through `service.get_all_tasks`, instead of `get_owned_or_assigned_tasks`. A test
-patches that one method and watches both the screen's path and the agent's change with it.
-New `_load_people`: members of the rooms the user is IN, their profiles (only when anybody
-else exists), and `task_assigned` rows of the activity log (only rooms the user is still in).
-Raises rather than degrading: without names, every colleague would read as "a former member".
+**`agent_tools.py`**
+- **What the user did not say is removed in code.** `ungrounded_filters`: a priority, a date range
+  or "no workspace" is applied only if the user's words carry it — this question, or an earlier
+  question or answer in the conversation («ναι» to «να τα βάλω για αύριο;» carries «αύριο»). A
+  wildcard («all», «όλα») is no filter. The model is told what was set aside (`ignored_note`).
+  `unasked_update_fields`: an update changes a time only if THIS question gives one
+  (`mentions_time`), a date or priority only if the words name one, a name or description only if
+  the user talks about one; `is_copy_of_current` drops a cut-short or decorated copy of the current
+  value. What was left alone is reported (`unchanged_note`). New tasks get no time nobody gave.
+- **Duplicates:** `propose_create_task` asks once when an open task by that name exists
+  (`similar_open_task`) and points at propose_update_task.
+- **The write tools lost `category`**: it could only write the four old words.
+- **Search:** `inbox=true` lists the whole Inbox; a keyword search falls back to the Inbox before
+  completed tasks; with `closed_by`, the dates mean WHEN it was closed (the Athens day,
+  `local_day`); a recurring task is one row with `repeats` — «every day from X to Y (N times)» —
+  and a hint to say it recurs; when the user has no match of their own, other people's matches
+  come back in the same call as `others`, labelled; nearby-date suggestions stay inside the asked
+  workspace, category and person.
+- **Rows:** empty fields left out; on accounts with colleagues the user's own unassigned rows say
+  `assigned_to: nobody, created_by: you` (without it, the final run filed his own «Κλήση λογιστή»
+  under «Άλλων»).
+- **Ids:** the model sees «t12», a per-request alias, instead of a 36-character UUID — in the day
+  view, the rows and the refs. `real_record_id` translates back; proposals carry the real id.
+- **Day view:** no given_by column; descriptions cut at 50 characters (was 70); the PENDING
+  APPROVAL header states the Inbox total.
+- **Follow-ups:** `refs_from_answer` — the remembered tasks are the ones the ANSWER named, in its
+  order, day-view ones included (`HISTORY_MAX_REFS` 5 → 8); the refs block is numbered;
+  `ordinal_in` reads «το πρώτο / δεύτερο / τελευταίο» (not Τρίτη, Τετάρτη, Πέμπτη), and the write
+  guard's refusal names the task the ordinal points to; «τα ληξιπρόθεσμα» and «τα σημερινά» reach
+  the day view's own scopes mid-conversation.
+- **Instruction:** 8,756 → 6,110 characters. Tool docstrings: search 1,152 → 839, the three
+  propose_* 1,025 → 665. After the first shortening the model invented filters in 8 of 23; the
+  explicit-null examples came back, and the grounding above went in.
 
-**`agent_tools.py`** — a new section, "workspaces and people":
-- `is_mine` — «τι έχω» as a filter over the visible list, the exact definition of the
-  reminders' SQL and the screen's «Δικά μου» (one truth table pins all three). The day view
-  applies it itself rather than trusting the caller.
-- Names only, never ids: `build_people_directory` labels each person as the screen does
-  (display name, else the email's local part — never the id the screen falls back to last);
-  duplicates get "(2)"; reserved words and the user's own name are taken first.
-  `resolve_person` refuses a name matching nobody or several; `ambiguous_in_question` refuses
-  when the USER's word fits two people even though the model passed one full name.
-- `assigners_from_log` — who made the CURRENT assignment, or `None` ("unknown"), never the creator as a guess.
-- Rows say `where` ("Workspace / Category"), and — only when someone else is involved —
-  `assigned_to` + `assigned_by`, or `assigned_to: nobody` + `created_by`, plus `completed_by`
-  on completed rows. A solo account's rows are unchanged in length.
-- `search_tasks` gained `workspace`, `category` (the user's own names), `person`,
-  `assigned_by`. No `person` = the user's own work, and when that hides someone else's match
-  the result says how many (`others_hint`) — so it neither mixes nor silently hides.
-- A proposal on somebody else's task carries `responsible`, and the card prints it.
+**`agent_engine.py`** — categories in ONE read (`repository.get_categories_for_workspaces`, the
+workspaces it already has) instead of four; passes the aliases, the last answer's refs in order
+(`recent_refs`), the day view's scopes (`day_scopes`) and this conversation's earlier questions and
+answers (`earlier_turns`) into the tools.
 
-**`repository.py`** — `get_members_of_workspaces` and `get_assignment_log`, one read each.
+**`repository.py`** — `get_categories_for_workspaces`.
 
-**`AgentChatModal.jsx` + both locales** — the searched-filters line shows workspace,
-category, person, assigned-by and undated; the card shows «Ανήκει σε: …».
+**`hostaway_integration.py`** — `ThinkingConfig(thinking_budget=0)`, as the three extractors in
+`ai_engine.py` already had it. Evidence in the comment and in DECISIONS.md.
 
-**`agent_engine_explain.py`** — brought along with Greek commentary, and one stale line
-corrected: step 6 said the confirm endpoint checks the task "is ΔΙΚΟ ΣΟΥ", untrue since 2026-09-11.
+**`AgentChatModal.jsx` + both locales** — «στο Inbox (αναμονή έγκρισης)» under an answer that
+searched the Inbox.
 
-## Tested against the real model — 47 questions, the limit he set was 50
+**`agent_engine_explain.py`** — brought along with Greek commentary for every change; the
+explain-copy test holds it identical to the real code.
 
-Two kinds: his live account (read-only; the agent only proposes), and a synthetic shared
-workspace «Γραφείο» with two invented colleagues, held in memory only — his live Personal
-workspace has no open task of anybody's, so it cannot exercise the hard case. Every
-question was tagged `#ws…`, so none appears in his agent history.
+**`tests/test_agent_audit.py`** — 34 tests, one per behaviour above. **`tests/test_agent_workspaces.py`**
+— four updated, each saying why (the given_by column is gone; other people's rows come back when
+the user has none; relaxed rows may now say `created_by: you`; «closed by nobody» means not closed).
 
-```
-questions asked      47          errors  0
-model calls          95          tokens  486,243
-cost                 $0.1332     (47 token_usage_log rows, priced by token_tracker.calculate_cost)
-```
+**`evals/`** — the suite and the Hostaway replay, to be re-run on future agent changes. Both cost
+money; the header of each says so. Results go to `evals/results/`, which git ignores.
 
-**Six failures found by the model, each fixed in code and pinned by a test:**
+## Final: 23 of 23 right
 
-1. «τι έχουμε στο Γραφείο» returned only his own three tasks and offered the rest. The rule
-   alone was not followed; an example naming his real shared workspace was.
-2. «τι δεν έχει αναλάβει κανείς» dropped exactly the untaken task — the row said
-   «responsible: Εύη» and the model read it as «assigned to Εύη». Rows now state facts.
-3. «κλείσε τον καθαρισμό του Β2» (a colleague's) — the model refused, claiming it may not
-   close other people's tasks. Now proposes, and the card names whose it is.
-4. «τι έχει καθυστερήσει στο Γραφείο» — «none», while a colleague's overdue task sat in
-   `others_hint`; the over-filtered relaxation beside it won. Relaxation and "no tasks in that
-   range" are now suppressed when the zero is explained by other people's work.
-5. Two members called Κώστας: the model picked one and passed the full name. Now refused from
-   the user's own word; the retry answered «Ζαχαρίου ή Παππά;».
-6. «ποια έχω δώσει στην Εύη» — «none», on live data where both were already completed. The
-   completed fallback now covers `assigned_by`.
-
-Also: «κλείσε το πρώτο» after «τι έχει η Εύη» still reaches first for a day-view row; the
-existing guard stops it, and now NAMES the discussed tasks, so the model asks «τον Καθαρισμό
-Β2;» instead of offering day-view rows. Safe, not ideal.
-
-Final re-run of the four most important synthetic cases: all correct a second time.
-Live data: 12 of 14 right first time, one of the two failures fixed, the other below.
-
-## Baselines — actual output, 2026-09-24/25
+Same questions, same data. Tokens per question, and rounds:
 
 ```
-pytest tests/ -q   → 636 passed   (593 before this task)
-npm run check      → EXIT=0
-                     ui-check: OK — 95 files, 46 tokens, 559 translation keys
-npm run build      → ✓ built, clean
-npm run lint       → ✖ 13 problems (13 errors, 0 warnings)
-                     12 is the standing baseline; the 13th is AgentPanel.jsx:79
-                     (react-refresh/only-export-components), from 12c0e53, whose own
-                     entry says lint was not re-run. AgentChatModal.jsx lints clean.
+       before  after    diff  rounds        before  after    diff  rounds
+L01     5,168   4,150   -20%   1->1   O01     9,685   7,504   -23%   2->2
+L02    10,726   8,113   -24%   2->2   O02    10,659   8,227   -23%   2->2
+L03    12,630   8,544   -32%   2->2   O03     4,539   7,395   +63%   1->2
+L04     5,496   4,076   -26%   1->1   O04    14,302  11,205   -22%   3->3
+L05     5,397  12,236  +127%   1->2   O05    14,391   7,346   -49%   3->2
+L06    10,983   8,553   -22%   2->2   O06    19,553  15,013   -23%   4->4
+L07    12,578   9,525   -24%   2->2   O07     9,179  11,176   +22%   2->3
+L08    15,856  13,121   -17%   3->3   O08     9,159   7,164   -22%   2->2
+L09    10,977   8,384   -24%   2->2   O09     4,531   7,249   +60%   1->2
+L10    12,162   9,156   -25%   2->2   O10    11,265   8,271   -27%   2->2
+L11    10,548   8,016   -24%   2->2   O11    14,467  11,575   -20%   3->3
+L12    10,797   8,250   -24%   2->2   TOTAL 245,048 204,249  -16.6%
+```
+
+- **L01 is the fixed cost everyone pays**: one round, answered from the day view — −20%, about
+  1,000 tokens less on every round of every question.
+- **The four that cost more are the four that now do the work**: L05 lists the whole Inbox,
+  O09 searches it, O03 searches instead of reading a column, O07 finds the task before moving it.
+  The 19 others: 221,402 → 166,193, **−25%**.
+- In money this is small — the agent runs on the cheap model, so ~2,000 tokens is ~$0.0005 a
+  question. **The money was in the Hostaway classifier**: its thinking tokens were $0.4375 of the
+  app's $1.3305 AI bill over the last 30 days (`token_usage_log`, read 2026-09-25; that total
+  includes this session's test runs, so the real share is larger). Replayed on 60 real guest
+  threads: 55 identical, $0.0056 → $0.0009 per message.
+
+## Baselines — actual output, 2026-09-25, on `2670562`
+
+```
+pytest tests/ -q   -> 680 passed   (646 before this task)
+npm run check      -> EXIT=0
+                      ui-check: OK — 95 files, 46 tokens, 563 translation keys
+npm run build      -> ✓ 340 modules transformed, built, exit 0
+npm run lint       -> ✖ 13 problems (13 errors, 0 warnings) — unchanged: the 12-error
+                      baseline plus AgentPanel.jsx:79 from 12c0e53. AgentChatModal.jsx clean.
 ```
 
 ## What a person has actually SEEN
 
-Nothing, in the real app. The owner has read the reports in the conversation; he has not
-asked the deployed agent a question since the push.
+Nothing in the real app — it is not pushed. The owner has read the reports in the conversation.
 
 ## What NOBODY has watched
 
-1. **The owner asking the deployed agent about a workspace.** Settles it: «τι έχουμε στο My App;» on his phone.
-2. **A real colleague's OPEN task in a shared room.** Every such case above is synthetic; his
-   only shared workspace has none open. Settles it: the colleague assigns him a test task,
-   then «ποια μου έχει δώσει η Εύη;».
-3. **«Ανήκει σε: …» on a real confirmation card**, and the new filter labels under an answer — rendered by code nobody has looked at in a browser.
-4. ~~**«τι έχει κλείσει η Εύη»** — still wrong.~~ **FIXED 2026-09-25, `75175ba`** — see
-   "Who closed it" below. _This item used to say it lists Εύη's completed tasks as ones SHE
-   closed and was parked in BACKLOG.md; the owner asked for it the next day._
+1. **The owner using the new agent on the deployed app.** Settles it: «τι περιμένει έγκριση;»,
+   «τι έκανα χθες;» and «βάλε τα ληξιπρόθεσμα για αύριο» on his phone — the last must show cards
+   with a date and nothing else.
+2. **A card from the new code, confirmed.** Every proposal above was checked as a proposal; none
+   was pressed. The real id travels to the confirm endpoint (a test holds that); pressing one is
+   what settles it.
+3. **«στο Inbox (αναμονή έγκρισης)» under an answer**, in a browser.
+4. **A real guest message classified with thinking off.** Settles it: its `token_usage_log` row
+   (`hostaway_classification`) shows `thinking_tokens` 0, and the priority reads right to him.
+5. **A real colleague's open task** — still all synthetic, as in the previous task.
 
-## Who closed it — `closed_by`, 2026-09-25 (`75175ba`)
+## Seen and left as it is
 
-Asked for after the report above: «ενταξει τωρα φτιαξε το τι εκλεισε η Εύη (με προτεινες
-αυτο τι ειναι αυτο?)», and, on the explanation, «ναι προχώρα αλλα πες μου μεγάλωσες πολύ
-to promt του agent?? γτ σκοπός ειναι να ειναι και οικονομικός».
+- **«AI brainstorming» carries 09:00 on his live account** — a time nobody gave, written by the old
+  code and confirmed on 2026-09-21. The new code adds no time, but cannot know this one is not his.
+  He can clear it on the task, or have it cleared as a guarded live write with his go.
+- «(no workspace)» appears in English inside a Greek answer, for a recurring task stored without a
+  workspace. It disappears for those once the recurrence gap in BACKLOG.md is fixed.
+- «Επαναλαμβάνεται καθημερινά έως 27/09» in a week's answer reads as if the recurrence ended there;
+  27/09 is only the end of the range asked about.
 
-**What it does.** `search_tasks(closed_by=…)`: a name or "me" returns only tasks that person
-is RECORDED as closing (`completed_by`), and lifts the default «your own work» scope —
-«τι έκλεισα εγώ» includes a colleague's task he closed. It is never relaxed away by the
-over-filtered fallback. Unrecorded older closes of THAT person (created or assigned to them)
-get one sentence — "recorded only since 2026-09-18" — and are never listed or attributed.
-`closed_by="everyone"` means «ποιος έκλεισε το Χ;»: completed tasks, any closer, each row
-saying who. On accounts with colleagues a completed OWN task now says who closed it too.
+## Parked, each in BACKLOG.md with the reason
 
-**Two things the first version got wrong, both caught before the owner saw them:**
-- The unrecorded closes were COUNTED. On live data that was 336 for «τι έκλεισε η Εύη» —
-  mostly the owner's own tasks, which she could never have seen. Now scoped to her tasks,
-  and not a number at all.
-- `closed_by="everyone"` was refused. The real model reached for it unprompted on «ποιος
-  έκλεισε το Ψώνια;» and spent 5 rounds / ~24k tokens getting there another way (answer
-  correct, cost five-fold). It is accepted now, with no prompt text added; the model's own
-  first call, replayed offline on live data, now answers in that one search.
-
-**Six real-model questions (the number he approved), all correct:** «τι έχει κλείσει η
-Εύη;» live → exactly the two «Τεστ» she closed, plus the 18/09 sentence; «ποιος έκλεισε το
-Ψώνια;» live → no record (5 rounds — the refusal fixed above); synthetic: Εύη's closes
-including a task of HIS she closed; «τι έκλεισα εγώ από τα tasks του Κώστα;» → the right
-one; «ποιος έκλεισε την αλλαγή λαμπτήρων;» → Εύη (5 rounds, same refusal); and «τι έχουμε
-στο Γραφείο;» re-run as a regression check → all 8, correctly labelled.
-**Not re-run against the model after the "everyone" fix** — the six were spent; the
-offline replay is the evidence. Settles it: «ποιος έκλεισε το Ψώνια;» in 2 rounds.
-
-**The prompt-size question, measured rather than estimated** (characters of what the model
-is sent, his account, before `02ce7b0` vs after this commit):
-
-```
-static instruction      7,840 → 8,756 chars   (+916,   everyone)
-vocabulary + people       281 → 2,216         (+1,935, only accounts with colleagues)
-search_tasks schema       986 → 1,443         (+457,   everyone)
-day view, 16 rows       1,710 → 1,824         (+114)
-≈ +830 tokens per round on his account (~+26% of a ~3,150-token fixed part),
-≈ +340 on a solo account; real agent_runs agree (~+750 measured on round 1).
-closed_by itself: +148 chars, ~37 tokens.
-In money at $0.25/M input: ~$0.0004 per two-round question.
-```
-
-**Offered, not decided:** tightening the people rules — the largest single addition, and
-written more verbosely than it needs to be. Every line in it was added to fix a measured
-failure, so shortening it needs a re-run of those questions to prove nothing comes back.
-
-Baselines after `75175ba`: `pytest` 646 passed; `npm run check` EXIT=0, `ui-check: OK — 95
-files, 46 tokens, 562 translation keys`; build clean; `AgentChatModal.jsx` lints clean.
-
-## Found on the way — FIXED the next day (`ca43a43` + data repair)
-
-**Hostaway guest-message tasks are created with no workspace and no category.**
-`services.create_task_manual` builds its `TaskRecord` without `workspace_id` or `category_id`,
-so whatever its caller passes is dropped. The webhook passes the Hostaway system category
-correctly (`main.py`, the `service.create_task_manual(user_id, {...})` in the webhook), and
-the three guest tasks of 2026-09-23 are in the database with `category_id` NULL. Escalation
-(`repository.get_active_hostaway_tasks`) finds guest tasks by exactly that `category_id`, so
-by the code it cannot see them. **Not yet watched failing** — this is the "real guest message
-since escalation was rekeyed onto `system_key`" that PROJECT_STATUS.md has listed as unwatched.
-Why no test caught it: `test_hostaway_system_category.py` monkeypatches `create_task_manual`
-and asserts what the webhook SENDS, never what is stored.
-
-The same function serves `POST /tasks` (the calendar's empty-slot create), whose request
-model accepts `workspace_id` / `category_id` and even validates them before they are
-dropped. (The agent's confirmed «create» goes through it too, but never passes a workspace
-in the first place — a separate, smaller gap.)
-
-**What was done, 2026-09-25**, after the owner's «1 ναι 2 ναι εφόσον θα βελτιώσουν την
-εφαρμογή θα λύσουν τα προβλήματα και δεν θα δημιουργηθούν νέα προβληματα»:
-
-- The measured size of it: **65 guest tasks, 2026-09-01 → 09-24, every one unfiled.** None
-  auto-closed on a reply and none was marked answered — against 18 and 46 of the 126 before
-  them. So his 2026-09-20 question «γτ οταν απανταω σε ενα μυνημα στην hostaway δεν κλεινει
-  μόνο του?» had this second cause, which the audit then did not find. Corrected in DECISIONS.md.
-- `create_task_manual` now passes `workspace_id` / `category_id` through. Two new tests assert
-  what `save_task` receives; run against the unfixed code, both failed. `638 passed`.
-- The 65 were refiled into Business / Hostaway. Dry run first (65, all completed, one account,
-  0 in a person-chosen workspace), then `updated: 65   skipped: 0`, then an independent read:
-  **191 of 191 guest tasks carry the category; open guest tasks escalation sees: 0** — so the
-  repair sent no push and closed nothing. The first attempt to write was blocked by Claude
-  Code's safety check on live data; the owner then gave explicit permission: «κάν' το εσύ, σου
-  δίνω άδεια». Undo list: `docs/migrations/2026-09-25-hostaway-guest-tasks-refiled.json`.
-
-**Not watched yet: a new guest message after `ca43a43`.** Settles it: it appears under
-Business / Hostaway, and a reply to a P3 in Hostaway closes it within ~2 minutes.
-
-Also found, parked in BACKLOG.md: the agent's write tools still offer the four old category
-words, so «άλλαξε κατηγορία» writes the old column.
+Recurring occurrences stored with no workspace; tasks the agent creates landing unfiled; moving or
+assigning through the agent; the preview model with no fallback; the extra round `others_hint`
+still costs when the user has matches of their own AND a colleague has more.
