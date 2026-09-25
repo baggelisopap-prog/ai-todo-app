@@ -147,19 +147,20 @@ def test_a_handover_is_recorded_in_the_activity_log(svc, monkeypatch):
     assert logged[0]["details"]["assigned_to"] == "user-2"
 
 
-def test_the_agent_reads_belongs_to_not_visible_to():
-    """build_day_view is injected into EVERY question, so its size is a
-    permanent per-question bill. Reading the wide list would put four other
-    people's work on it forever — and an unassigned task in a shared room is
-    nobody's work until somebody takes it."""
+def test_the_agent_day_view_stays_belongs_to_while_the_agent_reads_visible_to():
+    """REVERSED 2026-09-23, on the owner's request that the agent see what he
+    can see. This used to assert the agent read get_owned_or_assigned_tasks.
+    It now reads the screen's list — and the reason this test existed still
+    holds: build_day_view is injected into EVERY question, so it must not carry
+    four other people's work forever. It filters to the user's own work itself.
+    The full set of guarantees is in test_agent_workspaces.py."""
     import inspect
 
     import agent_engine
+    import agent_tools
 
-    source = inspect.getsource(agent_engine.ask_agent)
-
-    assert "get_owned_or_assigned_tasks" in source
-    assert "repository.get_tasks_for_user(user_id=user_id)" not in source
+    assert "repository.get_tasks_for_user(user_id=user_id)" in inspect.getsource(agent_engine.ask_agent)
+    assert "is_mine(t, ctx[\"me\"])" in inspect.getsource(agent_tools.build_day_view)
 
 
 def test_the_update_endpoint_accepts_an_assignee():

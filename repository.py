@@ -2119,6 +2119,29 @@ def get_workspace_members(workspace_id: str) -> list[WorkspaceMember]:
     return [_supabase_row_to_member(r) for r in (response.data or [])]
 
 
+def get_members_of_workspaces(workspace_ids: list[str]) -> list[WorkspaceMember]:
+    """
+    Everyone in several rooms at once, in ONE read — the agent's people
+    directory, which needs a name for every person the user shares any room
+    with, archived rooms included (their tasks are still on the user's list).
+
+    Not scoped by the caller: the caller passes the ids of rooms the user is a
+    member of (get_member_workspace_ids), which is the scoping.
+
+    Returns [] for an empty input rather than issuing `workspace_id.in.()`,
+    which PostgREST rejects as a syntax error instead of matching nothing.
+    """
+    if not workspace_ids:
+        return []
+    response = (
+        supabase.table("workspace_members")
+        .select("*")
+        .in_("workspace_id", workspace_ids)
+        .execute()
+    )
+    return [_supabase_row_to_member(r) for r in (response.data or [])]
+
+
 def is_workspace_owner(user_id: str, workspace_id: str) -> bool:
     """
     Asks `workspaces`, NOT `workspace_members`.
@@ -2385,6 +2408,32 @@ def get_workspace_activity(workspace_id: str, limit: int = 100) -> list[dict]:
         .eq("workspace_id", workspace_id)
         .order("created_at", desc=True)
         .limit(limit)
+        .execute()
+    )
+    return list(response.data or [])
+
+
+def get_assignment_log(workspace_ids: list[str]) -> list[dict]:
+    """
+    Every `task_assigned` entry in these rooms, newest first — the only record
+    of WHO handed a task to its assignee. `tasks` stores the assignee and never
+    the person who assigned, so this log is the one source the agent can
+    answer «ποια μου έδωσε η Εύη» from.
+
+    The caller passes rooms the user is a member of, which is the scoping —
+    the same right the Δραστηριότητα screen checks before showing this log.
+
+    Four columns rather than `select *`, and [] for an empty input rather than
+    `workspace_id.in.()`, which PostgREST rejects as a syntax error.
+    """
+    if not workspace_ids:
+        return []
+    response = (
+        supabase.table("workspace_activity")
+        .select("task_id, actor_user_id, details, created_at")
+        .in_("workspace_id", workspace_ids)
+        .eq("action", "task_assigned")
+        .order("created_at", desc=True)
         .execute()
     )
     return list(response.data or [])

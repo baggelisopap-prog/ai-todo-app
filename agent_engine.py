@@ -86,6 +86,31 @@ def _finish_reason_of(response) -> str | None:
     return getattr(fr, "name", None) or str(fr)
 
 
+def _load_people(user_id: str, tasks) -> tuple[dict, dict]:
+    """
+    (people directory, assigners) for agent_tools.build_agent_context.
+
+    Every read is scoped to the rooms the user is a MEMBER of — the same right
+    the members panel and the Δραστηριότητα screen check — so the agent learns
+    no name and no assignment the user could not look up on screen. A solo
+    account stops after the first read: nobody else to name, no log to read.
+
+    Raises rather than degrading. Without the directory, every colleague would
+    be labelled "a former member" and every assignment "unknown" — a confident,
+    wrong description of whose work is whose, which is worse than no answer.
+    """
+    member_workspace_ids = repository.get_member_workspace_ids(user_id)
+    members = repository.get_members_of_workspaces(member_workspace_ids)
+    others = {m.user_id for m in members if m.user_id and m.user_id != user_id}
+    profiles = repository.get_profiles(sorted(others) + [user_id]) if others else {}
+    people = agent_tools.build_people_directory(user_id, members, profiles)
+
+    assigned_rooms = {t.workspace_id for t in tasks if t.assigned_to and t.workspace_id}
+    readable_rooms = sorted(assigned_rooms & set(member_workspace_ids))
+    log_rows = repository.get_assignment_log(readable_rooms) if readable_rooms else []
+    return people, agent_tools.assigners_from_log(log_rows, tasks)
+
+
 def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
     """
     Sends a natural-language question to the agent via Gemini 3.1 Flash-Lite,
@@ -179,34 +204,36 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         # system_instruction + tools form a byte-identical, cacheable prefix
         # across requests. today_iso/now_hhmm reach the model via time_header
         # and the day view instead — see build_system_instruction's docstring.
-        # The user's own workspace and category names, APPENDED to the constant
-        # instruction rather than interpolated into it — see
-        # build_vocabulary_block for why that distinction is a budget line.
-        system_instruction = agent_tools.build_system_instruction(
-            agent_tools.build_vocabulary_block(
-                repository.get_workspaces(user_id),
-                repository.get_categories(user_id),
-            )
-        )
-        run["system_instruction_sha"] = agent_tools.system_instruction_sha(system_instruction)
-
         try:
-            # belongs_to, NOT visible_to (2026-09-11). "Τι έχω σήμερα" means
-            # what I have to do: tasks I created, plus tasks anyone assigned to
-            # me, in any workspace. Not everything I can see.
+            # visible_to — THE SAME READ AS THE TASK-LIST SCREEN (2026-09-23),
+            # replacing belongs_to (2026-09-11). The owner's rule, in his words:
+            # «να βλέπει μόνο ότι μπορώ να δω και εγώ». Reading through the very
+            # call GET /tasks makes (repository.get_all_tasks) is what makes that
+            # a guarantee rather than a second definition that could drift: the
+            # agent cannot be handed a task the screen would not show.
             #
-            # Two reasons it is this one. build_day_view is injected into EVERY
-            # question, always — so its size is a permanent per-question bill,
-            # and a five-person workspace would put four other people's work on
-            # it forever. And an unassigned task in a shared room is nobody's
-            # work until somebody takes it, which is the honest reading of the
-            # question rather than a gap.
-            #
-            # A team-scoped agent is the owner's own idea for a later phase.
-            cached_tasks = repository.get_owned_or_assigned_tasks(user_id=user_id)
+            # «Τι έχω» still means the user's own work. That is no longer a
+            # narrower database read but a filter over this list
+            # (agent_tools.is_mine), applied by the day view and by every
+            # search whose `person` the model did not set — so "mine" is always
+            # a part of what the user can see, never something beside it.
+            cached_tasks = repository.get_tasks_for_user(user_id=user_id)
+            workspaces = repository.get_workspaces(user_id)
+            categories = repository.get_categories(user_id)
+            people, assigners = _load_people(user_id, cached_tasks)
         except Exception as e:
             logging.error(f"[agent] Failed to fetch tasks: {e}")
             raise RuntimeError(f"Could not load task data: {e}")
+
+        ctx = agent_tools.build_agent_context(user_id, workspaces, categories, people, assigners)
+
+        # The user's own workspace, category and people names, APPENDED to the
+        # constant instruction rather than interpolated into it — see
+        # build_vocabulary_block for why that distinction is a budget line.
+        system_instruction = agent_tools.build_system_instruction(
+            agent_tools.build_vocabulary_block(workspaces, categories, people)
+        )
+        run["system_instruction_sha"] = agent_tools.system_instruction_sha(system_instruction)
 
         proposed_actions = []
         # Distinct tasks surfaced by search_tasks/get_task_details THIS run, keyed
@@ -232,10 +259,10 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
             if r.get("record_id")
         }
 
-        search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks)
+        search_tasks, get_task_details = agent_tools.build_tool_functions(cached_tasks, ctx, question=question)
         propose_complete_task, propose_update_task, propose_create_task = agent_tools.build_write_proposal_tools(
             proposed_actions, cached_tasks,
-            question=question, conversation_refs=conversation_refs,
+            question=question, conversation_refs=conversation_refs, ctx=ctx,
         )
         all_tools = [
             search_tasks, get_task_details,
@@ -253,7 +280,7 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         # of two — injected ALWAYS, never gated on pattern-matching the question: a false
         # negative costs a whole round (~3,350 tokens), an unnecessary injection costs a
         # few hundred, and fragile Greek/English regexes are not worth maintaining.
-        day_view = agent_tools.build_day_view(cached_tasks, today_iso, now_hhmm)
+        day_view = agent_tools.build_day_view(cached_tasks, today_iso, now_hhmm, ctx)
         day_view_row_count = len(day_view.splitlines()) - 1
         logging.info(f"[agent] day_view injected: {day_view_row_count} rows")
         run["day_view_rows"] = day_view_row_count
@@ -422,15 +449,23 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
 
                 # Track distinct tasks surfaced by search/detail calls this run for refs —
                 # NOT the day view, which is re-injected fresh every request (see seen_tasks above).
-                if fc.name == "search_tasks" and isinstance(result, dict):
+                # A refused search (an unknown workspace or person name) is not a
+                # search: showing it under the answer as "0 results" would be a lie.
+                if fc.name == "search_tasks" and isinstance(result, dict) and "error" not in result:
                     for t in result.get("tasks", []):
                         rid = t.get("record_id")
                         if rid:
                             seen_tasks[rid] = t.get("task_name")
                     # Only the filters actually passed — an omitted filter is not a
                     # constraint and listing it as one would be its own lie.
+                    filters = {k: v for k, v in (fc.args or {}).items() if v not in (None, "", False)}
+                    # The one exception runs the other way: an omitted `person` IS
+                    # a constraint (the user's own work) the moment it hid somebody
+                    # else's task, and then the user must be able to see it did.
+                    if result.get("others_excluded") and "person" not in filters:
+                        filters["person"] = "me"
                     searches_run.append({
-                        "filters": {k: v for k, v in (fc.args or {}).items() if v not in (None, "", False)},
+                        "filters": filters,
                         "total_matches": result.get("total_matches", 0),
                     })
                 elif fc.name == "get_task_details" and isinstance(result, dict) and result.get("record_id"):

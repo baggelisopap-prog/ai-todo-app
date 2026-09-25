@@ -59,13 +59,47 @@ function fieldValue(t, field, value) {
 // so the filters are shown to them as the last line of defence. Same principle
 // as the confirmation cards: make the machine's intent visible before it
 // matters, rather than asking the user to trust it.
+// The words the agent uses for a group rather than one person. The backend
+// accepts a few more spellings (agent_tools.PERSON_*_WORDS); these are the ones
+// its instruction tells it to send, and anything else is shown as the name it is.
+const PERSON_ME = ['me', 'you'];
+const PERSON_EVERYONE = ['everyone', 'everybody', 'all', 'team'];
+const PERSON_NOBODY = ['nobody', 'none', 'unassigned'];
+const UNFILED = ['no workspace', 'none', 'unfiled'];
+
+function describePerson(t, person) {
+  const word = String(person).trim().toLowerCase();
+  if (PERSON_ME.includes(word)) return t('agent.searched_filter_person_me');
+  if (PERSON_EVERYONE.includes(word)) return t('agent.searched_filter_person_everyone');
+  if (PERSON_NOBODY.includes(word)) return t('agent.searched_filter_person_nobody');
+  return t('agent.searched_filter_person', { value: person });
+}
+
 function describeFilters(t, filters) {
   const parts = [];
-  const { keyword, category, priority, date_from: from, date_to: to, include_completed: done } = filters;
+  const {
+    keyword, workspace, category, person, assigned_by: assignedBy, priority,
+    date_from: from, date_to: to, undated_only: undated, include_completed: done,
+  } = filters;
 
   if (keyword) parts.push(t('agent.searched_filter_keyword', { value: keyword }));
-  if (category) parts.push(t('agent.searched_filter_category', { value: fieldValue(t, 'category', category) }));
+  // Workspace, category and person are the user's OWN names since 2026-09-23,
+  // so they are shown as written — translating "Personal" would rename a
+  // workspace the user called that.
+  if (workspace) {
+    parts.push(UNFILED.includes(String(workspace).trim().toLowerCase())
+      ? t('agent.searched_filter_unfiled')
+      : t('agent.searched_filter_workspace', { value: workspace }));
+  }
+  if (category) parts.push(t('agent.searched_filter_category', { value: category }));
+  if (person) parts.push(describePerson(t, person));
+  if (assignedBy) {
+    parts.push(PERSON_ME.includes(String(assignedBy).trim().toLowerCase())
+      ? t('agent.searched_filter_assigned_by_me')
+      : t('agent.searched_filter_assigned_by', { value: assignedBy }));
+  }
   if (priority) parts.push(t('agent.searched_filter_priority', { value: priority }));
+  if (undated) parts.push(t('agent.searched_filter_undated'));
   // A single-day search is the common case and reads badly as "from X until X".
   if (from && to && from === to) parts.push(t('agent.searched_filter_on', { value: from }));
   else {
@@ -153,6 +187,15 @@ function ProposalCard({ action, t, onConfirm, onCancel }) {
             </ul>
             <p className="mt-1 text-xs italic text-[var(--text-muted)]">{t('agent.create_needs_approval')}</p>
           </>
+        )}
+
+        {/* Somebody else's work (agent_tools._someone_elses). Said on the card
+            itself, not only in the answer above it, because the card is the
+            thing you press — and the model saying so is a request, this is not. */}
+        {action.responsible && (
+          <p className="mt-1.5 text-xs font-medium text-[var(--text-secondary)]">
+            {t('agent.proposal_belongs_to', { name: action.responsible })}
+          </p>
         )}
       </div>
 
