@@ -334,6 +334,10 @@ TASK_COLUMNS = {
     # it and nobody has acknowledged that — and because being listed here is
     # what makes this guard refuse to pass until the migration exists.
     "completed_at", "completed_source", "completed_by", "completion_seen_by",
+    # Called off (2026-09-26). Real columns, added by
+    # docs/migrations/2026-09-26-task-cancellation.sql, which MUST run before
+    # this code is deployed — every insert carries them, as None.
+    "dropped_at", "dropped_by", "drop_reason",
 }
 
 

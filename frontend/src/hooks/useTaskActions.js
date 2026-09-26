@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { deleteTask, acknowledgeTaskCompletion } from '../api';
+import { deleteTask, acknowledgeTaskCompletion, dropTask, undropTask } from '../api';
 
 const ACTION_TOAST_KEYS = {
   approve: 'toast.approved',
@@ -34,6 +34,10 @@ export function useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onA
   const isPending = !task.approval_status;
   const isCompleted = optimisticCompleted ?? task.is_completed;
   const isRejected = task.is_rejected;
+  const isDropped = Boolean(task.dropped_at);
+  // The «Γιατί;» box. Held here rather than in each screen because the row and
+  // the sheet both offer «Ακύρωση εργασίας…» from the same menu.
+  const [isDropDialogOpen, setIsDropDialogOpen] = useState(false);
 
   // Editing a task that is waiting for approval — by Save or by the inline
   // agent — approves it: opening it, changing something and confirming IS the
@@ -150,6 +154,39 @@ export function useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onA
     }
   }
 
+  /**
+   * Calling a task off — «Ακυρώθηκε», with an optional reason (2026-09-26).
+   *
+   * Its own endpoint, and the server hands back the whole task, which is folded
+   * in through onAcknowledged: App's handler for that simply replaces the task
+   * with the server's copy, which is exactly what this needs too. A second
+   * callback threaded through ten screens to do the same replacement would be
+   * the same function under another name.
+   *
+   * THROWS on failure rather than setting actionError: DropDialog awaits it and
+   * keeps itself open with the message, so a cancellation that did not happen
+   * never looks as if it had.
+   */
+  async function drop(reason) {
+    const updated = await dropTask(task.record_id, reason);
+    onAcknowledged?.(updated);
+    onShowToast('toast.dropped', 'success');
+  }
+
+  async function undrop() {
+    setPendingAction('undrop');
+    setActionError(null);
+    try {
+      const updated = await undropTask(task.record_id);
+      onAcknowledged?.(updated);
+      onShowToast('toast.undropped', 'success');
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   async function setNotify(enabled) {
     try {
       await onUpdate(task.record_id, { notify_enabled: enabled });
@@ -170,6 +207,7 @@ export function useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onA
     isPending,
     isCompleted,
     isRejected,
+    isDropped,
     approvesOnEdit,
     pendingAction,
     actionError,
@@ -185,6 +223,11 @@ export function useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onA
     uncomplete: () => runAction('uncomplete', { is_completed: false }),
     reject: () => runAction('reject', { is_rejected: true }),
     unreject: () => runAction('unreject', { is_rejected: false }),
+    isDropDialogOpen,
+    openDrop: () => setIsDropDialogOpen(true),
+    closeDrop: () => setIsDropDialogOpen(false),
+    drop,
+    undrop,
   };
 }
 

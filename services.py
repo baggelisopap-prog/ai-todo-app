@@ -13,7 +13,7 @@ from repository import AirtableTaskRepository
 # "Is this row a record rather than work" — the same predicate the notification
 # queries read. See its docstring in agent_tools; agent_tools imports nothing
 # from this project, so this direction cannot cycle.
-from agent_tools import is_disposed_of
+from agent_tools import is_disposed_of, is_finished
 import google_calendar
 import hostaway_integration
 import hostaway_threading
@@ -184,7 +184,7 @@ def push_task_to_calendar_now(user_id: str, task: TaskRecord) -> None:
         # this can never push something the scheduler would refuse to push, and
         # the scheduler's queue learned those three columns on 2026-09-16 —
         # without this line that promise would have gone stale the same day.
-        if not task.due_date or task.is_completed or is_disposed_of(task):
+        if not task.due_date or is_finished(task) or is_disposed_of(task):
             return
         if not repository.get_google_calendar_connection(user_id):
             return
@@ -722,6 +722,13 @@ class TaskService:
                     # an old acknowledgement would be a notice that silently
                     # reaches nobody.
                     "completion_seen_by": [],
+                    # Done and called off are two endings, never both. A
+                    # card dragged from «Ακυρώθηκε» to «Έγινε», or a
+                    # cancelled task ticked from anywhere, stops being
+                    # cancelled here (2026-09-26).
+                    "dropped_at": None,
+                    "dropped_by": None,
+                    "drop_reason": None,
                 }
                 if updates["is_completed"]
                 # Re-opening clears it. A task that is open again must not keep
@@ -816,6 +823,97 @@ class TaskService:
         and refuse an acknowledgement on an unfiled task shared with nobody.
         """
         return self.repository.acknowledge_completion(user_id, record_id)
+
+    def drop_task(self, user_id: str, record_id: str, reason: Optional[str] = None) -> TaskRecord:
+        """
+        Calls a task off — «Ακυρώθηκε» — with an optional reason (2026-09-26).
+
+        A fourth way for work to end, beside completed, deleted and missed, and
+        the owner's own: «δεν έγινε το τασκ για χ ψ λόγο». Not a deletion — a
+        deletion says the task should never have existed; this says it existed
+        and somebody decided it will not be done, and keeps why.
+
+        Its own door rather than a field on PATCH, the same reasoning restore
+        and acknowledge-completion follow: the time must be the server's and the
+        person the caller, and neither may be reachable from a request body.
+
+        The same gate as any edit — a member may call off anything in a shared
+        room, exactly as they may complete it; deleting is the only act kept
+        for the owner, and this is not a deletion. The room's log records who.
+
+        REFUSED for a task still in the Inbox: an AI suggestion nobody approved
+        is turned down with «Απόρριψη», which is a different fact (is_rejected
+        feeds the learning loop). And refused for a row that is already a
+        record — deleted, missed, rejected — because there is nothing left to
+        call off.
+
+        A completed task is reopened in the same write. Done and called off are
+        two endings, never both: a card dragged from «Έγινε» to «Ακυρώθηκε» is
+        exactly this call.
+        """
+        gate_row = access.require_write(user_id, record_id)
+
+        existing = self.repository.get_task(user_id, record_id)
+        if existing is None:
+            raise ValueError(f"Task {record_id} is not visible to user {user_id}.")
+        if not existing.approval_status:
+            raise ValueError("A task still awaiting approval is rejected, not called off.")
+        if is_disposed_of(existing):
+            raise ValueError("This task is already deleted or closed; there is nothing to call off.")
+
+        # Trimmed and capped in code as well as by the column's CHECK: a CHECK
+        # violation would surface as a 500 and lose the cancellation itself
+        # over a pasted paragraph.
+        cleaned = (reason or "").strip()[:500] or None
+        updates = {
+            "dropped_at": datetime.now(ZoneInfo("Europe/Athens")).isoformat(),
+            "dropped_by": user_id,
+            "drop_reason": cleaned,
+        }
+        if existing.is_completed:
+            updates.update({
+                "is_completed": False,
+                "completed_at": None,
+                "completed_source": None,
+                "completed_by": None,
+                "completion_seen_by": [],
+            })
+
+        updated = self.repository.update_task(user_id, record_id, updates)
+
+        # After the write, so the log never claims what did not happen; never
+        # raises, for the reason log_workspace_activity gives.
+        if gate_row.get("workspace_id"):
+            repository.log_workspace_activity(
+                workspace_id=gate_row["workspace_id"],
+                actor_user_id=user_id,
+                action="task_dropped",
+                task_id=record_id,
+                task_name=updated.task_name,
+                details={"reason": cleaned} if cleaned else None,
+            )
+        logger.info(f"[drop] {user_id} called off task {record_id} (reason given: {bool(cleaned)})")
+        return updated
+
+    def undrop_task(self, user_id: str, record_id: str) -> TaskRecord:
+        """
+        Undoes a cancellation: the task is open again, and no longer claims it
+        was called off, by whom, or why. «Αναίρεση ακύρωσης».
+        """
+        gate_row = access.require_write(user_id, record_id)
+        updated = self.repository.update_task(
+            user_id, record_id, {"dropped_at": None, "dropped_by": None, "drop_reason": None}
+        )
+        if gate_row.get("workspace_id"):
+            repository.log_workspace_activity(
+                workspace_id=gate_row["workspace_id"],
+                actor_user_id=user_id,
+                action="task_undropped",
+                task_id=record_id,
+                task_name=updated.task_name,
+            )
+        logger.info(f"[drop] {user_id} reopened called-off task {record_id}")
+        return updated
 
     def delete_task(self, user_id: str, record_id: str) -> str:
         """
@@ -1092,7 +1190,7 @@ class TaskService:
         relabelling a finished row as an occurrence would hand the new rule a
         day that is already ticked off.
         """
-        if task.is_completed or task.is_rejected or task.missed_at or task.cancelled_at:
+        if task.is_completed or task.is_rejected or task.missed_at or task.cancelled_at or task.dropped_at:
             logger.info(
                 f"[recurrence] Task {task.record_id} is closed; rule {rule.record_id} "
                 "starts fresh instead of adopting it"
@@ -1222,7 +1320,9 @@ class TaskService:
         for task in user_tasks:
             if not task.recurrence_rule_id or not task.occurrence_date:
                 continue
-            if task.is_completed or task.is_rejected or task.missed_at or task.cancelled_at:
+            # dropped_at: a day the user called off must not ALSO be stamped
+            # missed — it did not lapse, somebody decided (2026-09-26).
+            if task.is_completed or task.is_rejected or task.missed_at or task.cancelled_at or task.dropped_at:
                 continue
 
             rule = rules_by_id.get(task.recurrence_rule_id)

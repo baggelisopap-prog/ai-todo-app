@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import TaskDetailSheet from './TaskDetailSheet';
 import { useTranslation } from 'react-i18next';
-import { restoreTask } from '../api';
+import { restoreTask, undropTask } from '../api';
 import { uiLocale, toLocalISODate, formatDate, formatStamp } from '../utils/formatDate';
 import { useMembers } from '../hooks/useMembers';
 import {
@@ -9,6 +9,7 @@ import {
   groupHistoryByDay,
   KIND_COMPLETED,
   KIND_DELETED,
+  KIND_DROPPED,
   KIND_MISSED,
   KIND_REJECTED,
 } from '../utils/taskHistory';
@@ -31,6 +32,7 @@ const KIND_STYLES = {
   [KIND_DELETED]: { glyph: '✕', color: 'var(--text-muted)' },
   [KIND_MISSED]: { glyph: '!', color: 'var(--priority-p1)' },
   [KIND_REJECTED]: { glyph: '✕', color: 'var(--text-muted)' },
+  [KIND_DROPPED]: { glyph: '⊘', color: 'var(--text-secondary)' },
 };
 
 // SOURCE_KEYS lived here and mapped completed_source straight to a label, one
@@ -76,6 +78,20 @@ function eventLine({ kind, at, exact, task }, t, nameFor) {
   if (kind === KIND_MISSED) {
     const when = task.occurrence_date || task.due_date;
     return t('browse.event_missed', { date: when ? formatDate(when) : '' });
+  }
+
+  // Called off (2026-09-26): when, the reason if one was given, and who — by
+  // the same rule as a completion, «από εσένα» or a colleague's name.
+  if (kind === KIND_DROPPED) {
+    const parts = [t('browse.event_dropped', { when: formatStamp(at) })];
+    if (task.drop_reason) parts.push(`«${task.drop_reason}»`);
+    if (task.dropped_by && task.dropped_by === nameFor?.myId) {
+      parts.push(t('browse.source_you'));
+    } else if (task.dropped_by) {
+      const name = nameFor?.of(task.workspace_id, task.dropped_by);
+      if (name) parts.push(t('browse.source_person', { name }));
+    }
+    return parts.join(' · ');
   }
 
   if (!exact) {
@@ -161,6 +177,14 @@ const ACTIONS = {
     // place for what went wrong.
     failKey: 'toast.action_failed',
   },
+  // Its own endpoint, like a restore: PATCH cannot reach the cancellation
+  // columns, by design (the time and person are the server's).
+  [KIND_DROPPED]: {
+    labelKey: 'browse.undrop',
+    busyKey: 'browse.reopening',
+    toastKey: 'toast.undropped',
+    failKey: 'toast.action_failed',
+  },
 };
 
 function HistoryRow({ row, onAct, isBusy, onOpen, nameFor }) {
@@ -208,7 +232,7 @@ function HistoryRow({ row, onAct, isBusy, onOpen, nameFor }) {
   );
 }
 
-function HistoryList({ rows, onTaskUpdate, onTaskRestored, onShowToast }) {
+function HistoryList({ rows, onTaskUpdate, onTaskRestored, onTaskReplaced, onShowToast }) {
   const { t } = useTranslation();
   const [busyId, setBusyId] = useState(null);
   // Which row is open, by record_id. The id and not the row object, so the
@@ -244,6 +268,10 @@ function HistoryList({ rows, onTaskUpdate, onTaskRestored, onShowToast }) {
           calendar === 'link_cleared' ? 'toast.restored_calendar_cleared' : 'toast.restored',
           'success'
         );
+      } else if (kind === KIND_DROPPED) {
+        const updated = await undropTask(task.record_id);
+        onTaskReplaced?.(updated);
+        onShowToast?.(action.toastKey, 'success');
       } else {
         await onTaskUpdate(task.record_id, action.updates);
         onShowToast?.(action.toastKey, 'success');

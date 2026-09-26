@@ -329,6 +329,27 @@ export async function acknowledgeTaskCompletion(recordId) {
 }
 
 /**
+ * POST /tasks/{record_id}/drop — call a task off, «Ακυρώθηκε», with an
+ * optional reason (2026-09-26). Returns the whole task, so the caller folds it
+ * in rather than stamping fields by hand.
+ *
+ * Its own endpoint rather than a field on updateTask, like restore: the time
+ * and the person are the server's to write. 422 means refused — an Inbox
+ * suggestion (that one is rejected, not called off) or a row already closed.
+ */
+export async function dropTask(recordId, reason) {
+  return request(`/tasks/${recordId}/drop`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || null }),
+  });
+}
+
+/** POST /tasks/{record_id}/undrop — «Αναίρεση ακύρωσης». Returns the task. */
+export async function undropTask(recordId) {
+  return request(`/tasks/${recordId}/undrop`, { method: 'POST' });
+}
+
+/**
  * POST /push/subscribe — registers this browser's push subscription with the backend.
  * Returns { status, record_id }.
  */

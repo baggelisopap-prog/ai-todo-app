@@ -115,7 +115,10 @@
     "delete": "Διαγραφή",
     "deleting": "Διαγραφή...",
     "edit": "Επεξεργασία",
-    "save_approve": "Αποθήκευση & Έγκριση"
+    "save_approve": "Αποθήκευση & Έγκριση",
+    "drop": "Ακύρωση εργασίας…",
+    "undrop": "Αναίρεση ακύρωσης",
+    "undropping": "Επαναφορά..."
   },
   "modal": {
     "add_task_title": "Νέα Εργασία",
@@ -255,7 +258,10 @@
     "sort_created_desc": "Μπήκε: νεότερα πρώτα",
     "sort_created_asc": "Μπήκε: παλαιότερα πρώτα",
     "sort_due_asc": "Λήγει: νωρίτερα πρώτα",
-    "sort_due_desc": "Λήγει: αργότερα πρώτα"
+    "sort_due_desc": "Λήγει: αργότερα πρώτα",
+    "kind_dropped": "Ακυρωμένα",
+    "event_dropped": "Ακυρώθηκε {{when}}",
+    "undrop": "Αναίρεση"
   },
   "toast": {
     "added_one": "Προστέθηκε 1 εργασία",
@@ -274,7 +280,9 @@
     "restored": "Επανήλθε",
     "restored_calendar_cleared": "Η εργασία επανήλθε. Το event στο Google Calendar ΔΕΝ επανήλθε — είχε διαγραφεί από το ημερολόγιο τη στιγμή της διαγραφής και δεν ξαναφτιάχνεται. Ο σύνδεσμος καθαρίστηκε.",
     "restore_failed": "Η επαναφορά απέτυχε",
-    "action_failed": "Η ενέργεια απέτυχε"
+    "action_failed": "Η ενέργεια απέτυχε",
+    "dropped": "Ακυρώθηκε",
+    "undropped": "Η ακύρωση αναιρέθηκε"
   },
   "inbox": {
     "hint": "Πατήστε ○ για έγκριση"
@@ -619,7 +627,10 @@
     "task_assigned": "{{actor}}: ανέθεσε «{{task}}» στον/στην {{member}}",
     "task_unassigned": "{{actor}}: έβγαλε τον υπεύθυνο από «{{task}}»",
     "task_completed": "{{actor}}: ολοκλήρωσε «{{task}}»",
-    "task_reopened": "{{actor}}: ξανάνοιξε «{{task}}»"
+    "task_reopened": "{{actor}}: ξανάνοιξε «{{task}}»",
+    "task_dropped": "{{actor}}: ακύρωσε «{{task}}»",
+    "task_dropped_reason": "{{actor}}: ακύρωσε «{{task}}» — {{reason}}",
+    "task_undropped": "{{actor}}: αναίρεσε την ακύρωση του «{{task}}»"
   },
   "handover": {
     "notice_by": "Ο/Η {{name}} ολοκλήρωσε",
@@ -636,5 +647,14 @@
     "pink": "Ροζ",
     "grey": "Γκρι",
     "custom": "Το τωρινό χρώμα"
+  },
+  "drop": {
+    "title": "Ακύρωση εργασίας",
+    "hint": "Δεν θα γίνει. Φεύγει από τις λίστες και μένει στο ιστορικό, μαζί με τον λόγο.",
+    "reason_label": "Γιατί; (προαιρετικό)",
+    "reason_placeholder": "π.χ. ο πελάτης το ακύρωσε",
+    "confirm": "Ακύρωση εργασίας",
+    "confirming": "Ακύρωση...",
+    "back": "Πίσω"
   }
 }

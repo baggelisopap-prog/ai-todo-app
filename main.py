@@ -877,6 +877,55 @@ def acknowledge_task_completion(record_id: str, user_id: str = Depends(get_curre
             detail=f"Failed to acknowledge completion: {str(e)}"
         )
 
+class DropTaskRequest(BaseModel):
+    """Request body for POST /tasks/{record_id}/drop. The reason is optional —
+    the owner's decision, so a cancellation on a phone costs one tap."""
+    reason: Optional[str] = None
+
+
+@app.post("/tasks/{record_id}/drop", response_model=TaskRecord, status_code=status.HTTP_200_OK)
+def drop_task(record_id: str, request: DropTaskRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Call a task off — «Ακυρώθηκε» — optionally saying why (2026-09-26).
+
+    Its own door, like restore and acknowledge-completion: the time and the
+    person are stamped by the server and no request body can reach them. See
+    services.TaskService.drop_task for what is refused and why.
+
+    422 for the refusals (an Inbox suggestion, an already-closed row): they are
+    the user's data, not a server fault, and the phone retries a 500.
+    """
+    try:
+        return service.drop_task(user_id, record_id, request.reason)
+    except access.TaskAccessDenied:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to call off task {record_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cancel task: {str(e)}"
+        )
+
+
+@app.post("/tasks/{record_id}/undrop", response_model=TaskRecord, status_code=status.HTTP_200_OK)
+def undrop_task(record_id: str, user_id: str = Depends(get_current_user_id)):
+    """Undo a cancellation — «Αναίρεση ακύρωσης». The task is open again."""
+    try:
+        return service.undrop_task(user_id, record_id)
+    except access.TaskAccessDenied:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to reopen called-off task {record_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to undo cancellation: {str(e)}"
+        )
+
+
 @app.post("/tasks/{record_id}/agent-edit", response_model=TaskAgentEditResponse)
 def agent_edit_task(record_id: str, request: TaskAgentEditRequest, user_id: str = Depends(get_current_user_id)):
     """

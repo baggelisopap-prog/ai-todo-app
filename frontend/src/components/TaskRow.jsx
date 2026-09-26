@@ -19,6 +19,7 @@ import { placementParts } from '../utils/workspaces';
 import Avatar from './Avatar';
 import TaskMenu from './TaskMenu';
 import QuickReschedule from './QuickReschedule';
+import DropDialog from './DropDialog';
 import {
   CheckIcon,
   CalendarIcon,
@@ -652,6 +653,9 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
                 onRecurrence={() => recurrence.openEditor(task)}
                 isRecurring={Boolean(task.recurrence_rule_id)}
                 onDelete={handleDelete}
+                isDropped={actions.isDropped}
+                onDrop={actions.openDrop}
+                onUndrop={actions.undrop}
                 t={t}
               />
             </span>
@@ -685,6 +689,10 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
           onPick={handleReschedule}
           onClose={() => setIsReschedulingOpen(false)}
         />
+      )}
+
+      {actions.isDropDialogOpen && (
+        <DropDialog taskName={task.task_name} onConfirm={actions.drop} onClose={actions.closeDrop} />
       )}
     </div>
   );

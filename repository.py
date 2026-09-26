@@ -10,7 +10,7 @@ from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, 
 # hand-written version, written before deleted_at existed, and that is exactly
 # how a deleted task kept its reminder. agent_tools imports nothing from this
 # project (stdlib only), so this direction cannot cycle.
-from agent_tools import is_open_task, is_disposed_of
+from agent_tools import is_open_task, is_disposed_of, is_finished
 
 # Set up module-level logging
 logger = logging.getLogger(__name__)
@@ -269,6 +269,11 @@ class AirtableTaskRepository:
             completed_source=row.get("completed_source"),
             completed_by=row.get("completed_by"),
             completion_seen_by=_get(row, "completion_seen_by", []),
+            # row.get: NULL is the real value "not called off", and it is what
+            # every task written before 2026-09-26 carries.
+            dropped_at=row.get("dropped_at"),
+            dropped_by=row.get("dropped_by"),
+            drop_reason=row.get("drop_reason"),
         )
 
     def save_task(self, user_id: str, task: TaskRecord) -> TaskRecord:
@@ -937,7 +942,7 @@ def get_active_hostaway_tasks(
     return [
         t for t in all_tasks
         if t.category_id == system_category.record_id
-        and not is_disposed_of(t) and not t.is_completed
+        and not is_disposed_of(t) and not is_finished(t)
     ]
 
 
@@ -997,6 +1002,10 @@ def get_open_tasks_for_conversation(user_id: str, conversation_id: str) -> list[
             .is_("deleted_at", "null")
             .is_("cancelled_at", "null")
             .is_("missed_at", "null")
+            # A task the user CALLED OFF is closed too (2026-09-26): threading
+            # the next guest message onto it would bury that message in a row
+            # no list shows, the very failure the deleted_at line prevents.
+            .is_("dropped_at", "null")
             .order("created_at", desc=True)
             .execute()
         )
@@ -1237,6 +1246,9 @@ def get_tasks_needing_calendar_push(user_id: str) -> list[dict]:
         .is_("deleted_at", "null")
         .is_("cancelled_at", "null")
         .is_("missed_at", "null")
+        # Called off (2026-09-26): not work any more, so nothing to keep in
+        # step on Google's side — the same reason is_completed is above.
+        .is_("dropped_at", "null")
         .not_.is_("due_date", "null")
     )
     if not sync_all:
@@ -2694,6 +2706,9 @@ def get_open_occurrences(user_id: str, rule_id: str) -> list[dict]:
         .eq("is_rejected", False)
         .is_("cancelled_at", "null")
         .is_("missed_at", "null")
+        # A called-off day is closed, like a completed one: regenerating or
+        # deleting the rule must not hard-delete the row that says why.
+        .is_("dropped_at", "null")
         .execute()
     )
     return response.data or []

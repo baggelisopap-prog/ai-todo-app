@@ -45,6 +45,7 @@ function TaskCard({ task, variant = 'default', showCreated = false, isExpanded, 
           onUpdate={onUpdate}
           onTaskDeleted={onTaskDeleted}
           onShowToast={onShowToast}
+          onAcknowledged={onAcknowledged}
         />
       )}
     </>

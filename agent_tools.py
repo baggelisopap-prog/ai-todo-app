@@ -49,6 +49,22 @@ def is_disposed_of(t) -> bool:
     return bool(t.is_rejected or t.missed_at or t.cancelled_at or t.deleted_at)
 
 
+def is_finished(t) -> bool:
+    """SINGLE SOURCE OF TRUTH for 'this work has ended' — done, or called off.
+
+    dropped_at (2026-09-26) is a task somebody decided will not be done, with
+    an optional reason. It is FINISHED work, not a dead row: unlike the four in
+    is_disposed_of it was real work with a real ending, and "why wasn't X done?"
+    must be answerable — so it appears wherever completed tasks do
+    (include_completed), and nowhere open work is counted.
+
+    Every check that used to read `t.is_completed` to mean "no longer to do"
+    reads this instead; one that kept `is_completed` would keep reminding,
+    escalating and calendar-pushing a task the user called off. getattr,
+    because a few callers hand in lightweight stand-ins without the column."""
+    return bool(t.is_completed or getattr(t, "dropped_at", None))
+
+
 def is_open_task(t, include_completed: bool = False) -> bool:
     """SINGLE SOURCE OF TRUTH for 'counts as an open task'.
     Any change to the pending-approval policy happens HERE and nowhere else."""
@@ -72,7 +88,7 @@ def is_open_task(t, include_completed: bool = False) -> bool:
     # the next state to be added.
     if is_disposed_of(t) or not t.approval_status:
         return False
-    if not include_completed and t.is_completed:
+    if not include_completed and is_finished(t):
         return False
     return True
 
@@ -708,7 +724,7 @@ def similar_open_task(name, tasks):
     folded = fold_name(name)
     stems = stem_words(name or "")
     for task in tasks:
-        if task.is_completed or is_disposed_of(task):
+        if is_finished(task) or is_disposed_of(task):
             continue
         if folded and fold_name(task.task_name) == folded:
             return task
@@ -1161,7 +1177,7 @@ A date range is the argument most often filled in without being asked for: no ti
 
 DATES: a single day ("today", a weekday, a date) sets date_from = date_to = that day. A bare weekday ("Τετάρτη", "Monday") is the UPCOMING one — read it off the [Today + next 7 days] map, never compute it; look back only for "περασμένη"/"last". The map is a lookup table, never a search range. A range ("this week", "αυτές τις μέρες") gets real bounds and starts TODAY unless today is excluded. "Overdue": no date_from, date_to = the [Yesterday] date; today is not overdue. With closed_by, the dates bound WHEN the tasks were closed.
 
-RESULTS: a *_hint / *_note field states what to do with THIS result — follow it, and say so. Results are capped at 30 rows with descriptions cut to 100 characters; get_task_details has the full task. A recurring task appears once, with a "repeats" field listing its dates. The search already retries by word stems, then the Inbox, then completed tasks before returning nothing, so an empty result is real: never re-run it reworded; if other filters were set, retry once without the keyword.
+RESULTS: a *_hint / *_note field states what to do with THIS result — follow it, and say so. Results are capped at 30 rows with descriptions cut to 100 characters; get_task_details has the full task. A recurring task appears once, with a "repeats" field listing its dates. A "cancelled" row was called off on purpose — not done, not deleted; give its cancel_reason when there is one. The search already retries by word stems, then the Inbox, then completed tasks before returning nothing, so an empty result is real: never re-run it reworded; if other filters were set, retry once without the keyword.
 
 CONVERSATION HISTORY is only for resolving references ("it", "the second one", "change it to Friday"). It may be stale: task facts come only from the day view or a fresh tool call. The [TASKS ALREADY DISCUSSED] block lists this conversation's tasks with their ids, numbered in the order your last answer gave them. Never resolve a reference to whichever day-view task looks salient. Name the task you resolved to. If a follow-up is ambiguous — which task, or which value ("set it to 5": the 5th or 5 o'clock?) — ask a short question instead of guessing.
 
@@ -1175,6 +1191,28 @@ WRITE ACTIONS — propose_* only REGISTER a change the user confirms with a butt
 TIME: for tasks due TODAY, compare due_time with the [Now:] time — earlier has passed, later is ahead. Not for other days.
 
 Task ids (like t12) are internal — never mention one; refer to tasks by name. Answer in the SAME LANGUAGE as the question, concisely. Never invent task data; if nothing matches, say so plainly.""" + vocabulary
+
+
+def dropped_fields(task, ctx: dict) -> dict:
+    """A called-off task, said as what it is (2026-09-26): the day, the reason
+    when one was given, and — on an account with colleagues — who. EMPTY for
+    every task that was not called off, so no other row grows.
+
+    "cancelled" is the word the model is shown because it is the plain one;
+    the column is dropped_at only because cancelled_at was taken. Without these
+    fields a called-off task would read as a plain open or finished one, and
+    «γιατί δεν έγινε το Χ;» would get an invented answer."""
+    dropped = getattr(task, "dropped_at", None)
+    if not dropped:
+        return {}
+    fields = {"cancelled": local_day(dropped)}
+    reason = getattr(task, "drop_reason", None)
+    if reason:
+        fields["cancel_reason"] = reason[:DESCRIPTION_TRUNCATE_LENGTH]
+    if ctx["people"]["labels"]:
+        closer = getattr(task, "dropped_by", None)
+        fields["cancelled_by"] = person_label(ctx["people"], closer) if closer else UNKNOWN_ASSIGNER_LABEL
+    return fields
 
 
 def render_task_rows(tasks, ctx: dict, repeats: dict = None) -> list[dict]:
@@ -1213,6 +1251,7 @@ def render_task_rows(tasks, ctx: dict, repeats: dict = None) -> list[dict]:
         if dates:
             row["repeats"] = describe_repeats(dates)
         row.update(people_fields(task, ctx))
+        row.update(dropped_fields(task, ctx))
         rows.append(row)
     return rows
 
@@ -1850,6 +1889,7 @@ def build_tool_functions(cached_tasks, ctx: dict, question: str = None, earlier_
                     "checklist": [{"text": item.text, "done": item.done} for item in (task.checklist or [])],
                 }
                 details.update(people_fields(task, ctx))
+                details.update(dropped_fields(task, ctx))
                 return details
         return {"error": "Task not found"}
 

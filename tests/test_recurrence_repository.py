@@ -198,7 +198,7 @@ def test_open_occurrences_exclude_completed_rejected_and_already_missed(monkeypa
     assert got == [{"id": "t1", "occurrence_date": "2026-08-17", "due_date": "2026-08-17"}]
     assert ("is_completed", False) in fake.calls["eq"]
     assert ("is_rejected", False) in fake.calls["eq"]
-    assert fake.calls["is_"] == ("missed_at", "null")
+    assert ("missed_at", "null") in fake.calls["is_calls"]
 
 
 def test_open_occurrences_also_exclude_a_cancelled_one(monkeypatch):
@@ -216,6 +216,9 @@ def test_open_occurrences_also_exclude_a_cancelled_one(monkeypatch):
 
     assert ("cancelled_at", "null") in fake.calls["is_calls"]
     assert ("missed_at", "null") in fake.calls["is_calls"]
+    # A called-off day too (2026-09-26): a rule edit must not hard-delete the
+    # row that says why it was called off.
+    assert ("dropped_at", "null") in fake.calls["is_calls"]
 
 
 def test_deleting_by_ids_is_scoped_and_skips_an_empty_list(monkeypatch):

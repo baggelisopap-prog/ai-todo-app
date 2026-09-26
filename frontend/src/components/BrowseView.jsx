@@ -16,6 +16,7 @@ import {
   KIND_DELETED,
   KIND_MISSED,
   KIND_REJECTED,
+  KIND_DROPPED,
   RANGE_TODAY,
   RANGE_YESTERDAY,
   RANGE_WEEK,
@@ -135,6 +136,7 @@ function BrowseView({
     { value: KIND_DELETED, label: `${t('browse.kind_deleted')} (${historyCounts[KIND_DELETED]})` },
     { value: KIND_MISSED, label: `${t('browse.kind_missed')} (${historyCounts[KIND_MISSED]})` },
     { value: KIND_REJECTED, label: `${t('browse.kind_rejected')} (${historyCounts[KIND_REJECTED]})` },
+    { value: KIND_DROPPED, label: `${t('browse.kind_dropped')} (${historyCounts[KIND_DROPPED]})` },
   ];
 
   // Nearest first, because "where did that just go" is the question that
@@ -305,6 +307,7 @@ function BrowseView({
           rows={historyRows}
           onTaskUpdate={onTaskUpdate}
           onTaskRestored={onTaskRestored}
+          onTaskReplaced={onTaskAcknowledged}
           onShowToast={onShowToast}
         />
       )}

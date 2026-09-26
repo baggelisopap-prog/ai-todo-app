@@ -29,6 +29,9 @@ function TaskMenu({
   onRecurrence,
   isRecurring,
   onDelete,
+  isDropped,
+  onDrop,
+  onUndrop,
   t,
 }) {
   const busy = pendingAction !== null;
@@ -59,11 +62,31 @@ function TaskMenu({
       label: isRecurring ? t('recurrence.menu_edit') : t('recurrence.menu_add'),
       onClick: onRecurrence,
     },
-    !isRejected && {
+    // «Απόρριψη» only where it means what it says: an AI suggestion still
+    // waiting in the Inbox. It used to sit on EVERY task, and on an approved
+    // one it did nearly what the owner asked for on 2026-09-26 — hid the task
+    // — without keeping why, under a name that says something else. On those
+    // it is «Ακύρωση εργασίας…» now: same slot, same number of items.
+    isPending && !isRejected && {
       key: 'reject',
       label: pendingAction === 'reject' ? t('actions.rejecting') : t('actions.reject'),
       disabled: busy,
       onClick: onReject,
+    },
+    // Not on a completed task: that one is finished, and «Αναίρεση
+    // ολοκλήρωσης» above is its way back. A board moves a card from «Έγινε»
+    // to «Ακυρώθηκε» directly; a list has no need to.
+    !isPending && !isRejected && !isCompleted && !isDropped && onDrop && {
+      key: 'drop',
+      label: t('actions.drop'),
+      disabled: busy,
+      onClick: onDrop,
+    },
+    isDropped && onUndrop && {
+      key: 'undrop',
+      label: pendingAction === 'undrop' ? t('actions.undropping') : t('actions.undrop'),
+      disabled: busy,
+      onClick: onUndrop,
     },
     isRejected && {
       key: 'unreject',

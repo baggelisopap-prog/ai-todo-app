@@ -115,7 +115,10 @@
     "delete": "Delete",
     "deleting": "Deleting...",
     "edit": "Edit",
-    "save_approve": "Save & approve"
+    "save_approve": "Save & approve",
+    "drop": "Cancel task…",
+    "undrop": "Undo cancellation",
+    "undropping": "Restoring..."
   },
   "modal": {
     "add_task_title": "New Task",
@@ -255,7 +258,10 @@
     "sort_created_desc": "Added: newest first",
     "sort_created_asc": "Added: oldest first",
     "sort_due_asc": "Due: earliest first",
-    "sort_due_desc": "Due: latest first"
+    "sort_due_desc": "Due: latest first",
+    "kind_dropped": "Cancelled",
+    "event_dropped": "Cancelled {{when}}",
+    "undrop": "Undo"
   },
   "toast": {
     "added_one": "Added 1 task",
@@ -274,7 +280,9 @@
     "restored": "Restored",
     "restored_calendar_cleared": "Task restored. Its Google Calendar event was NOT — it was removed from your calendar when the task was deleted and is not recreated. The link has been cleared.",
     "restore_failed": "Restore failed",
-    "action_failed": "That didn't work"
+    "action_failed": "That didn't work",
+    "dropped": "Cancelled",
+    "undropped": "Cancellation undone"
   },
   "inbox": {
     "hint": "Tap ○ to approve"
@@ -619,7 +627,10 @@
     "task_assigned": "{{actor}}: assigned «{{task}}» to {{member}}",
     "task_unassigned": "{{actor}}: put «{{task}}» back on the pile",
     "task_completed": "{{actor}}: completed «{{task}}»",
-    "task_reopened": "{{actor}}: reopened «{{task}}»"
+    "task_reopened": "{{actor}}: reopened «{{task}}»",
+    "task_dropped": "{{actor}}: cancelled «{{task}}»",
+    "task_dropped_reason": "{{actor}}: cancelled «{{task}}» — {{reason}}",
+    "task_undropped": "{{actor}}: undid the cancellation of «{{task}}»"
   },
   "handover": {
     "notice_by": "{{name}} completed",
@@ -636,5 +647,14 @@
     "pink": "Pink",
     "grey": "Grey",
     "custom": "The current colour"
+  },
+  "drop": {
+    "title": "Cancel task",
+    "hint": "It won't be done. It leaves your lists and stays in History, with the reason.",
+    "reason_label": "Why? (optional)",
+    "reason_placeholder": "e.g. the guest cancelled",
+    "confirm": "Cancel task",
+    "confirming": "Cancelling...",
+    "back": "Back"
   }
 }

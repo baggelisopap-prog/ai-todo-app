@@ -229,6 +229,22 @@ class TaskRecord(SingleTask):
     # reminders broke when sharing arrived.
     completion_seen_by: list[str] = Field(default_factory=list)
 
+    # Called off on purpose (2026-09-26) — «Ακυρώθηκε» in the app. A fourth way
+    # for a task to end, beside completed, deleted and missed: it existed, and
+    # somebody decided it will not be done, optionally saying why.
+    #
+    # NOT cancelled_at, which is taken: that one means "deleted this recurrence
+    # occurrence", History reads it as «Διαγράφηκε» and Restore clears it. See
+    # docs/migrations/2026-09-26-task-cancellation.sql.
+    #
+    # Written only through their own door (services.drop_task / undrop_task),
+    # never through PATCH, so the time is the server's and the person is the
+    # caller. Mutually exclusive with is_completed: completing a dropped task
+    # clears these, and dropping a completed one reopens it first.
+    dropped_at: Optional[str] = None
+    dropped_by: Optional[str] = None
+    drop_reason: Optional[str] = None
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str

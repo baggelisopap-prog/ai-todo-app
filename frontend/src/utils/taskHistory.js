@@ -18,6 +18,10 @@ export const KIND_COMPLETED = 'completed';
 export const KIND_DELETED = 'deleted';
 export const KIND_MISSED = 'missed';
 export const KIND_REJECTED = 'rejected';
+// Called off on purpose, optionally with a reason (2026-09-26). Its own kind
+// rather than folded into «Διαγράφηκε»: the owner asked for it precisely
+// because "we decided not to" and "this should not exist" are different facts.
+export const KIND_DROPPED = 'dropped';
 
 // The ranges the «Πότε» menu offers, nearest first.
 //
@@ -82,6 +86,7 @@ export function historyEntry(task) {
   // same to the person who pressed Delete.
   if (task.cancelled_at) return { kind: KIND_DELETED, at: task.cancelled_at, exact: true };
   if (task.missed_at) return { kind: KIND_MISSED, at: task.missed_at, exact: true };
+  if (task.dropped_at) return { kind: KIND_DROPPED, at: task.dropped_at, exact: true };
   if (task.is_rejected) return { kind: KIND_REJECTED, at: createdStamp(task), exact: false };
   if (task.is_completed) {
     return task.completed_at
@@ -207,7 +212,9 @@ export function groupHistoryByDay(rows) {
  * the one thing already selected.
  */
 export function countByKind(tasks, { range = RANGE_ALL, now = new Date() } = {}) {
-  const counts = { all: 0, [KIND_COMPLETED]: 0, [KIND_DELETED]: 0, [KIND_MISSED]: 0, [KIND_REJECTED]: 0 };
+  const counts = {
+    all: 0, [KIND_COMPLETED]: 0, [KIND_DELETED]: 0, [KIND_MISSED]: 0, [KIND_REJECTED]: 0, [KIND_DROPPED]: 0,
+  };
   for (const row of selectHistory(tasks, { kind: 'all', range, now })) {
     counts.all += 1;
     counts[row.kind] += 1;

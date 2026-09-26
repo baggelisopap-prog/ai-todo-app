@@ -136,9 +136,14 @@ export function checklistProgress(checklist) {
  * Calendar, Upcoming or the Inbox: every one of those screens asks this
  * function rather than keeping its own copy of the rule. History is the one
  * screen that deliberately does NOT call it.
+ *
+ * `dropped_at` (2026-09-26) is a task somebody called off — «Ακυρώθηκε», with
+ * an optional reason. It leaves the live lists here for the same reason as the
+ * others, and turns up in History (taskHistory.historyEntry) and in a board's
+ * «Ακυρώθηκε» column, which read it directly.
  */
 export function isVisibleTask(task) {
-  return !task.is_rejected && !task.missed_at && !task.cancelled_at && !task.deleted_at;
+  return !task.is_rejected && !task.missed_at && !task.cancelled_at && !task.deleted_at && !task.dropped_at;
 }
 
 /**

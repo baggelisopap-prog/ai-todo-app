@@ -12,6 +12,7 @@ import { useWorkspaces } from '../hooks/useWorkspaces';
 import DictateButton from './DictateButton';
 import Switch from './Switch';
 import TaskMenu from './TaskMenu';
+import DropDialog from './DropDialog';
 import { SparkleIcon, SpinnerIcon, SendIcon } from './icons';
 import {
   CheckIcon, CheckedBox, EmptyBox,
@@ -268,10 +269,13 @@ const INPUT_CLASSES =
  * `historyLine` is the only thing this sheet shows that the live one cannot:
  * how the task ended. Without it this would just be an old card.
  */
-function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskDeleted, onShowToast, readOnly = false, footerAction = null, historyLine = null }) {
+function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskDeleted, onShowToast, onAcknowledged, readOnly = false, footerAction = null, historyLine = null }) {
   useModalBehavior(onClose);
   const { t } = useTranslation();
-  const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast });
+  // onAcknowledged folds a task the server hands back — the handover's OK,
+  // and since 2026-09-26 a cancellation and its undo, which are offered from
+  // this sheet's menu too.
+  const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onAcknowledged });
   const { isPending, isCompleted, isRejected, approvesOnEdit } = actions;
   const { workspaces, categoriesFor } = useWorkspaces();
   const recurrence = useRecurrence();
@@ -640,6 +644,9 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             onRecurrence={() => recurrence.openEditor(task)}
             isRecurring={Boolean(task.recurrence_rule_id)}
             onDelete={handleDelete}
+            isDropped={actions.isDropped}
+            onDrop={actions.openDrop}
+            onUndrop={actions.undrop}
             t={t}
           />
           )}
@@ -1238,6 +1245,10 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
           )}
         </div>
       </div>
+
+      {actions.isDropDialogOpen && (
+        <DropDialog taskName={task.task_name} onConfirm={actions.drop} onClose={actions.closeDrop} />
+      )}
     </div>
   );
 }

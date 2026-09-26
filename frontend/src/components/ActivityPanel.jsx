@@ -101,6 +101,14 @@ function ActivityPanel({ workspace, members }) {
         return t('activity.task_completed', { actor, task });
       case 'task_reopened':
         return t('activity.task_reopened', { actor, task });
+      // Called off, and back (2026-09-26). The reason rides along when one was
+      // given, because "who cancelled my task" is always followed by "why".
+      case 'task_dropped':
+        return details.reason
+          ? t('activity.task_dropped_reason', { actor, task, reason: details.reason })
+          : t('activity.task_dropped', { actor, task });
+      case 'task_undropped':
+        return t('activity.task_undropped', { actor, task });
       default:
         // The vocabulary is meant to grow — comments are the next project — and
         // the column has no CHECK constraint for that reason. An unknown verb
