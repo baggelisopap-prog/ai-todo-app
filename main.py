@@ -124,6 +124,10 @@ class RecurrenceCreateRequest(BaseModel):
     ends_on: Optional[str] = None
     notify_enabled: bool = False
     calendar_sync_enabled: bool = False
+    # Where every occurrence goes (2026-09-26). Until then the form offered
+    # only the four old words above, which file nothing.
+    workspace_id: Optional[str] = None
+    category_id: Optional[str] = None
     # Not part of the rule: it addresses a task that already exists and should
     # become this rule's first occurrence ("make THIS repeat", from the task's
     # own menu) rather than being duplicated alongside it. Excluded when the
@@ -149,6 +153,8 @@ class RecurrenceUpdateRequest(BaseModel):
     approval_status: Optional[bool] = None
     notify_enabled: Optional[bool] = None
     calendar_sync_enabled: Optional[bool] = None
+    workspace_id: Optional[str] = None
+    category_id: Optional[str] = None
 
 
 class RecurrencesListResponse(BaseModel):
@@ -703,11 +709,14 @@ def create_task_manual(request: CreateTaskRequest, user_id: str = Depends(get_cu
             detail="task_name cannot be empty"
         )
 
-    # Same rule as PATCH: a category must live inside the task's workspace.
+    # Same rule as PATCH: a category must live inside the task's workspace,
+    # and the workspace must be one the user is a member of (2026-09-26).
     try:
         service.validate_workspace_placement(
             user_id, request.workspace_id, request.category_id
         )
+    except services.WorkspaceNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -741,23 +750,37 @@ def update_task(record_id: str, request: UpdateTaskRequest, user_id: str = Depen
     # changes the category does, so the common case, not an edge one — compare
     # against the workspace the task already has, or the rule is bypassed by
     # simply omitting a field.
-    # `is not None` guards the read: clearing a category (moving the task to
-    # Unfiled) is always allowed, and fetching the task to compare a workspace
-    # that will not be checked is a round trip bought for nothing.
-    if updates.get("category_id") is not None:
-        target_workspace = updates.get("workspace_id")
-        if "workspace_id" not in updates:
-            existing = service.repository.get_task(user_id, record_id)
-            target_workspace = existing.workspace_id if existing else None
-        try:
-            service.validate_workspace_placement(
-                user_id, target_workspace, updates["category_id"]
-            )
-        except ValueError as e:
-            # Raised before the generic handler below, which turns everything
-            # into a 500. This is the user's data being out of date, not a
-            # server fault.
-            raise HTTPException(status_code=422, detail=str(e))
+    # Clearing either (moving the task to Unfiled) is always allowed.
+    #
+    # ONLY WHAT CHANGES is checked (2026-09-26, when the workspace itself began
+    # to be checked for membership). The task sheet sends both fields on every
+    # save; checking an unchanged one would refuse every edit of a task that
+    # sits in a room its creator has since left — the creator may still write
+    # it (access.can_write). Moving work INTO a room, or under a category, is
+    # what needs membership.
+    if updates.get("workspace_id") is not None or updates.get("category_id") is not None:
+        existing = service.repository.get_task(user_id, record_id)
+        current_workspace = existing.workspace_id if existing else None
+        current_category = existing.category_id if existing else None
+        workspace = updates["workspace_id"] if "workspace_id" in updates else current_workspace
+        category = updates["category_id"] if "category_id" in updates else current_category
+        workspace_changed = workspace is not None and workspace != current_workspace
+        # A category is re-checked when it changes, and when the workspace
+        # under it does — a category of the old room would not fit the new one.
+        category_changed = category is not None and (category != current_category or workspace_changed)
+        if workspace_changed or category_changed:
+            try:
+                service.validate_workspace_placement(
+                    user_id, workspace, category if category_changed else None,
+                    check_membership=workspace_changed,
+                )
+            except services.WorkspaceNotFound as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            except ValueError as e:
+                # Raised before the generic handler below, which turns everything
+                # into a 500. This is the user's data being out of date, not a
+                # server fault.
+                raise HTTPException(status_code=422, detail=str(e))
 
     try:
         updated_task = service.update_task(user_id, record_id, updates)
@@ -1027,6 +1050,30 @@ def _athens_today():
     return datetime.now(ZoneInfo("Europe/Athens")).date()
 
 
+def _check_rule_placement(user_id: str, workspace_id, category_id, check_membership: bool = True) -> None:
+    """
+    Where a recurrence files its occurrences: the task placement rule
+    (membership, a category inside its workspace) plus one of its own — never
+    under a category an integration owns. RecurrenceRule already refuses the
+    old word «Hostaway»; the real Hostaway category is a row with a system_key,
+    and a hand-made daily task inside it would be escalated as a guest message.
+    """
+    if category_id is not None and workspace_id is None:
+        raise HTTPException(status_code=422, detail="A category needs its workspace")
+    try:
+        category = service.validate_workspace_placement(
+            user_id, workspace_id, category_id, check_membership=check_membership
+        )
+    except services.WorkspaceNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    if category is not None and category.system_key:
+        raise HTTPException(
+            status_code=422, detail="A recurrence cannot go under a category an integration owns"
+        )
+
+
 @app.get("/recurrences", response_model=RecurrencesListResponse)
 def list_recurrences(user_id: str = Depends(get_current_user_id)):
     """Every recurrence rule this user owns, oldest first."""
@@ -1060,6 +1107,8 @@ def create_recurrence(payload: RecurrenceCreateRequest, user_id: str = Depends(g
         rule = RecurrenceRule(**payload.model_dump(exclude_none=True, exclude={"adopt_task_id"}))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+    _check_rule_placement(user_id, payload.workspace_id, payload.category_id)
 
     # Resolved BEFORE the rule is written, not after. A rule created and then
     # abandoned by a failed adoption is a standing commitment the user never
@@ -1110,6 +1159,19 @@ def update_recurrence(
     updates = payload.model_dump(exclude_unset=True)
     if "checklist" in updates:
         updates["checklist"] = [item.model_dump() for item in payload.checklist or []]
+
+    # A new workspace without a category word takes none: the old room's
+    # category cannot follow it — what the task sheet does too.
+    if (updates.get("workspace_id") != existing.workspace_id and "workspace_id" in updates
+            and "category_id" not in updates):
+        updates["category_id"] = None
+    # Only what changes is judged, as on PATCH /tasks: an unchanged placement
+    # re-sent by the form must not fail because of a room left since.
+    new_workspace = updates.get("workspace_id", existing.workspace_id)
+    new_category = updates.get("category_id", existing.category_id)
+    workspace_changed = new_workspace != existing.workspace_id
+    if workspace_changed or new_category != existing.category_id:
+        _check_rule_placement(user_id, new_workspace, new_category, check_membership=workspace_changed)
 
     # repository.update_recurrence_rule writes the raw dict straight to
     # Supabase and never reconstructs a RecurrenceRule, so validate_shape

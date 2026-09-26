@@ -391,9 +391,12 @@ class RecurrenceRule(BaseModel):
     materialized_through: Optional[str] = None
     created_at: Optional[str] = None
 
-    # Workspaces (2026-09-01). Added here so the columns exist end-to-end, but
-    # nothing writes them until Slice 4 — the `category` field above is still
-    # what a rule copies into each occurrence.
+    # Where every occurrence goes. The columns existed from 2026-09-01, but
+    # until 2026-09-26 nothing read or wrote them and the form offered only the
+    # old `category` word above, so every occurrence landed unfiled. Now the
+    # form sets them, main.py checks them (_check_rule_placement) and each
+    # occurrence copies them (TaskService._rule_placement). `category` above is
+    # still copied into the old column, which only the Hostaway badge reads.
     workspace_id: Optional[str] = None
     category_id: Optional[str] = None
 

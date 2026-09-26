@@ -208,6 +208,13 @@ def push_task_to_calendar_now(user_id: str, task: TaskRecord) -> None:
         logger.error(f"[calendar sync] Immediate push failed for task {task.record_id}: {e}")
 
 
+class WorkspaceNotFound(ValueError):
+    """A workspace the user is not a member of — or one that does not exist;
+    the two are deliberately indistinguishable. A ValueError, so a route that
+    only knows ValueError still refuses (422); the routes that know it answer
+    404, as _require_membership in main.py does."""
+
+
 class TaskService:
     """
     Business logic layer. Coordinates AI extraction with data persistence.
@@ -359,7 +366,8 @@ class TaskService:
         logger.info(f"Successfully saved {len(saved_tasks)} tasks from image to database.")
         return saved_tasks
 
-    def validate_workspace_placement(self, user_id: str, workspace_id, category_id) -> None:
+    def validate_workspace_placement(self, user_id: str, workspace_id, category_id,
+                                     check_membership: bool = True) -> Optional[Category]:
         """
         A task's category must live inside the task's own workspace.
 
@@ -373,18 +381,43 @@ class TaskService:
         otherwise refuse.
 
         Raises ValueError; the routes turn that into a 422.
-        """
-        if category_id is None:
-            return
 
-        category = repository.get_category(user_id, category_id)
+        MEMBERSHIP (2026-09-26). Until then only the category was checked, and
+        against who CREATED it: a workspace id alone was never checked at all,
+        so anyone knowing a room's id could put work into a room they are not
+        in; and a member could not file under the room owner's categories. Both
+        are now the one rule the rest of the app runs on — you may place work
+        where you are a member (WorkspaceNotFound otherwise, a 404).
+
+        `check_membership=False` is for a workspace the work is ALREADY in (an
+        edit that keeps it): the category must still fit it, but the room is not
+        re-judged — its creator may have left it and still own the task.
+
+        Returns the category, or None when none was given, so a caller with a
+        rule of its own about categories (recurrences refuse the integration's)
+        does not read it twice.
+        """
+        member_ids = None
+        if workspace_id is not None and check_membership:
+            member_ids = repository.get_member_workspace_ids(user_id)
+            if workspace_id not in member_ids:
+                raise WorkspaceNotFound("Workspace not found")
+
+        if category_id is None:
+            return None
+
+        if member_ids is None:
+            member_ids = repository.get_member_workspace_ids(user_id)
+        category = repository.get_category_in_workspaces(category_id, member_ids)
         if category is None:
             # A stale id from a client whose category was deleted on another
             # device — the user's data being out of date, not a server fault.
+            # A category in somebody else's room reads the same way.
             raise ValueError("That category no longer exists")
 
         if workspace_id is not None and category.workspace_id != workspace_id:
             raise ValueError("That category belongs to a different workspace")
+        return category
 
     def resolve_extraction_workspace(self, user_id: str, requested_id) -> Optional[str]:
         """
@@ -397,10 +430,17 @@ class TaskService:
         Returns None when there is no default either. That means the task is
         filed nowhere, which is honest; picking the first workspace instead
         would quietly put work somewhere nobody chose.
+
+        Also None for a workspace the user is not a member of (2026-09-26) —
+        a room they have left, or an id they were never given. Unfiled rather
+        than refused: capture is the one thing that must never fail, and the
+        work still reaches the user, just not somebody else's room.
         """
-        if requested_id:
-            return requested_id
-        return repository.get_app_settings(user_id).default_workspace_id
+        resolved = requested_id or repository.get_app_settings(user_id).default_workspace_id
+        if resolved and resolved not in repository.get_member_workspace_ids(user_id):
+            logger.warning(f"[workspaces] extraction for {user_id}: not a member of {resolved}; filing nowhere")
+            return None
+        return resolved
 
     # The two workspaces every account starts with, in display order.
     # Business first and Business default: the owner is aiming this at
@@ -568,8 +608,8 @@ class TaskService:
             # category_id (repository.get_active_hostaway_tasks). Not one of the
             # 65 auto-closed on a reply; 18 of the 126 before it had. POST
             # /tasks lost a workspace the same way, after validating it.
-            # Callers that pass none (recurrence occurrences, the agent's
-            # create) still get None, which is unchanged.
+            # The agent's create passes none and still gets None; recurrence
+            # occurrences pass their rule's placement since 2026-09-26.
             workspace_id=fields.get("workspace_id"),
             category_id=fields.get("category_id"),
         )
@@ -975,7 +1015,8 @@ class TaskService:
     # Recurring tasks (2026-08-15)
     # =========================================================
 
-    def _occurrence_fields(self, rule: RecurrenceRule, occurrence: "date") -> dict:
+    def _occurrence_fields(self, rule: RecurrenceRule, occurrence: "date",
+                           placement: tuple = (None, None)) -> dict:
         """
         The template, copied fresh for one day.
 
@@ -984,9 +1025,16 @@ class TaskService:
         rule's chosen values — the same thing the Google-event conversion in
         repository.py does, and for the same reason: the columns are
         non-nullable and no AI suggested anything here.
+
+        `placement` is (workspace_id, category_id) as _rule_placement decided
+        it (2026-09-26). Before that every occurrence was stored unfiled while
+        its rule said Personal: 29 of «Χάπι end» on the owner's account.
         """
         occurrence_str = recurrence.format_date(occurrence)
+        workspace_id, category_id = placement
         return {
+            "workspace_id": workspace_id,
+            "category_id": category_id,
             "task_name": rule.task_name,
             "description": rule.description,
             "category": rule.category,
@@ -1000,6 +1048,27 @@ class TaskService:
             "occurrence_date": occurrence_str,
             "approval_status": True,
         }
+
+    def _rule_placement(self, user_id: str, rule: RecurrenceRule) -> tuple:
+        """
+        Where this rule's new occurrences go: its own workspace and category —
+        unless that workspace is no longer one the user sees (archived, or a
+        room they left), in which case unfiled.
+
+        Unfiled rather than into the room anyway: a daily task put where its
+        owner cannot see it is a pill nobody is reminded of. Unfiled is still
+        in «Όλα». Checked when occurrences are actually made — about once a day
+        per rule, after the short-circuit — never on the idle ticks.
+        """
+        if not rule.workspace_id:
+            return (None, None)
+        if rule.workspace_id not in repository.get_visible_workspace_ids(user_id):
+            logger.warning(
+                f"[recurrence] Rule {rule.record_id}: workspace {rule.workspace_id} is no longer "
+                "one the user sees; its occurrences are filed nowhere"
+            )
+            return (None, None)
+        return (rule.workspace_id, rule.category_id)
 
     def adopt_task_into_rule(self, user_id: str, task: TaskRecord, rule: RecurrenceRule) -> bool:
         """
@@ -1083,13 +1152,14 @@ class TaskService:
             recurrence.format_date(window_end),
         )
 
+        placement = self._rule_placement(user_id, rule)
         created = 0
         for occurrence in wanted:
             if recurrence.format_date(occurrence) in existing:
                 continue
             try:
                 self.create_task_manual(
-                    user_id, self._occurrence_fields(rule, occurrence), approval_status=True
+                    user_id, self._occurrence_fields(rule, occurrence, placement), approval_status=True
                 )
                 created += 1
             except Exception as e:

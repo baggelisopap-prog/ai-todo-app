@@ -481,7 +481,6 @@
     ],
     "form_name": "Name",
     "form_description": "Description",
-    "form_category": "Category",
     "form_priority": "Priority",
     "form_time": "Time",
     "form_pattern": "Repeats",

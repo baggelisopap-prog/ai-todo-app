@@ -481,7 +481,6 @@
     ],
     "form_name": "Όνομα",
     "form_description": "Περιγραφή",
-    "form_category": "Κατηγορία",
     "form_priority": "Προτεραιότητα",
     "form_time": "Ώρα",
     "form_pattern": "Επαναλαμβάνεται",

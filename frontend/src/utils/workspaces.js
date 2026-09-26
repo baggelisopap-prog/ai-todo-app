@@ -113,6 +113,47 @@ export function placementParts(task, workspaces, categories) {
 }
 
 /**
+ * The categories a RECURRENCE may go under in this workspace: all of them but
+ * the one an integration owns. A hand-made daily task inside Hostaway would be
+ * escalated as a guest message every two hours, and the server refuses it
+ * (main.py, _check_rule_placement) — so the form never offers it.
+ */
+export function ruleCategoriesForWorkspace(categories, workspaceId) {
+  return categoriesForWorkspace(categories, workspaceId).filter((category) => !category.system_key);
+}
+
+/**
+ * Where a recurrence form opens pointing (2026-09-26). Until then it offered
+ * the four old category words, which file nothing, and every occurrence of
+ * the owner's «Χάπι end» landed unfiled although he had picked «Προσωπικά».
+ *
+ *   editing a rule        -> where the rule already goes
+ *   «make THIS repeat»    -> where that task already lives
+ *   a rule from scratch   -> the workspace on screen, else the default one
+ *
+ * Anything that no longer resolves — an archived room, a deleted category, the
+ * integration's category — falls back to less rather than to a stale id the
+ * select cannot show. Returns { workspaceId, categoryId }, '' meaning unfiled.
+ */
+export function initialRulePlacement({ rule, task, activeId, defaultWorkspaceId, workspaces, categories }) {
+  const known = (id) => Boolean(id) && (workspaces || []).some((w) => w.record_id === id);
+  const source = rule || task;
+  let workspaceId = '';
+  if (source) {
+    workspaceId = known(source.workspace_id) ? source.workspace_id : '';
+  } else if (activeId !== UNFILED && known(activeId)) {
+    workspaceId = activeId;
+  } else if (known(defaultWorkspaceId)) {
+    workspaceId = defaultWorkspaceId;
+  }
+  const categoryId = workspaceId && source
+    && ruleCategoriesForWorkspace(categories, workspaceId).some((c) => c.record_id === source.category_id)
+    ? source.category_id
+    : '';
+  return { workspaceId, categoryId };
+}
+
+/**
  * Where a newly created item goes: after the highest position, not after the
  * count. Deleting the middle of a list leaves gaps, so a count-based answer
  * would collide with an existing row and make the order arbitrary.

@@ -20,6 +20,8 @@ import {
   countByWorkspace,
   describePlacement,
   nextPosition,
+  initialRulePlacement,
+  ruleCategoriesForWorkspace,
   UNFILED,
 } from '../src/utils/workspaces.js';
 
@@ -163,6 +165,43 @@ check('an empty library counts as zero everywhere rather than undefined',
 
 check('a missing list does not throw the picker off',
   countByWorkspace(undefined, []), { all: 0, [UNFILED]: 0 });
+
+// ------------------------------------ where a recurrence form opens (2026-09-26)
+const place = (o) => initialRulePlacement({ workspaces: WS, categories: CATS, ...o });
+
+check('a recurrence never offers the category an integration owns',
+  ruleCategoriesForWorkspace(CATS, 'ws-b').map((c) => c.record_id), ['c-office']);
+
+check('editing a rule opens where the rule goes',
+  place({ rule: { workspace_id: 'ws-p', category_id: 'c-garden' } }),
+  { workspaceId: 'ws-p', categoryId: 'c-garden' });
+
+check('«make this repeat» opens where the task lives',
+  place({ task: task({ workspace_id: 'ws-b', category_id: 'c-office' }) }),
+  { workspaceId: 'ws-b', categoryId: 'c-office' });
+
+check('a Hostaway task made to repeat keeps its room but not the integration category',
+  place({ task: task({ workspace_id: 'ws-b', category_id: 'c-host' }) }),
+  { workspaceId: 'ws-b', categoryId: '' });
+
+check('an unfiled task stays unfiled — the form does not invent a room',
+  place({ task: task({}), activeId: 'ws-b', defaultWorkspaceId: 'ws-b' }),
+  { workspaceId: '', categoryId: '' });
+
+check('a new rule starts in the room on screen',
+  place({ activeId: 'ws-p', defaultWorkspaceId: 'ws-b' }), { workspaceId: 'ws-p', categoryId: '' });
+
+check('a new rule on «Όλα» starts in the default room',
+  place({ activeId: null, defaultWorkspaceId: 'ws-b' }), { workspaceId: 'ws-b', categoryId: '' });
+
+check('a new rule while looking at the unfiled pile starts in the default room',
+  place({ activeId: UNFILED, defaultWorkspaceId: 'ws-p' }), { workspaceId: 'ws-p', categoryId: '' });
+
+check('a rule whose room is gone opens unfiled rather than on a stale id',
+  place({ rule: { workspace_id: 'ws-archived', category_id: 'c-x' } }), { workspaceId: '', categoryId: '' });
+
+check("a category from another room is not carried in",
+  place({ rule: { workspace_id: 'ws-p', category_id: 'c-office' } }), { workspaceId: 'ws-p', categoryId: '' });
 
 console.log(failures === 0 ? '\nAll workspace checks passed.' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

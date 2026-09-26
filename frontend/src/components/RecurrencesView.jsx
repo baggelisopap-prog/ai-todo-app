@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getRecurrences, updateRecurrence, deleteRecurrence } from '../api';
 import { describeRecurrence } from '../utils/taskDisplay';
+import { describePlacement } from '../utils/workspaces';
 import { useRecurrence } from '../hooks/useRecurrence';
+import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useConfirm } from '../hooks/useConfirm';
 import Switch from './Switch';
 import RecurrenceForm from './RecurrenceForm';
@@ -32,6 +34,7 @@ import ConfirmDialog from './ConfirmDialog';
  */
 function RecurrencesView({ onShowToast }) {
   const { t } = useTranslation();
+  const { workspaces, categories } = useWorkspaces();
   const confirm = useConfirm();
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -151,6 +154,11 @@ function RecurrencesView({ onShowToast }) {
             </span>
             <span className="block text-xs text-[var(--text-muted)] truncate">
               {describeRecurrence(rule, t)}
+            </span>
+            {/* Where its days go — the fact that was invisible until
+                2026-09-26, when every occurrence landed unfiled. */}
+            <span className="block text-xs text-[var(--text-muted)] truncate">
+              {describePlacement(rule, workspaces, categories, t)}
             </span>
           </button>
 

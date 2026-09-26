@@ -1741,6 +1741,11 @@ def _supabase_row_to_rule(row: dict) -> RecurrenceRule:
         grace_days=_get(row, "grace_days", 1),
         materialized_through=row.get("materialized_through"),
         created_at=row.get("created_at"),
+        # Read since 2026-09-26. The columns existed from 2026-09-01 and the
+        # migration had even filled workspace_id, but nothing read them back,
+        # so every occurrence landed unfiled.
+        workspace_id=row.get("workspace_id"),
+        category_id=row.get("category_id"),
     )
 
 
@@ -2537,6 +2542,32 @@ def get_category(user_id: str, category_id: str) -> Optional[Category]:
         .select("*")
         .eq("id", category_id)
         .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return _supabase_row_to_category(rows[0]) if rows else None
+
+
+def get_category_in_workspaces(category_id: str, workspace_ids: list[str]) -> Optional[Category]:
+    """
+    A category, but only if it lives in one of these workspaces — the rooms the
+    caller is a member of.
+
+    get_category above is scoped by who CREATED the category, which is right for
+    renaming and deleting one and wrong for filing a task under it: a member of
+    a shared room could not use the owner's categories («That category no longer
+    exists»). Placing work is a member's right, so the scope here is membership.
+    None for a category outside those rooms, exactly as for one that does not
+    exist — telling them apart would confirm that somebody else's row is there.
+    """
+    if not category_id or not workspace_ids:
+        return None
+    response = (
+        supabase.table("categories")
+        .select("*")
+        .eq("id", category_id)
+        .in_("workspace_id", workspace_ids)
         .limit(1)
         .execute()
     )

@@ -21,6 +21,8 @@ CATS = [
 @pytest.fixture
 def service(monkeypatch):
     monkeypatch.setattr(repository, "get_categories", lambda u: CATS)
+    # Since 2026-09-26 the extractor files only into rooms the user is IN.
+    monkeypatch.setattr(repository, "get_member_workspace_ids", lambda u: ["ws-b", "ws-p", "ws-default"])
     return services.TaskService()
 
 
@@ -46,6 +48,21 @@ def test_no_workspace_and_no_default_means_unfiled(service, monkeypatch):
     """Rather than picking the first workspace, which would silently file a
     task somewhere the user never chose."""
     monkeypatch.setattr(repository, "get_app_settings", lambda u: AppSettings())
+
+    assert service.resolve_extraction_workspace(USER, None) is None
+
+
+def test_a_room_the_user_is_not_in_files_nowhere(service, monkeypatch):
+    """A room they left, or an id they were never given: the task is still
+    captured — capture must never fail — but not into somebody else's room."""
+    monkeypatch.setattr(repository, "get_app_settings", lambda u: AppSettings())
+
+    assert service.resolve_extraction_workspace(USER, "ws-someone-else") is None
+
+
+def test_a_default_the_user_has_left_files_nowhere(service, monkeypatch):
+    monkeypatch.setattr(repository, "get_app_settings",
+                        lambda u: AppSettings(default_workspace_id="ws-left-behind"))
 
     assert service.resolve_extraction_workspace(USER, None) is None
 

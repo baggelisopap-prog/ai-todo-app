@@ -126,11 +126,21 @@ def test_deleting_an_ordinary_category_reports_what_became_unfiled(client, monke
 # service layer because a CHECK constraint cannot see another table.
 
 
+def _placement_world(monkeypatch, *, member_of, categories, task=None):
+    """The three reads placement makes since 2026-09-26: the task as it is now,
+    the rooms the user is in, and a category looked up INSIDE those rooms."""
+    monkeypatch.setattr(main.service.repository, "get_task",
+                        lambda u, i: task if task is not None else _stub_task())
+    monkeypatch.setattr(main.repository, "get_member_workspace_ids", lambda u: list(member_of))
+    monkeypatch.setattr(main.repository, "get_category_in_workspaces", lambda i, ids: next(
+        (c for c in categories if c.record_id == i and c.workspace_id in ids), None))
+
+
 def test_a_task_cannot_take_a_category_from_another_workspace(client, monkeypatch):
     """A task in Personal must not be filed under 'μετοχές', which lives in
     Business. Left unenforced this produces a task the UI cannot render."""
-    monkeypatch.setattr(main.repository, "get_category", lambda u, i: _cat(
-        record_id="cat-stocks", workspace_id="ws-business", name="μετοχές"))
+    _placement_world(monkeypatch, member_of=["ws-personal", "ws-business"], categories=[
+        _cat(record_id="cat-stocks", workspace_id="ws-business", name="μετοχές")])
 
     r = client.patch("/tasks/t1", json={
         "workspace_id": "ws-personal", "category_id": "cat-stocks"})
@@ -140,12 +150,77 @@ def test_a_task_cannot_take_a_category_from_another_workspace(client, monkeypatc
 
 
 def test_a_matching_pair_is_accepted(client, monkeypatch):
-    monkeypatch.setattr(main.repository, "get_category", lambda u, i: _cat(
-        record_id="cat-1", workspace_id="ws-1"))
+    _placement_world(monkeypatch, member_of=["ws-1"], categories=[
+        _cat(record_id="cat-1", workspace_id="ws-1")])
     monkeypatch.setattr(main.service, "update_task",
                         lambda u, i, up: _stub_task(**up))
 
     r = client.patch("/tasks/t1", json={"workspace_id": "ws-1", "category_id": "cat-1"})
+
+    assert r.status_code == 200
+
+
+# ---------------------------------------------- membership (2026-09-26)
+# Until then a workspace id alone was never checked, and a category was looked
+# up by who CREATED it. Each test below failed, or would have, on that code.
+
+
+def test_a_task_cannot_be_moved_into_a_room_the_user_is_not_in(client, monkeypatch):
+    """Anyone who knew a room's id could put work into it — an ex-member, say.
+    404, not 403: confirming the room exists is itself a leak."""
+    _placement_world(monkeypatch, member_of=["ws-mine"], categories=[])
+    written = []
+    monkeypatch.setattr(main.service, "update_task", lambda u, i, up: written.append(up) or _stub_task())
+
+    r = client.patch("/tasks/t1", json={"workspace_id": "ws-someone-else"})
+
+    assert r.status_code == 404
+    assert written == []
+
+
+def test_a_task_cannot_be_created_in_a_room_the_user_is_not_in(client, monkeypatch):
+    _placement_world(monkeypatch, member_of=["ws-mine"], categories=[])
+    created = []
+    monkeypatch.setattr(main.service, "create_task_manual", lambda u, f: created.append(f) or _stub_task())
+
+    r = client.post("/tasks", json={"task_name": "Χ", "workspace_id": "ws-someone-else"})
+
+    assert r.status_code == 404
+    assert created == []
+
+
+def test_a_member_may_file_under_the_room_owners_category(client, monkeypatch):
+    """Εύη in the owner's Personal choosing a category the owner made. The old
+    lookup was by creator, so this answered «That category no longer exists»."""
+    _placement_world(monkeypatch, member_of=["ws-shared"], categories=[
+        _cat(record_id="cat-owners", workspace_id="ws-shared", name="κήπος")])
+    monkeypatch.setattr(main.service, "update_task", lambda u, i, up: _stub_task(**up))
+
+    r = client.patch("/tasks/t1", json={"workspace_id": "ws-shared", "category_id": "cat-owners"})
+
+    assert r.status_code == 200
+
+
+def test_a_category_in_a_room_the_user_is_not_in_reads_as_gone(client, monkeypatch):
+    _placement_world(monkeypatch, member_of=["ws-mine"], categories=[
+        _cat(record_id="cat-theirs", workspace_id="ws-theirs")])
+
+    r = client.patch("/tasks/t1", json={"category_id": "cat-theirs"})
+
+    assert r.status_code == 422
+    assert "no longer exists" in r.json()["detail"]
+
+
+def test_re_saving_a_task_in_a_room_its_creator_left_still_works(client, monkeypatch):
+    """The task sheet sends workspace and category on every save. Checking the
+    UNCHANGED ones would lock a creator out of editing their own task the day
+    they leave its room — access.can_write still lets them."""
+    _placement_world(monkeypatch, member_of=[], categories=[],
+                     task=_stub_task(workspace_id="ws-left", category_id="cat-left"))
+    monkeypatch.setattr(main.service, "update_task", lambda u, i, up: _stub_task(**up))
+
+    r = client.patch("/tasks/t1", json={
+        "task_name": "νέο όνομα", "workspace_id": "ws-left", "category_id": "cat-left"})
 
     assert r.status_code == 200
 
@@ -163,7 +238,7 @@ def test_clearing_the_category_is_always_allowed(client, monkeypatch):
 def test_a_category_that_does_not_exist_is_422_not_500(client, monkeypatch):
     """A stale id from a client whose category was deleted on another device.
     That is the user's data being out of date, not a server fault."""
-    monkeypatch.setattr(main.repository, "get_category", lambda u, i: None)
+    _placement_world(monkeypatch, member_of=["ws-1"], categories=[])
 
     r = client.patch("/tasks/t1", json={"workspace_id": "ws-1", "category_id": "gone"})
 

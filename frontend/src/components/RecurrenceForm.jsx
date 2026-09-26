@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createRecurrence, updateRecurrence } from '../api';
 import { isoWeekday } from '../utils/formatDate';
+import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useAppSettings } from '../hooks/useAppSettings';
+import { initialRulePlacement, ruleCategoriesForWorkspace } from '../utils/workspaces';
 import Switch from './Switch';
 
 const ISO_DAYS = [1, 2, 3, 4, 5, 6, 7]; // 1 = Monday .. 7 = Sunday
@@ -17,14 +20,14 @@ function todayISO() {
  * rule's own field names so the form can read either source without caring
  * which it got.
  *
- * Two judgements worth naming. The days default to the ONE day the task
- * already falls on, not Mon-Fri: "repeat this" said about next Tuesday most
- * often means every Tuesday, and a form that opens pre-armed for five days a
- * week invites the user to save four commitments they never asked for. And
- * Hostaway cannot come along — RecurrenceRule refuses that category outright
- * (models.py), because it belongs to the integration and its escalation
- * intervals. A Hostaway task can still be made to repeat; it just arrives as
- * Unknown rather than being rejected at save time with no explanation.
+ * The days default to the ONE day the task already falls on, not Mon-Fri:
+ * "repeat this" said about next Tuesday most often means every Tuesday, and a
+ * form that opens pre-armed for five days a week invites the user to save four
+ * commitments they never asked for.
+ *
+ * Where it lives is not read here but by initialRulePlacement (utils/
+ * workspaces.js), which also keeps the Hostaway category out: a hand-made
+ * repeat inside it would be escalated as a guest message.
  */
 function fromTask(task) {
   const weekday = isoWeekday(task.due_date);
@@ -34,7 +37,6 @@ function fromTask(task) {
     // row already knows to hide (TaskRow's showDescription). Carrying it into
     // the rule would print the same words twice in the Recurrences list.
     description: task.description === task.task_name ? '' : (task.description || ''),
-    category: !task.category || task.category === 'Hostaway' ? 'Unknown' : task.category,
     priority: task.priority || 'P3',
     due_time: task.due_time || '',
     weekdays: weekday ? [weekday] : [1, 2, 3, 4, 5],
@@ -61,9 +63,24 @@ function RecurrenceForm({ rule, task, onCancel, onSaved }) {
   const adoptTask = isEdit ? null : task;
   const source = rule || (adoptTask ? fromTask(adoptTask) : {});
 
+  // Where every occurrence goes. It replaced, on 2026-09-26, a «Κατηγορία»
+  // select offering the four old words — which filed nothing, so every day of
+  // the owner's «Χάπι end» landed unfiled although he had picked «Προσωπικά».
+  const { workspaces, categories, activeId } = useWorkspaces();
+  const { settings } = useAppSettings();
+  const placementInputs = {
+    rule, task: adoptTask, activeId, workspaces, categories,
+    defaultWorkspaceId: settings?.default_workspace_id,
+  };
+  // null until the user chooses; until then the suggestion is recomputed on
+  // every render, so lists that arrive after the form opened are picked up.
+  // And an edit sends no placement at all until then, so a list still loading
+  // can never quietly unfile an existing rule.
+  const [chosenPlacement, setChosenPlacement] = useState(null);
+  const placement = chosenPlacement || initialRulePlacement(placementInputs);
+
   const [taskName, setTaskName] = useState(source.task_name || '');
   const [description, setDescription] = useState(source.description || '');
-  const [category, setCategory] = useState(source.category || 'Personal');
   const [priority, setPriority] = useState(source.priority || 'P3');
   const [dueTime, setDueTime] = useState(source.due_time || '');
   const [freq, setFreq] = useState(source.freq || 'weekly');
@@ -103,7 +120,10 @@ function RecurrenceForm({ rule, task, onCancel, onSaved }) {
     const payload = {
       task_name: taskName.trim(),
       description: description.trim(),
-      category,
+      ...(!isEdit || chosenPlacement ? {
+        workspace_id: placement.workspaceId || null,
+        category_id: placement.categoryId || null,
+      } : {}),
       priority,
       due_time: dueTime || null,
       freq,
@@ -151,15 +171,41 @@ function RecurrenceForm({ rule, task, onCancel, onSaved }) {
         <textarea className={`${field} resize-none`} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
 
+      {/* Where it lives: the same two questions, in the same words, as a
+          task's own sheet. Changing the room clears the category — one from
+          the old room would not fit the new one, and the server refuses it. */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className={label}>{t('recurrence.form_category')}</label>
-          <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="Personal">{t('browse.filter_personal')}</option>
-            <option value="Business">{t('browse.filter_business')}</option>
-            <option value="Unknown">{t('browse.filter_unknown')}</option>
+          <label className={label}>{t('workspace.label')}</label>
+          <select
+            className={field}
+            value={placement.workspaceId}
+            onChange={(e) => setChosenPlacement({ workspaceId: e.target.value, categoryId: '' })}
+          >
+            <option value="">{t('workspace.unfiled')}</option>
+            {workspaces.map((w) => (
+              <option key={w.record_id} value={w.record_id}>{w.name}</option>
+            ))}
           </select>
         </div>
+        {placement.workspaceId && (
+          <div>
+            <label className={label}>{t('workspace.category_label')}</label>
+            <select
+              className={field}
+              value={placement.categoryId}
+              onChange={(e) => setChosenPlacement({ ...placement, categoryId: e.target.value })}
+            >
+              <option value="">{t('workspace.unfiled')}</option>
+              {ruleCategoriesForWorkspace(categories, placement.workspaceId).map((c) => (
+                <option key={c.record_id} value={c.record_id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={label}>{t('recurrence.form_priority')}</label>
           <select className={field} value={priority} onChange={(e) => setPriority(e.target.value)}>
@@ -168,11 +214,10 @@ function RecurrenceForm({ rule, task, onCancel, onSaved }) {
             <option value="P3">P3</option>
           </select>
         </div>
-      </div>
-
-      <div>
-        <label className={label}>{t('recurrence.form_time')}</label>
-        <input type="time" className={field} value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
+        <div>
+          <label className={label}>{t('recurrence.form_time')}</label>
+          <input type="time" className={field} value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
+        </div>
       </div>
 
       <div>
