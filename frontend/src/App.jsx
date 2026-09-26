@@ -13,6 +13,7 @@ import BrowseView from './components/BrowseView';
 import FloatingActionButtons from './components/FloatingActionButtons';
 import Toast from './components/Toast';
 import RecurrenceProvider from './components/RecurrenceProvider';
+import BoardsProvider from './components/BoardsProvider';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
 import AppBar from './components/AppBar';
 import WorkspaceProvider from './components/WorkspaceProvider';
@@ -93,7 +94,9 @@ function TaskViews({ activeTab, viewProps, onTaskCreated }) {
           <CalendarView {...scoped} onTaskCreated={onTaskCreated} />
         </Suspense>
       )}
-      {activeTab === 'browse' && <BrowseView {...scoped} />}
+      {/* allTasks for the Boards tab only: a board shows every card on it,
+          whatever room the switcher is set to — see BoardsView. */}
+      {activeTab === 'browse' && <BrowseView {...scoped} allTasks={viewProps.tasks} />}
     </TaskFilterProvider>
   );
 }
@@ -530,6 +533,12 @@ function App() {
         "none", so it never issues a request at all. */}
     <MembersProvider>
     <RecurrenceProvider onShowToast={handleShowToast} onTasksChanged={refreshTasks}>
+    {/* The boards, once for the whole app: the Boards tab reads them, and so
+        does every task's ⋯ menu, which offers «Στείλε σε πίνακα…» only to
+        someone who has a board. A card dropped on «Έγινε» completes its task,
+        so the task the server hands back is folded in the way the agent's
+        confirmed actions are. */}
+    <BoardsProvider onShowToast={handleShowToast} onTaskChanged={handleAgentActionConfirmed}>
     <div className="flex min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       {isDesktop && (
         <SideNav
@@ -701,6 +710,7 @@ function App() {
         </Suspense>
       )}
     </div>
+    </BoardsProvider>
     </RecurrenceProvider>
     </MembersProvider>
     </WorkspaceProvider>

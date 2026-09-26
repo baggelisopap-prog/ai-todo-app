@@ -7,6 +7,7 @@ import { describeRecurrence, dueTone, DUE_TONE_CLASSES, priorityLabel } from '..
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { useRecurrence } from '../hooks/useRecurrence';
+import { useBoards } from '../hooks/useBoards';
 import CustomSelect from './CustomSelect';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import DictateButton from './DictateButton';
@@ -276,6 +277,8 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   // and since 2026-09-26 a cancellation and its undo, which are offered from
   // this sheet's menu too.
   const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onAcknowledged });
+  const boards = useBoards();
+  const canSendToBoard = boards.boards.length > 0 && task.approval_status && !task.dropped_at && !task.deleted_at;
   const { isPending, isCompleted, isRejected, approvesOnEdit } = actions;
   const { workspaces, categoriesFor } = useWorkspaces();
   const recurrence = useRecurrence();
@@ -647,6 +650,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             isDropped={actions.isDropped}
             onDrop={actions.openDrop}
             onUndrop={actions.undrop}
+            onSendToBoard={canSendToBoard ? () => boards.openPicker(task) : null}
             t={t}
           />
           )}

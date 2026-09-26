@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
-from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings, RecurrenceRule, Workspace, Category
+from models import ChecklistItem, TaskRecord, PushSubscriptionRequest, AppSettings, RecurrenceRule, Workspace, Category, Board
 from services import TaskService
 import services  # for HOSTAWAY_REPLY_AUTOCOMPLETE_PRIORITIES — one policy, both reply paths
 from repository import save_push_subscription, get_app_settings, update_app_settings
@@ -44,6 +44,7 @@ import hostaway_threading
 import repository
 import access
 import sharing
+import boards
 import token_tracker
 import os
 from dotenv import load_dotenv
@@ -1574,6 +1575,201 @@ def list_workspace_activity(
         for row in rows
     ])
 
+# -------------------------------------------------------------------- boards
+#
+# A kanban view of tasks the user picks (2026-09-26). The rules live in
+# boards.py; these routes only translate. Every write answers with the WHOLE
+# list of the user's boards — three reads, whatever the count — so the screen
+# replaces its state instead of patching it, and can never drift from what
+# the database holds.
+
+
+class BoardsListResponse(BaseModel):
+    boards: list[Board]
+
+
+class BoardCreateRequest(BaseModel):
+    name: str
+    # The four default column names in the user's language; the server falls
+    # back to the Greek ones for anything other than four non-empty names.
+    column_names: Optional[list[str]] = None
+
+
+class BoardRenameRequest(BaseModel):
+    name: str
+
+
+class BoardColumnCreateRequest(BaseModel):
+    name: str
+
+
+class BoardColumnUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    # -1 one step left, +1 one step right, among the open columns.
+    direction: Optional[int] = None
+
+
+class BoardCardSendRequest(BaseModel):
+    task_id: str
+    column_id: Optional[str] = None
+
+
+class BoardCardMoveRequest(BaseModel):
+    column_id: str
+    # Only read when the target is «Ακυρώθηκε»: the optional «Γιατί;».
+    reason: Optional[str] = None
+
+
+class BoardCardCreateRequest(BaseModel):
+    column_id: str
+    task_name: str
+    workspace_id: Optional[str] = None
+
+
+class BoardCardWriteResponse(BaseModel):
+    """A card move or a new card: the task as it now stands — completed,
+    reopened, called off or created — plus the boards, so the screen folds
+    both in with no second request."""
+    task: TaskRecord
+    boards: list[Board]
+
+
+class BoardActivityResponse(BaseModel):
+    activity: list[dict]
+
+
+def _board_call(fn):
+    """The one translation of board refusals into HTTP. Not-yours and no-such
+    are the same 404, deliberately; a refusal the user can act on is a 422;
+    the write gate keeps its 403."""
+    try:
+        return fn()
+    except access.TaskAccessDenied:
+        raise
+    except (boards.BoardNotFound, services.WorkspaceNotFound) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Board request failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Board request failed: {str(e)}")
+
+
+def _all_boards(user_id: str) -> BoardsListResponse:
+    return BoardsListResponse(boards=boards.list_boards(user_id))
+
+
+@app.get("/boards", response_model=BoardsListResponse)
+def list_boards(user_id: str = Depends(get_current_user_id)):
+    """Every board of this user, each with its columns and cards. The TASKS are
+    not repeated here: the screen already holds them from GET /tasks and joins
+    by task_id — a card whose task it cannot see is simply not drawn."""
+    return _board_call(lambda: _all_boards(user_id))
+
+
+@app.post("/boards", response_model=BoardsListResponse, status_code=status.HTTP_201_CREATED)
+def create_board(payload: BoardCreateRequest, user_id: str = Depends(get_current_user_id)):
+    def run():
+        boards.create_board(user_id, payload.name, payload.column_names)
+        return _all_boards(user_id)
+    return _board_call(run)
+
+
+@app.patch("/boards/{board_id}", response_model=BoardsListResponse)
+def rename_board(board_id: str, payload: BoardRenameRequest, user_id: str = Depends(get_current_user_id)):
+    def run():
+        boards.rename_board(user_id, board_id, payload.name)
+        return _all_boards(user_id)
+    return _board_call(run)
+
+
+@app.delete("/boards/{board_id}", response_model=BoardsListResponse)
+def delete_board(board_id: str, user_id: str = Depends(get_current_user_id)):
+    """The board and its cards go; every task on it stays exactly as it was."""
+    def run():
+        boards.delete_board(user_id, board_id)
+        return _all_boards(user_id)
+    return _board_call(run)
+
+
+@app.post("/boards/{board_id}/columns", response_model=BoardsListResponse, status_code=status.HTTP_201_CREATED)
+def add_board_column(board_id: str, payload: BoardColumnCreateRequest, user_id: str = Depends(get_current_user_id)):
+    def run():
+        boards.add_column(user_id, board_id, payload.name)
+        return _all_boards(user_id)
+    return _board_call(run)
+
+
+@app.patch("/boards/{board_id}/columns/{column_id}", response_model=BoardsListResponse)
+def update_board_column(board_id: str, column_id: str, payload: BoardColumnUpdateRequest,
+                        user_id: str = Depends(get_current_user_id)):
+    def run():
+        if payload.name is not None:
+            boards.rename_column(user_id, board_id, column_id, payload.name)
+        if payload.direction:
+            boards.move_column(user_id, board_id, column_id, payload.direction)
+        return _all_boards(user_id)
+    return _board_call(run)
+
+
+@app.delete("/boards/{board_id}/columns/{column_id}", response_model=BoardsListResponse)
+def delete_board_column(board_id: str, column_id: str, user_id: str = Depends(get_current_user_id)):
+    def run():
+        boards.delete_column(user_id, board_id, column_id)
+        return _all_boards(user_id)
+    return _board_call(run)
+
+
+@app.post("/boards/{board_id}/cards", response_model=BoardsListResponse, status_code=status.HTTP_201_CREATED)
+def send_task_to_board(board_id: str, payload: BoardCardSendRequest, user_id: str = Depends(get_current_user_id)):
+    """«Στείλε σε πίνακα…» — or move it here from another of the user's boards."""
+    def run():
+        boards.send_to_board(service, user_id, payload.task_id, board_id, payload.column_id)
+        return _all_boards(user_id)
+    return _board_call(run)
+
+
+@app.delete("/boards/{board_id}/cards/{task_id}", response_model=BoardsListResponse)
+def remove_task_from_board(board_id: str, task_id: str, user_id: str = Depends(get_current_user_id)):
+    """«Βγάλε από τον πίνακα». The task itself is untouched."""
+    def run():
+        boards.remove_from_board(service, user_id, board_id, task_id)
+        return _all_boards(user_id)
+    return _board_call(run)
+
+
+@app.post("/boards/{board_id}/cards/{task_id}/move", response_model=BoardCardWriteResponse)
+def move_board_card(board_id: str, task_id: str, payload: BoardCardMoveRequest,
+                    user_id: str = Depends(get_current_user_id)):
+    """A card dragged to a column. Into «Έγινε» it completes the task, into
+    «Ακυρώθηκε» it calls it off — everywhere, through the same service calls
+    the rest of the app uses. See boards.move_card."""
+    def run():
+        task = boards.move_card(service, user_id, board_id, task_id, payload.column_id, payload.reason)
+        return BoardCardWriteResponse(task=task, boards=boards.list_boards(user_id))
+    return _board_call(run)
+
+
+@app.post("/boards/{board_id}/cards/new", response_model=BoardCardWriteResponse, status_code=status.HTTP_201_CREATED)
+def create_board_card(board_id: str, payload: BoardCardCreateRequest, user_id: str = Depends(get_current_user_id)):
+    """«Νέα κάρτα» typed into a column: an ordinary, approved task, on this board."""
+    def run():
+        task = boards.create_card(service, user_id, board_id, payload.column_id,
+                                  payload.task_name, payload.workspace_id)
+        return BoardCardWriteResponse(task=task, boards=boards.list_boards(user_id))
+    return _board_call(run)
+
+
+@app.get("/boards/{board_id}/activity", response_model=BoardActivityResponse)
+def list_board_activity(board_id: str, limit: int = 100, user_id: str = Depends(get_current_user_id)):
+    """Who did what on this board, and when, newest first — including what
+    happened to its cards from elsewhere (a colleague, the agent, Hostaway)."""
+    return _board_call(lambda: BoardActivityResponse(activity=boards.board_activity(user_id, board_id, limit)))
+
+
 # ---------------------------------------------------------------- categories
 
 
@@ -2129,6 +2325,12 @@ def _handle_outgoing_hostaway_message(user_id: str, data: dict) -> dict:
         updates.update(services.hostaway_completion_fields())
 
     repository.update_hostaway_thread_fields(user_id, task.record_id, updates)
+    if updates.get("is_completed"):
+        # Nobody pressed anything: the board's diary says Hostaway (2026-09-26).
+        repository.log_task_event_on_boards(
+            task.record_id, "task_completed", actor_user_id=None,
+            actor_kind="hostaway", task_name=task.task_name,
+        )
     logging.info(
         f"[hostaway webhook] Human reply on conversation {conversation_id}: "
         f"task {task.record_id} ({task.priority}) -> "

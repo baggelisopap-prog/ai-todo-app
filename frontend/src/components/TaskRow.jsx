@@ -15,6 +15,7 @@ import { useSwipeRow } from '../hooks/useSwipeRow';
 import { useRecurrence } from '../hooks/useRecurrence';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useMembers } from '../hooks/useMembers';
+import { useBoards } from '../hooks/useBoards';
 import { placementParts } from '../utils/workspaces';
 import Avatar from './Avatar';
 import TaskMenu from './TaskMenu';
@@ -87,6 +88,10 @@ const TRAY_WIDTH_PX = 140;
 function TaskRow({ task, variant = 'default', showCreated = false, isSelected, isNew = false, onOpen, onUpdate, onTaskDeleted, onShowToast, onAcknowledged }) {
   const { t } = useTranslation();
   const actions = useTaskActions(task, { onUpdate, onTaskDeleted, onShowToast, onAcknowledged });
+  // «Στείλε σε πίνακα…» appears only for someone with a board, and only for
+  // work that can go on one — see TaskMenu.
+  const boards = useBoards();
+  const canSendToBoard = boards.boards.length > 0 && task.approval_status && !task.dropped_at && !task.deleted_at;
   const { isPending, isCompleted, isRejected } = actions;
 
   const [isTrayOpen, setIsTrayOpen] = useState(false);
@@ -656,6 +661,7 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
                 isDropped={actions.isDropped}
                 onDrop={actions.openDrop}
                 onUndrop={actions.undrop}
+                onSendToBoard={canSendToBoard ? () => boards.openPicker(task) : null}
                 t={t}
               />
             </span>

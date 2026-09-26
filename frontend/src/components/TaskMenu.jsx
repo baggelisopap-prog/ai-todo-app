@@ -32,6 +32,7 @@ function TaskMenu({
   isDropped,
   onDrop,
   onUndrop,
+  onSendToBoard,
   t,
 }) {
   const busy = pendingAction !== null;
@@ -94,6 +95,11 @@ function TaskMenu({
       disabled: busy,
       onClick: onUnreject,
     },
+    // Only for someone who HAS a board — the owner's rule, so a person who
+    // never uses boards sees nothing new — and only for work that could go on
+    // one: approved, not called off, not a record. The caller decides both and
+    // passes null otherwise.
+    onSendToBoard && { key: 'board', label: t('boards.send'), onClick: onSendToBoard },
     onEdit && { key: 'edit', label: t('actions.edit'), onClick: onEdit },
     { key: 'delete', label: t('actions.delete'), onClick: onDelete, danger: true, separator: true },
   ];

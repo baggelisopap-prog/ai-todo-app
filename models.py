@@ -455,3 +455,48 @@ class RecurrenceRule(BaseModel):
             if self.month_day != -1 and not (1 <= self.month_day <= 31):
                 raise ValueError("month_day must be 1-31, or -1 for the last day")
         return self
+
+class BoardColumn(BaseModel):
+    """
+    One column of a board (2026-09-26).
+
+    `kind` is what makes two columns more than a label: 'done' and 'dropped'
+    change the TASK — a card there is a completed or called-off task, and the
+    board never keeps its own second opinion about that. Every other column is
+    'open' and entirely the user's to shape. Exactly one of each ending per
+    board, enforced by partial unique indexes in the database.
+    """
+    record_id: Optional[str] = None
+    board_id: Optional[str] = None
+    name: str = Field(min_length=1, max_length=40)
+    kind: Literal["open", "done", "dropped"] = "open"
+    position: int = 0
+
+
+class BoardCard(BaseModel):
+    """
+    Which task sits on which board — one board per task per person.
+
+    `column_id` is meaningful for OPEN columns only; see utils/boards.js and
+    boards.column_for for how a card's visible column is derived from the
+    task's own state first.
+    """
+    task_id: str
+    board_id: str
+    column_id: Optional[str] = None
+    position: float = 0
+    added_at: Optional[str] = None
+
+
+class Board(BaseModel):
+    """
+    A kanban board of tasks the user picked (2026-09-26). Personal for now —
+    `user_id` stays a data-layer scoping concern, as on Workspace. Returned
+    with its columns and cards so the screen needs one request.
+    """
+    record_id: Optional[str] = None
+    name: str = Field(min_length=1, max_length=60)
+    position: int = 0
+    created_at: Optional[str] = None
+    columns: list[BoardColumn] = Field(default_factory=list)
+    cards: list[BoardCard] = Field(default_factory=list)

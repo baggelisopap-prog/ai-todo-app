@@ -780,6 +780,20 @@ class TaskService:
                 task_name=updated_task.task_name,
             )
 
+        # Every BOARD this task sits on hears about it too (2026-09-26) —
+        # whoever's board, and wherever the tick came from: the board itself,
+        # Today, a colleague's list, the agent. Separate from the room's log
+        # above, which only exists for shared workspaces; a board is a person's
+        # own and wants its diary either way. Never raises.
+        if "is_completed" in updates:
+            repository.log_task_event_on_boards(
+                record_id,
+                "task_completed" if updates["is_completed"] else "task_reopened",
+                actor_user_id=user_id,
+                actor_kind="agent" if completed_source == "agent" else "user",
+                task_name=updated_task.task_name,
+            )
+
         if "is_completed" in updates:
             try:
                 calendar_fields = repository.get_task_calendar_fields(user_id, record_id)
@@ -892,6 +906,10 @@ class TaskService:
                 task_name=updated.task_name,
                 details={"reason": cleaned} if cleaned else None,
             )
+        repository.log_task_event_on_boards(
+            record_id, "task_dropped", actor_user_id=user_id, actor_kind="user",
+            task_name=updated.task_name, details={"reason": cleaned} if cleaned else None,
+        )
         logger.info(f"[drop] {user_id} called off task {record_id} (reason given: {bool(cleaned)})")
         return updated
 
@@ -912,6 +930,10 @@ class TaskService:
                 task_id=record_id,
                 task_name=updated.task_name,
             )
+        repository.log_task_event_on_boards(
+            record_id, "task_undropped", actor_user_id=user_id, actor_kind="user",
+            task_name=updated.task_name,
+        )
         logger.info(f"[drop] {user_id} reopened called-off task {record_id}")
         return updated
 
@@ -1624,6 +1646,11 @@ class TaskService:
                 if updates.get("is_completed"):
                     task.is_completed = True
                     tasks_completed += 1
+                    # Nobody pressed anything: the board's diary says Hostaway.
+                    repository.log_task_event_on_boards(
+                        task.record_id, "task_completed", actor_user_id=None,
+                        actor_kind="hostaway", task_name=task.task_name,
+                    )
 
                 outcome = (
                     "completed" if updates.get("is_completed")

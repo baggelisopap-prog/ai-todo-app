@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
 from supabase import create_client
-from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings, RecurrenceRule, Workspace, WorkspaceMember, Category
+from models import TaskRecord, PushSubscriptionRequest, PushSubscriptionRecord, AppSettings, RecurrenceRule, Workspace, WorkspaceMember, Category, Board, BoardColumn, BoardCard
 # The two predicates that answer "does this task still count". Imported rather
 # than re-implemented: the three queries below each used to carry their own
 # hand-written version, written before deleted_at existed, and that is exactly
@@ -2763,3 +2763,273 @@ def cancel_task(user_id: str, record_id: str, cancelled_at: str) -> bool:
         .execute()
     )
     return bool(response.data)
+
+
+# --- Boards (2026-09-26) ---------------------------------------------------
+#
+# A kanban board of tasks the user picked. Four tables; see
+# docs/migrations/2026-09-26-boards.sql for why each exists. Every function
+# scopes by the board OWNER's user_id — boards are personal for now, and the
+# secret key bypasses RLS, so this scoping is the enforcement.
+#
+# The board never stores whether a task is done or called off. A card's column
+# is derived from the task first (boards.column_for); board_cards.column_id only
+# remembers which OPEN column it sits in.
+
+
+def _row_to_board_column(row: dict) -> BoardColumn:
+    return BoardColumn(
+        record_id=row.get("id"),
+        board_id=row.get("board_id"),
+        name=_get(row, "name", ""),
+        kind=_get(row, "kind", "open"),
+        position=_get(row, "position", 0),
+    )
+
+
+def _row_to_board_card(row: dict) -> BoardCard:
+    return BoardCard(
+        task_id=row["task_id"],
+        board_id=row["board_id"],
+        column_id=row.get("column_id"),
+        position=_get(row, "position", 0),
+        added_at=row.get("added_at"),
+    )
+
+
+def _assemble_boards(board_rows: list[dict], user_id: str) -> list[Board]:
+    """Boards with their columns and cards, in three reads however many boards
+    there are: one per table, never one per board."""
+    if not board_rows:
+        return []
+    ids = [row["id"] for row in board_rows]
+    column_rows = (
+        supabase.table("board_columns").select("*").in_("board_id", ids)
+        .eq("user_id", user_id).order("position").execute().data or []
+    )
+    card_rows = (
+        supabase.table("board_cards").select("*").in_("board_id", ids)
+        .eq("user_id", user_id).order("position").execute().data or []
+    )
+    columns, cards = {}, {}
+    for row in column_rows:
+        columns.setdefault(row["board_id"], []).append(_row_to_board_column(row))
+    for row in card_rows:
+        cards.setdefault(row["board_id"], []).append(_row_to_board_card(row))
+    return [
+        Board(
+            record_id=row["id"],
+            name=_get(row, "name", ""),
+            position=_get(row, "position", 0),
+            created_at=row.get("created_at"),
+            columns=columns.get(row["id"], []),
+            cards=cards.get(row["id"], []),
+        )
+        for row in board_rows
+    ]
+
+
+def get_boards(user_id: str) -> list[Board]:
+    rows = (
+        supabase.table("boards").select("*").eq("user_id", user_id)
+        .order("position").order("created_at").execute().data or []
+    )
+    return _assemble_boards(rows, user_id)
+
+
+def get_board(user_id: str, board_id: str) -> Optional[Board]:
+    rows = (
+        supabase.table("boards").select("*").eq("id", board_id)
+        .eq("user_id", user_id).limit(1).execute().data or []
+    )
+    boards = _assemble_boards(rows, user_id)
+    return boards[0] if boards else None
+
+
+def create_board(user_id: str, name: str, columns: list[tuple[str, str]], position: int) -> Board:
+    """The board and all its columns. Two inserts rather than one transaction,
+    since PostgREST has none to offer, so a failure between them would leave a
+    board with no columns; that board is deleted again before the error rises."""
+    row = (
+        supabase.table("boards")
+        .insert({"user_id": user_id, "name": name, "position": position})
+        .execute().data[0]
+    )
+    try:
+        supabase.table("board_columns").insert([
+            {"board_id": row["id"], "user_id": user_id, "name": col_name, "kind": kind, "position": i}
+            for i, (col_name, kind) in enumerate(columns)
+        ]).execute()
+    except Exception:
+        supabase.table("boards").delete().eq("id", row["id"]).eq("user_id", user_id).execute()
+        raise
+    return get_board(user_id, row["id"])
+
+
+def update_board(user_id: str, board_id: str, updates: dict) -> bool:
+    response = (
+        supabase.table("boards").update(updates).eq("id", board_id)
+        .eq("user_id", user_id).execute()
+    )
+    return bool(response.data)
+
+
+def delete_board(user_id: str, board_id: str) -> bool:
+    """Columns, cards and the diary go with it (ON DELETE CASCADE). The TASKS
+    do not: a card is a link to a task, never the task itself."""
+    response = (
+        supabase.table("boards").delete().eq("id", board_id)
+        .eq("user_id", user_id).execute()
+    )
+    return bool(response.data)
+
+
+def add_board_column(user_id: str, board_id: str, name: str, position: int) -> BoardColumn:
+    """Always an OPEN column. Each board is born with its one 'done' and one
+    'dropped', and the database refuses a second of either."""
+    row = (
+        supabase.table("board_columns")
+        .insert({"board_id": board_id, "user_id": user_id, "name": name,
+                 "kind": "open", "position": position})
+        .execute().data[0]
+    )
+    return _row_to_board_column(row)
+
+
+def update_board_column(user_id: str, column_id: str, updates: dict) -> bool:
+    response = (
+        supabase.table("board_columns").update(updates).eq("id", column_id)
+        .eq("user_id", user_id).execute()
+    )
+    return bool(response.data)
+
+
+def delete_board_column(user_id: str, column_id: str) -> bool:
+    """Cards in it fall back to the first open column: board_cards.column_id is
+    ON DELETE SET NULL, and NULL means exactly that."""
+    response = (
+        supabase.table("board_columns").delete().eq("id", column_id)
+        .eq("user_id", user_id).execute()
+    )
+    return bool(response.data)
+
+
+def get_card_for_task(user_id: str, task_id: str) -> Optional[BoardCard]:
+    """This person's card for a task, on whichever of their boards. There is at
+    most one (UNIQUE task_id, user_id)."""
+    rows = (
+        supabase.table("board_cards").select("*").eq("task_id", task_id)
+        .eq("user_id", user_id).limit(1).execute().data or []
+    )
+    return _row_to_board_card(rows[0]) if rows else None
+
+
+def upsert_board_card(user_id: str, board_id: str, task_id: str,
+                      column_id: Optional[str], position: float) -> BoardCard:
+    """Puts a task on a board, or MOVES it there from another of this person's
+    boards, since (task_id, user_id) is unique: one board per task per person."""
+    row = (
+        supabase.table("board_cards")
+        .upsert(
+            {"board_id": board_id, "task_id": task_id, "user_id": user_id,
+             "column_id": column_id, "position": position},
+            on_conflict="task_id,user_id",
+        )
+        .execute().data[0]
+    )
+    return _row_to_board_card(row)
+
+
+def update_board_card(user_id: str, task_id: str, updates: dict) -> Optional[BoardCard]:
+    rows = (
+        supabase.table("board_cards").update(updates).eq("task_id", task_id)
+        .eq("user_id", user_id).execute().data or []
+    )
+    return _row_to_board_card(rows[0]) if rows else None
+
+
+def delete_board_card(user_id: str, board_id: str, task_id: str) -> bool:
+    """Takes the card off the board. The task is untouched."""
+    response = (
+        supabase.table("board_cards").delete().eq("board_id", board_id)
+        .eq("task_id", task_id).eq("user_id", user_id).execute()
+    )
+    return bool(response.data)
+
+
+def log_board_activity(
+    board_id: str,
+    owner_id: str,
+    action: str,
+    actor_user_id: Optional[str] = None,
+    actor_kind: str = "user",
+    task_id: Optional[str] = None,
+    task_name: Optional[str] = None,
+    details: Optional[dict] = None,
+) -> None:
+    """
+    NEVER RAISES, the same contract as log_workspace_activity and for the same
+    reason: by the time this runs, what the user asked for has happened, and a
+    diary that could not be written must not turn it into a reported failure.
+    """
+    try:
+        supabase.table("board_activity").insert({
+            "board_id": board_id,
+            "user_id": owner_id,
+            "actor_user_id": actor_user_id,
+            "actor_kind": actor_kind,
+            "action": action,
+            "task_id": task_id,
+            "task_name": task_name,
+            "details": details,
+        }).execute()
+    except Exception as e:
+        logger.error(f"[board activity] failed to record {action} on board {board_id}: {e}")
+
+
+def log_task_event_on_boards(
+    task_id: str,
+    action: str,
+    actor_user_id: Optional[str],
+    actor_kind: str,
+    task_name: Optional[str],
+    details: Optional[dict] = None,
+) -> None:
+    """
+    Something happened to a TASK (completed, reopened, called off, deleted),
+    and every board it sits on gets a line in its diary, whoever's board that
+    is and wherever the act came from: the board itself, a colleague's list,
+    the agent, a Hostaway reply. That last part is the point of the owner's
+    «ποιος κάνει τι και πότε»: a card that moves on your board because
+    somebody else acted elsewhere must still say who.
+
+    One indexed read of board_cards per call, answering "nothing" for every
+    task on no board. NEVER RAISES, since it runs after the write it reports.
+    """
+    try:
+        rows = (
+            supabase.table("board_cards").select("board_id, user_id")
+            .eq("task_id", task_id).execute().data or []
+        )
+    except Exception as e:
+        logger.error(f"[board activity] could not look up boards for task {task_id}: {e}")
+        return
+    for row in rows:
+        log_board_activity(
+            board_id=row["board_id"],
+            owner_id=row["user_id"],
+            action=action,
+            actor_user_id=actor_user_id,
+            actor_kind=actor_kind,
+            task_id=task_id,
+            task_name=task_name,
+            details=details,
+        )
+
+
+def get_board_activity(user_id: str, board_id: str, limit: int = 100) -> list[dict]:
+    return (
+        supabase.table("board_activity").select("*").eq("board_id", board_id)
+        .eq("user_id", user_id).order("created_at", desc=True).limit(limit)
+        .execute().data or []
+    )

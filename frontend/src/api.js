@@ -801,3 +801,82 @@ export async function restoreWorkspace(workspaceId) {
 export async function getWorkspaceActivity(workspaceId, limit = 100) {
   return request(`/workspaces/${workspaceId}/activity?limit=${limit}`);
 }
+
+// ------------------------------------------------------------------ boards
+//
+// A kanban view of tasks the user picks (2026-09-26). Every write answers with
+// the whole list of the user's boards, so the screen replaces its copy rather
+// than patching it. A card move and a new card also return the task as it now
+// stands, since «Έγινε» completes it and «Ακυρώθηκε» calls it off.
+
+/** GET /boards — every board, each with its columns and cards (task ids). */
+export async function getBoards() {
+  return request('/boards');
+}
+
+/** POST /boards — columnNames are the four defaults in the user's language. */
+export async function createBoard(name, columnNames) {
+  return request('/boards', {
+    method: 'POST',
+    body: JSON.stringify({ name, column_names: columnNames }),
+  });
+}
+
+export async function renameBoard(boardId, name) {
+  return request(`/boards/${boardId}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+}
+
+/** DELETE /boards/{id} — the board and its cards go; no task is touched. */
+export async function deleteBoard(boardId) {
+  return request(`/boards/${boardId}`, { method: 'DELETE' });
+}
+
+export async function addBoardColumn(boardId, name) {
+  return request(`/boards/${boardId}/columns`, { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+/** PATCH a column: `{ name }` renames, `{ direction: -1 | 1 }` moves it. */
+export async function updateBoardColumn(boardId, columnId, changes) {
+  return request(`/boards/${boardId}/columns/${columnId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(changes),
+  });
+}
+
+export async function deleteBoardColumn(boardId, columnId) {
+  return request(`/boards/${boardId}/columns/${columnId}`, { method: 'DELETE' });
+}
+
+/** «Στείλε σε πίνακα…» — or move it here from another board. */
+export async function sendTaskToBoard(boardId, taskId, columnId = null) {
+  return request(`/boards/${boardId}/cards`, {
+    method: 'POST',
+    body: JSON.stringify({ task_id: taskId, column_id: columnId }),
+  });
+}
+
+/** «Βγάλε από τον πίνακα» — the task itself is untouched. */
+export async function removeTaskFromBoard(boardId, taskId) {
+  return request(`/boards/${boardId}/cards/${taskId}`, { method: 'DELETE' });
+}
+
+/** A card dropped on a column. Returns { task, boards }. */
+export async function moveBoardCard(boardId, taskId, columnId, reason = null) {
+  return request(`/boards/${boardId}/cards/${taskId}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ column_id: columnId, reason }),
+  });
+}
+
+/** «Νέα κάρτα» typed into a column. Returns { task, boards }. */
+export async function createBoardCard(boardId, columnId, taskName, workspaceId = null) {
+  return request(`/boards/${boardId}/cards/new`, {
+    method: 'POST',
+    body: JSON.stringify({ column_id: columnId, task_name: taskName, workspace_id: workspaceId }),
+  });
+}
+
+/** GET /boards/{id}/activity — who did what on this board, newest first. */
+export async function getBoardActivity(boardId, limit = 100) {
+  return request(`/boards/${boardId}/activity?limit=${limit}`);
+}
