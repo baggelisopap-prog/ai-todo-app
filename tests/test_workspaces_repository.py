@@ -338,6 +338,9 @@ TASK_COLUMNS = {
     # docs/migrations/2026-09-26-task-cancellation.sql, which MUST run before
     # this code is deployed — every insert carries them, as None.
     "dropped_at", "dropped_by", "drop_reason",
+    # Start date (2026-09-26), docs/migrations/2026-09-26-task-start-date.sql —
+    # also to run before deploying.
+    "start_date",
 }
 
 

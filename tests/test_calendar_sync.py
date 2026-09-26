@@ -69,6 +69,11 @@ def _service(monkeypatch, returned_task, connected=True, pushed_event_id="event-
     log = {"pushed": [], "stored": []}
 
     class _Repo:
+        # Read since 2026-09-26 by any edit that touches a date, to keep a
+        # start date in step with its deadline (services.settle_task_range).
+        def get_task(self, user_id, record_id):
+            return returned_task
+
         def update_task(self, user_id, record_id, updates):
             return returned_task
 

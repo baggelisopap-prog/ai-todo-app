@@ -274,6 +274,7 @@ class AirtableTaskRepository:
             dropped_at=row.get("dropped_at"),
             dropped_by=row.get("dropped_by"),
             drop_reason=row.get("drop_reason"),
+            start_date=row.get("start_date"),
         )
 
     def save_task(self, user_id: str, task: TaskRecord) -> TaskRecord:

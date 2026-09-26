@@ -9,7 +9,7 @@ import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEve
 import { openEventInGoogle } from '../utils/openEventInGoogle';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
-import { isVisibleTask, isClosedForMe } from '../utils/taskDisplay';
+import { isVisibleTask, isClosedForMe, isRunning } from '../utils/taskDisplay';
 import { useMembers } from '../hooks/useMembers';
 
 /**
@@ -31,13 +31,16 @@ function splitByDay(list, today, myId) {
   return {
     today: open.filter((task) => task.due_date === today),
     overdue: open.filter((task) => task.due_date && task.due_date < today),
+    // Started, due later (2026-09-26): the reason a start date exists at all.
+    running: open.filter((task) => isRunning(task, today)),
     pending: list.filter(
       (task) => task.due_date === today && !task.approval_status && isVisibleTask(task)
     ),
   };
 }
 
-const countAll = (piles) => piles.today.length + piles.overdue.length + piles.pending.length;
+const countAll = (piles) =>
+  piles.today.length + piles.overdue.length + piles.pending.length + piles.running.length;
 
 function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskAcknowledged }) {
   const { t } = useTranslation();
@@ -49,6 +52,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   // colleague closed is still waiting for my OK.
   const { myId } = useMembers();
   const [overdueExpanded, setOverdueExpanded] = useState(true);
+  const [runningExpanded, setRunningExpanded] = useState(true);
   const [todayEvents, setTodayEvents] = useState([]);
   const { settings } = useAppSettings();
 
@@ -102,6 +106,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const todayTasks = piles.today;
   const overdueTasks = piles.overdue;
   const pendingTodayTasks = piles.pending;
+  const runningTasks = piles.running;
 
   const isEmpty = countAll(piles) === 0;
   // Only asked when the screen is empty AND something is filtered, so the cost
@@ -189,6 +194,44 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
               />
             )}
           </div>
+
+          {/* «Τρέχουν» — started, due later. Its own group rather than mixed
+              into Today, so «what is due today» keeps meaning exactly that; and
+              it folds like the overdue group, so a week of long jobs never
+              buries the day. Not named «Σε εξέλιξη»: that is a board column,
+              which the user moves by hand — this group is decided by dates. */}
+          {runningTasks.length > 0 && (
+            <div className="mb-6">
+              <button
+                onClick={() => setRunningExpanded(!runningExpanded)}
+                className="w-full flex items-center justify-between text-left mb-3"
+              >
+                <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide">
+                  {t('sections.running_header')} <span className="ml-1 text-[var(--text-muted)]">({runningTasks.length})</span>
+                </h2>
+                <svg
+                  className={`w-4 h-4 text-[var(--text-muted)] transition-transform flex-shrink-0 ${runningExpanded ? 'rotate-180' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {runningExpanded && (
+                <TaskList
+                  tasks={runningTasks}
+                  sortBy="due_date"
+                  expandedTaskId={expandedTaskId}
+                  onToggleExpand={onToggleExpand}
+                  onUpdateTask={onTaskUpdate}
+                  onTaskAcknowledged={onTaskAcknowledged}
+                  onTaskDeleted={onTaskDeleted}
+                  onShowToast={onShowToast}
+                />
+              )}
+            </div>
+          )}
 
           {pendingTodayTasks.length > 0 && (
             <div className="mb-6">

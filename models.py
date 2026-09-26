@@ -245,6 +245,26 @@ class TaskRecord(SingleTask):
     dropped_by: Optional[str] = None
     drop_reason: Optional[str] = None
 
+    # WHEN THE WORK BEGINS (2026-09-26) — the «από» beside due_date's «έως».
+    # A task with one shows on Today from this day until its deadline.
+    #
+    # On TaskRecord and deliberately NOT on SingleTask, which is the schema the
+    # extractor answers in: the owner decided the AI does not set this, only a
+    # person does («το αφήνουμε κενό για τον καταγραφέα»). Being absent from
+    # SingleTask is what makes that true — the model is never offered the field.
+    start_date: Optional[str] = None
+
+    @field_validator("start_date")
+    @classmethod
+    def validate_start_date(cls, v):
+        if v is None:
+            return v
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("start_date must be a valid date in YYYY-MM-DD format")
+        return v
+
 
 class PushSubscriptionKeys(BaseModel):
     p256dh: str

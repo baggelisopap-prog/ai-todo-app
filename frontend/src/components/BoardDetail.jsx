@@ -17,7 +17,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { layoutBoard, columnFor } from '../utils/boards';
 import { formatDate } from '../utils/formatDate';
-import { dueTone, DUE_TONE_CLASSES, checklistProgress } from '../utils/taskDisplay';
+import { dueTone, DUE_TONE_CLASSES, checklistProgress, effectiveStart } from '../utils/taskDisplay';
 import { priorityColor } from '../utils/priorityColor';
 import { effectiveAssignee } from '../utils/assignment';
 import { UNFILED } from '../utils/workspaces';
@@ -80,6 +80,8 @@ function CardBody({ task, column, isSharedRoom, assignee, t }) {
       <div className="mt-1.5 flex items-center gap-2 text-xs">
         {task.due_date && (
           <span className={`tabular-nums ${finished || dropped ? 'text-[var(--text-muted)]' : DUE_TONE_CLASSES[tone]}`}>
+            {/* «από → έως» when there is a start, as on the list row. */}
+            {effectiveStart(task) ? `${formatDate(effectiveStart(task))} → ` : ''}
             {formatDate(task.due_date, task.due_time)}
           </span>
         )}

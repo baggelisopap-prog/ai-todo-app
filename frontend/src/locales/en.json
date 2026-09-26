@@ -71,7 +71,8 @@
     "today_header": "Today",
     "overdue_header": "Overdue",
     "tomorrow": "TOMORROW",
-    "no_date": "NO DATE"
+    "no_date": "NO DATE",
+    "running_header": "Running"
   },
   "today": {
     "pending_approval_header": "Pending approval ({{count}})"
@@ -190,7 +191,13 @@
     "hostaway_message_count": "{{count}} messages",
     "hostaway_answered": "Replied — still open",
     "assignee_label": "Assignee",
-    "unassigned": "Nobody"
+    "unassigned": "Nobody",
+    "from_date": "from {{date}}",
+    "start_date_label": "Start date",
+    "start_short": "From",
+    "due_short": "Until",
+    "start_clear": "Remove start date",
+    "start_after_due": "The start date is after the deadline."
   },
   "menu": {
     "open_menu": "Open menu"

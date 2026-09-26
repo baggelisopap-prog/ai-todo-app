@@ -8,6 +8,7 @@ import {
   priorityLabel,
   checklistProgress,
   awaitsMyAcknowledgement,
+  effectiveStart,
 } from '../utils/taskDisplay';
 import { effectiveAssignee } from '../utils/assignment';
 import { useTaskActions } from '../hooks/useTaskActions';
@@ -531,7 +532,14 @@ function TaskRow({ task, variant = 'default', showCreated = false, isSelected, i
               className={`flex-none inline-flex items-center gap-1 tabular-nums font-medium ${task.due_date ? DUE_TONE_CLASSES[tone] : 'text-[var(--text-muted)]'}`}
             >
               <CalendarIcon className="w-3 h-3 flex-none" aria-hidden="true" />
-              {task.due_date ? formatDate(task.due_date, task.due_time) : t('task.no_date')}
+              {/* «από → έως» in the date's own place, and only when there is a
+                  start (2026-09-26) — the owner's «να μη φορτωθεί»: no new
+                  element on the row, the same span saying a little more. */}
+              {effectiveStart(task)
+                ? (task.due_date
+                  ? `${formatDate(effectiveStart(task))} → ${formatDate(task.due_date, task.due_time)}`
+                  : t('task.from_date', { date: formatDate(effectiveStart(task)) }))
+                : (task.due_date ? formatDate(task.due_date, task.due_time) : t('task.no_date'))}
             </span>
 
             {/* A HAIRLINE, NOT A « · ».

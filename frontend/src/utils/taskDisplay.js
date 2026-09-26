@@ -108,6 +108,31 @@ export function priorityLabel(priority) {
   return priority || 'P3';
 }
 
+/**
+ * A task's start date — «από» (2026-09-26) — when it is a sensible one: on or
+ * before the deadline. The Google Calendar pull can move a deadline without the
+ * start, and a start stranded after its deadline is ignored here rather than
+ * shown as a range that runs backwards. Mirrors agent_tools.starts_by.
+ */
+export function effectiveStart(task) {
+  const start = task?.start_date;
+  if (!start) return null;
+  if (task.due_date && start > task.due_date) return null;
+  return start;
+}
+
+/**
+ * Has this task STARTED and is it due later? That is Today's «Τρέχουν» group —
+ * the owner's choice (2026-09-26): a three-day job shows from its first day,
+ * not only on its last. Due today or overdue is left out: those have their own
+ * groups already. A start with no deadline runs until it is done.
+ */
+export function isRunning(task, todayISO) {
+  const start = effectiveStart(task);
+  if (!start || start > todayISO) return false;
+  return !task.due_date || task.due_date > todayISO;
+}
+
 export function checklistProgress(checklist) {
   if (!checklist || checklist.length === 0) return null;
   return { done: checklist.filter((item) => item.done).length, total: checklist.length };

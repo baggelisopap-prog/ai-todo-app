@@ -275,6 +275,7 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
         # The day view's scopes, so «βάλε τα ληξιπρόθεσμα για αύριο» can reach
         # overdue tasks the conversation never named one by one.
         day_overdue, day_today, day_pending = agent_tools.day_view_tasks(cached_tasks, today_iso, ctx)
+        day_running = agent_tools.running_tasks(cached_tasks, today_iso, ctx)
         day_scopes = {"overdue": {t.record_id for t in day_overdue},
                       "today": {t.record_id for t in day_today}}
 
@@ -358,7 +359,7 @@ def ask_agent(question: str, user_id: str, conversation_id: str = None) -> dict:
             # that was not the first one listed. Falls back to what the tools
             # returned when the answer names none of them.
             candidates = list(seen_tasks.items()) + [
-                (t.record_id, t.task_name) for t in day_overdue + day_today + day_pending
+                (t.record_id, t.task_name) for t in day_overdue + day_today + day_pending + day_running
             ]
             refs = agent_tools.refs_from_answer(answer, candidates)
             if not refs:

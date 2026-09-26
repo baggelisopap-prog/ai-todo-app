@@ -96,6 +96,9 @@ class UpdateTaskRequest(BaseModel):
     # workspace: a task handed to somebody who cannot see it is handed over in
     # appearance only.
     assigned_to: Optional[str] = None
+    # When the work begins (2026-09-26). Explicit null clears it. Set by a
+    # person only — the agent's write whitelist does not carry it.
+    start_date: Optional[str] = None
 
 class CreateTaskRequest(BaseModel):
     """Request body for manual task creation via POST /tasks"""
@@ -108,6 +111,7 @@ class CreateTaskRequest(BaseModel):
     checklist: Optional[list[ChecklistItem]] = None
     workspace_id: Optional[str] = None
     category_id: Optional[str] = None
+    start_date: Optional[str] = None
 
 class RecurrenceCreateRequest(BaseModel):
     """Request body for POST /recurrences. Mirrors RecurrenceRule minus the
@@ -710,6 +714,14 @@ def create_task_manual(request: CreateTaskRequest, user_id: str = Depends(get_cu
             detail="task_name cannot be empty"
         )
 
+    # A start after the deadline is not a range (2026-09-26). ISO dates compare
+    # correctly as text, which is why both columns are text.
+    if request.start_date and request.due_date and request.start_date > request.due_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="start_date cannot be after due_date"
+        )
+
     # Same rule as PATCH: a category must live inside the task's workspace,
     # and the workspace must be one the user is a member of (2026-09-26).
     try:
@@ -786,6 +798,9 @@ def update_task(record_id: str, request: UpdateTaskRequest, user_id: str = Depen
     try:
         updated_task = service.update_task(user_id, record_id, updates)
         return updated_task
+    except services.InvalidTaskRange as e:
+        # The user's data, not a server fault — and the phone retries a 500.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         # We can't easily distinguish "not found" from "network error" with current repository
         # For now, log and return 500. Future improvement: repository should raise typed exceptions.

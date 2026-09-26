@@ -208,6 +208,51 @@ def push_task_to_calendar_now(user_id: str, task: TaskRecord) -> None:
         logger.error(f"[calendar sync] Immediate push failed for task {task.record_id}: {e}")
 
 
+class InvalidTaskRange(ValueError):
+    """A start date after the deadline (2026-09-26). A ValueError, so a route
+    that only knows ValueError still refuses; PATCH /tasks answers it with 422."""
+
+
+def settle_task_range(existing: Optional[TaskRecord], updates: dict) -> dict:
+    """
+    Keeps a task's «από–έως» a range when either end moves (2026-09-26).
+
+    MOVING THE DEADLINE MOVES THE START WITH IT, by the same number of days, when
+    the start itself was not sent. A Wednesday-to-Friday job dragged to next
+    Friday in the calendar is still a three-day job, and a start left behind on
+    the old Wednesday would either stretch it to ten days or — dragged earlier —
+    leave the start after the deadline. This is what a calendar does with a
+    multi-day event, and it is the only way a quick reschedule, which only knows
+    about one date, can keep the range whole.
+
+    An explicit start (the form sends both) is taken as given; an explicit null
+    clears it. Clearing the deadline keeps the start: "starts Monday" is a real
+    task. A start after the deadline is refused with InvalidTaskRange — never
+    silently swapped, which would be the app deciding which date was the typo.
+
+    Returns a NEW dict; the caller's is never modified.
+    """
+    if existing is None or ("start_date" not in updates and "due_date" not in updates):
+        return updates
+    settled = dict(updates)
+    old_start, old_due = existing.start_date, existing.due_date
+    new_due = settled.get("due_date", old_due)
+
+    if "start_date" not in settled and old_start and old_due and new_due and new_due != old_due:
+        try:
+            shift = date.fromisoformat(new_due) - date.fromisoformat(old_due)
+            settled["start_date"] = (date.fromisoformat(old_start) + shift).isoformat()
+        except ValueError:
+            # A malformed stored date is not this edit's problem to fix; leave
+            # the start alone rather than refuse the reschedule.
+            pass
+
+    new_start = settled.get("start_date", old_start)
+    if new_start and new_due and new_start > new_due:
+        raise InvalidTaskRange("The start date is after the deadline.")
+    return settled
+
+
 class WorkspaceNotFound(ValueError):
     """A workspace the user is not a member of — or one that does not exist;
     the two are deliberately indistinguishable. A ValueError, so a route that
@@ -612,6 +657,9 @@ class TaskService:
             # occurrences pass their rule's placement since 2026-09-26.
             workspace_id=fields.get("workspace_id"),
             category_id=fields.get("category_id"),
+            # Only a person's own form sends it (POST /tasks); every other
+            # creator — the webhook, occurrences, the agent — leaves it None.
+            start_date=fields.get("start_date"),
         )
         return self.repository.save_task(user_id, task)
 
@@ -658,6 +706,11 @@ class TaskService:
         discarding it meant a second round trip for a column we had in hand.
         """
         gate_row = access.require_write(user_id, record_id)
+
+        # «από–έως» stays a range when either end moves (settle_task_range).
+        # One read, and only on an edit that touches a date.
+        if "start_date" in updates or "due_date" in updates:
+            updates = settle_task_range(self.repository.get_task(user_id, record_id), updates)
 
         # Handing work to somebody. `in updates` rather than a truth test: an
         # explicit null is how a client puts work back on the pile, and it must

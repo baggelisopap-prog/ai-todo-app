@@ -71,7 +71,8 @@
     "today_header": "Σήμερα",
     "overdue_header": "Εκπρόθεσμες",
     "tomorrow": "ΑΥΡΙΟ",
-    "no_date": "ΧΩΡΙΣ ΗΜΕΡΟΜΗΝΙΑ"
+    "no_date": "ΧΩΡΙΣ ΗΜΕΡΟΜΗΝΙΑ",
+    "running_header": "Τρέχουν"
   },
   "today": {
     "pending_approval_header": "Σε αναμονή έγκρισης ({{count}})"
@@ -190,7 +191,13 @@
     "hostaway_message_count": "{{count}} μηνύματα",
     "hostaway_answered": "Απαντήθηκε — ακόμα ανοιχτό",
     "assignee_label": "Υπεύθυνος",
-    "unassigned": "Κανένας"
+    "unassigned": "Κανένας",
+    "from_date": "από {{date}}",
+    "start_date_label": "Από (έναρξη)",
+    "start_short": "Από",
+    "due_short": "Έως",
+    "start_clear": "Αφαίρεση ημερομηνίας έναρξης",
+    "start_after_due": "Η ημερομηνία έναρξης είναι μετά την προθεσμία."
   },
   "menu": {
     "open_menu": "Άνοιγμα μενού"

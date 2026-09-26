@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { agentEditTask, getWorkspaceMembers } from '../api';
 import { formatDate } from '../utils/formatDate';
 import { priorityColor } from '../utils/priorityColor';
-import { describeRecurrence, dueTone, DUE_TONE_CLASSES, priorityLabel } from '../utils/taskDisplay';
+import { describeRecurrence, dueTone, DUE_TONE_CLASSES, priorityLabel, effectiveStart } from '../utils/taskDisplay';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { useRecurrence } from '../hooks/useRecurrence';
@@ -85,6 +85,8 @@ function draftFromTask(task) {
     priority: task.priority,
     due_date: task.due_date || '',
     due_time: task.due_time || '',
+    // «από» (2026-09-26). '' for none, like the two above.
+    start_date: task.start_date || '',
     checklist: [...(task.checklist || [])],
     // '' rather than null, because CustomSelect's options are strings and an
     // empty value is how "Unfiled" is expressed in a <select>. handleSave
@@ -299,6 +301,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   // change your mind, close it, then open a DIFFERENT task — without the reset
   // that second task would show an empty time row nobody asked it for.
   const [showTime, setShowTime] = useState(false);
+  const [showStart, setShowStart] = useState(false);
   const [showAssignee, setShowAssignee] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
@@ -370,6 +373,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
     setDraft(draftFromTask(task));
     setSaveError(null);
     setShowTime(false);
+    setShowStart(false);
     setShowAssignee(false);
     setShowChecklist(false);
     setDescOpen(false);
@@ -377,6 +381,12 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   }
 
   async function handleSave() {
+    // A start after the deadline is not a range. Said here, in words, before
+    // the server would refuse it with a 422 (services.settle_task_range).
+    if (draft.start_date && draft.due_date && draft.start_date > draft.due_date) {
+      setSaveError(t('task.start_after_due'));
+      return;
+    }
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -387,6 +397,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
         priority: draft.priority,
         due_date: draft.due_date || null,
         due_time: draft.due_time || null,
+        start_date: draft.start_date || null,
         checklist: draft.checklist,
         // '' back to null: the columns are nullable uuids, and an empty string
         // is not a uuid. Null IS the value that means unfiled.
@@ -687,6 +698,13 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                     Hostaway integration still keys off it, Browse still filters
                     on it, and handleSave still carries draft.category through
                     unchanged. It is simply not shown to a person any more. */}
+                {effectiveStart(task) && (
+                  <span className="text-[var(--text-secondary)]">
+                    {task.due_date
+                      ? `${formatDate(effectiveStart(task))} →`
+                      : t('task.from_date', { date: formatDate(effectiveStart(task)) })}
+                  </span>
+                )}
                 {task.due_date && (
                   <span className={DUE_TONE_CLASSES[tone]}>
                     {formatDate(task.due_date, task.due_time)}
@@ -862,7 +880,35 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                     reminder needs a due_time, and an empty time two rows below
                     was never seen while the date was being set — the task was
                     simply silent on the day. */}
+                {/* «Από» (2026-09-26): a row only once asked for, like the
+                    time and the assignee — its pill is at the foot. */}
+                {(draft.start_date || showStart) && (
+                  <SheetRow icon={<FieldIcon label={t('task.start_date_label')}><CalendarIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
+                    <span className="flex-shrink-0 text-xs text-[var(--text-muted)]">{t('task.start_short')}</span>
+                    <input
+                      type="date"
+                      autoFocus={showStart && !draft.start_date}
+                      value={draft.start_date}
+                      max={draft.due_date || undefined}
+                      onChange={(e) => updateDraft('start_date', e.target.value)}
+                      aria-label={t('task.start_date_label')}
+                      className={BARE_INPUT_CLASSES}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { updateDraft('start_date', ''); setShowStart(false); }}
+                      aria-label={t('task.start_clear')}
+                      className="tap-40 flex-shrink-0 px-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    >
+                      ✕
+                    </button>
+                  </SheetRow>
+                )}
+
                 <SheetRow icon={<FieldIcon label={t('task.due_date_label')}><CalendarIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
+                  {(draft.start_date || showStart) && (
+                    <span className="flex-shrink-0 text-xs text-[var(--text-muted)]">{t('task.due_short')}</span>
+                  )}
                   <input
                     type="date"
                     value={draft.due_date}
@@ -992,6 +1038,13 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                   label={t('task.description_label')}
                   onClick={() => setDescOpen((v) => !v)}
                 />
+                {!draft.start_date && !showStart && (
+                  <SheetPill
+                    icon={<CalendarIcon className="w-4 h-4" />}
+                    label={t('task.start_date_label')}
+                    onClick={() => setShowStart(true)}
+                  />
+                )}
                 {members.length > 1 && !draft.assigned_to && !showAssignee && (
                   <SheetPill
                     icon={<PersonIcon className="w-4 h-4" />}
