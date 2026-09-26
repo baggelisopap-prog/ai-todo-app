@@ -1,6 +1,25 @@
 # DECISIONS — choices + rationale (current decisions only)
 _Append-only in spirit, but SUPERSEDED decisions move to DECISIONS_ARCHIVE.md (kept in git, excluded from the Project index) so retrieval can never mistake a cancelled decision for a current one. When a spec overturns a decision, name what's superseded and have the new entry reference what it replaced. Criterion for staying here: "does this still govern the code?"_
 
+### Decision: you may place work only where you are a member, and only what changes is judged
+Found while giving recurrences a workspace: a workspace id sent by a client was never checked. `validate_workspace_placement` looked only at the category, and only when one was sent — so anyone knowing a room's id, an ex-member for one, could create a task in it or move one there. Measured on the previous code with the writes stubbed: `POST /tasks` into a foreign room answered 201 and `PATCH` 200. Its category check had the opposite fault: it found the category by who CREATED it, so a member of a shared room could not file under the owner's categories («That category no longer exists»). The owner approved the fix with the rest («ναι σε όλα»).
+
+**One rule, the one the rest of the app already runs on: membership.** A new workspace must be one the user is a member of (else 404 — as `_require_membership` answers, because confirming a room exists is itself a leak); a category is found among the rooms the user is in, and must sit in the task's workspace.
+
+**Only what CHANGES is judged.** The task sheet sends workspace and category on every save. Judging unchanged ones would lock a creator out of editing their own task the day they leave its room — `access.can_write` still lets them write it. So `PATCH` compares with the task as it is; the same for recurrences.
+
+**The extractor files nowhere rather than refusing.** A stale active room, or a default the user has left, makes capture put the task unfiled. Rejected: a 404 there — capture is the one thing that must never fail, and unfiled work still reaches its owner.
+
+### Decision: a recurrence's days go where the rule says — or unfiled, never hidden
+The owner: «τα επαναλαμβανομενα να τα ορίζω όταν ορίζω την επανάληψη». So the placement is part of the rule, set in its form in the words of a task's sheet, and copied into each day as it is made. Three choices inside that:
+- **Where the form opens.** Where the rule goes when editing; where the task lives for «make this repeat»; for a new rule, the room on screen, else the default one — the extractor's answer to the same question. An unfiled task made to repeat stays unfiled: the form does not invent a room.
+- **An edit sends no placement until the user changes it.** The workspace list may still be loading when the form opens; sending what it shows then would unfile an existing rule silently.
+- **A day whose room the user no longer sees goes unfiled.** Rejected: into the room anyway. A room archived or left is one the user cannot see, and a daily pill put there is a pill nobody is reminded of; unfiled is still in «Όλα». Checked when days are actually made, about once a day per rule — never on the idle ticks.
+The integration's category is refused for a rule outright: a hand-made daily task inside Hostaway would be escalated as a guest message every two hours.
+
+### Decision: no fallback model for the agent — the owner's call
+The agent and the ✨ editor run on `gemini-3.1-flash-lite-preview`, a preview Google may withdraw at short notice; on that day every agent question fails until the name is changed and deployed. Offered: on a "model unavailable" error, retry once on `gemini-3.5-flash` — nothing on normal days, ~6× per question on the bad ones, and 1–2 paid questions to prove it. **Declined**: «ναι σε όλα εκτος το μοντελο αν κλεισει θα βάλουμε άλλο κλάην». The cost of this choice, named so it is not rediscovered as a surprise: the day it closes, the agent is down until someone notices and changes one constant. The extractors and the Hostaway classifier use `gemini-3.5-flash` and are not affected.
+
 ### Decision: what the user did not say is removed in code, and the instruction keeps its explicit-null examples
 The commonest failure of the 2026-09-25 audit had one shape in two places: the model filling an argument nobody asked for. On writes — a time on 8 cards of the baseline (the clock at the moment of asking, or 00:00), descriptions copied back or invented («Γραφείο», the workspace's name, as the new description of «Έλεγχος θερμοσίφωνα»). On searches — once the instruction was shortened, 8 of 23 questions got a filter nobody asked for: today's date and P1 on «πόσα ανοιχτά έχω στο Business;», workspace="no workspace" as if it were a default, "*" as a wildcard. For times the instruction already said "only if the user gave one". The rule existed and did not hold.
 
