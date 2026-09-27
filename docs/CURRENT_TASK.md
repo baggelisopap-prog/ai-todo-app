@@ -1,13 +1,17 @@
-ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits on `main` (`3711d60`, `92c9572`, `6fd05ee`), built while the owner was away — NOT pushed, NOT migrated, never seen on a screen
+ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, confirmed LIVE — nobody has used any of it yet
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
-> **NOTHING HERE IS LIVE.** Three commits sit on local `main`, not pushed (a push auto-deploys).
-> Three migrations are written and NOT run. **Order to deploy, and it matters:** run in the
-> Supabase SQL Editor `docs/migrations/2026-09-26-task-cancellation.sql`, then
-> `2026-09-26-boards.sql`, then `2026-09-26-task-start-date.sql`, each with its commented
-> VERIFICATION block; only then push. Pushing first breaks EVERY task creation: every insert
-> carries `dropped_at` / `dropped_by` / `drop_reason` / `start_date`, and Supabase rejects an
-> unknown column wholesale (PGRST204).
+> **LIVE SINCE 2026-09-27, ~11:19 Athens.** The owner ran the three migrations
+> («έτρεξα τα 3 migrations, κάνε push»); before pushing they were read back from the live
+> database, read-only: `tasks: dropped_at, dropped_by, drop_reason, start_date -> PRESENT`, 0 rows
+> with any of them set, and `boards`, `board_columns`, `board_cards`, `board_activity` all PRESENT
+> with 0 rows. Pushed `3e6963e..712e2bd`. About 30 s later the server's public API description
+> listed 9 `/boards` paths, `/tasks/{record_id}/drop`, and `start_date` / `dropped_at` on
+> TaskRecord; the site served a new bundle (`index-CZLyJ-67.js`) carrying the new strings.
+>
+> **Not proven by any of that: that creating a task still works.** Every insert now carries the
+> four new columns; they exist, so it should — but no task has been created since. The first task
+> he adds settles it.
 >
 > The previous task (recurrence placement, `ff03cf1`) is finished as far as code goes; its open
 > items — the refile of the 29 «Χάπι end» days and three unwatched checks — moved into its
@@ -128,8 +132,7 @@ Not run: the agent against the real model (costs money; never without his yes).
 
 ## What a person has actually SEEN
 
-**Nothing.** No screen was opened — not by him, not by me. The app cannot run these features
-end to end until the migrations exist, and I did not render the components in a browser.
+**Nothing yet.** Live, but no screen has been opened — not by him, not by me.
 
 ## What NOBODY has watched
 
@@ -142,7 +145,7 @@ end to end until the migrations exist, and I did not render the components in a 
 6. **The board diary** after a completion made elsewhere (Today, the agent, a Hostaway reply).
 7. **The agent answering «γιατί δεν έγινε το Χ;»** for a cancelled task, and «τι έχω την Πέμπτη;»
    for a Wednesday–Friday job — tested offline only; the real model has never seen either field.
-8. **The three migrations themselves.**
+8. **A task created after the deploy** — the one real risk of the new columns (see the top).
 
 ## A correction to what I told him
 
