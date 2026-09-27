@@ -1,4 +1,4 @@
-ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, confirmed LIVE — nobody has used any of it yet
+ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, LIVE; a task created after the deploy works; the owner does NOT like the UI/UX — the redesign is the next piece
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **LIVE SINCE 2026-09-27, ~11:19 Athens.** The owner ran the three migrations
@@ -9,9 +9,9 @@ _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" fi
 > listed 9 `/boards` paths, `/tasks/{record_id}/drop`, and `start_date` / `dropped_at` on
 > TaskRecord; the site served a new bundle (`index-CZLyJ-67.js`) carrying the new strings.
 >
-> **Not proven by any of that: that creating a task still works.** Every insert now carries the
-> four new columns; they exist, so it should — but no task has been created since. The first task
-> he adds settles it.
+> **Creating a task works after the deploy — settled by the owner, 2026-09-27:** «έφτιαξα
+> εργασία, δουλεύει». (Until then this said it was unproven: every insert carries the four new
+> columns, and no task had been created since the push.)
 >
 > The previous task (recurrence placement, `ff03cf1`) is finished as far as code goes; its open
 > items — the refile of the 29 «Χάπι end» days and three unwatched checks — moved into its
@@ -132,7 +132,20 @@ Not run: the agent against the real model (costs money; never without his yes).
 
 ## What a person has actually SEEN
 
-**Nothing yet.** Live, but no screen has been opened — not by him, not by me.
+**The owner, 2026-09-27, on the live app:** created a task — it works — and looked at the new
+screens: «δεν μου αρέσει το ui και ux». He did not say which screens or what, and chose to stop
+there: «θα ασχολειθώ μετά με το άλλο». So the UI of this work is **rejected as built** and the
+details are still to be asked. (Until then this section said «Nothing yet».)
+
+## NEXT: redesign the UI/UX of this work, with him looking
+
+Start by asking what he disliked and where — the board screen, the ⋯ menu items, the «Γιατί;»
+dialog, «Τρέχουν», the «από → έως» date, the «Από (έναρξη)» pill — before drawing anything. Then
+the way that works with him: a short brainstorm, then **real-size HTML mockups published as an
+artifact that he opens on his phone**, built from the real tokens in `frontend/src/index.css`;
+expect three or four rounds. The eleven choices listed above were made without him and are all
+open. The behaviour underneath (what a column means, what a cancellation does, how the range
+moves) was decided by him and is not in question unless he reopens it.
 
 ## What NOBODY has watched
 
@@ -145,7 +158,7 @@ Not run: the agent against the real model (costs money; never without his yes).
 6. **The board diary** after a completion made elsewhere (Today, the agent, a Hostaway reply).
 7. **The agent answering «γιατί δεν έγινε το Χ;»** for a cancelled task, and «τι έχω την Πέμπτη;»
    for a Wednesday–Friday job — tested offline only; the real model has never seen either field.
-8. **A task created after the deploy** — the one real risk of the new columns (see the top).
+8. ~~A task created after the deploy~~ — settled by the owner, it works (see the top).
 
 ## A correction to what I told him
 
