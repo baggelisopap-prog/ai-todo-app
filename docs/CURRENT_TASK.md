@@ -1,4 +1,4 @@
-ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, LIVE; a task created after the deploy works; the owner does NOT like the UI/UX — redesign CHOSEN 2026-09-29 (proposals 1 + 2 + 4 + 5α + 5β), not built yet
+ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, LIVE; a task created after the deploy works; the owner does NOT like the UI/UX — redesign CHOSEN 2026-09-29 (proposals 1 + 2 + 4 + 5α + 5β); stage A (1 + 2) LIVE, waiting for his look; stage B (4 + 5α + 5β) not built
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **LIVE SINCE 2026-09-27, ~11:19 Athens.** The owner ran the three migrations
@@ -175,7 +175,11 @@ ends with were asked again. His answers:
 shown to him on his phone before Stage B = 4 + 5α + 5β is built, because 4 and 5 sit on top of
 1 and 2 and his UI calls usually change 3–4 times on first look.
 
-#### Stage A — BUILT 2026-09-29, frontend only, NOT committed, NOT pushed
+#### Stage A — PUSHED and LIVE 2026-09-29 (`3c081a9`), frontend only; NOT yet seen by him
+
+> Pushed `170a497..3f9a9a2` with his yes («Commit και push»). About 30 s later the site served
+> `index-BrPOQ6VP.js` carrying the new strings (`strip_title`, `phone_hint`,
+> `tile_moved_yesterday`). No migration: nothing on the server changed.
 
 - `BoardStrip` (tiles at the top of «Όλα»; «+ Πίνακας» beside the tabs when there is no board),
   `BoardPage` (own bar ‹ / name ▾ / ⋯; App draws no AppBar, no AskBar, no app FAB while it is
