@@ -109,6 +109,119 @@ export function layoutBoard(board, tasksById, now = new Date()) {
 }
 
 /**
+ * «Επόμενο βήμα» — where the button on a card sends it: the next column along,
+ * ending at «Έγινε». Null for a card already finished or called off. Never
+ * «Ακυρώθηκε»: calling work off is a decision, not the next step of it
+ * (proposal 2, chosen 2026-09-29).
+ */
+export function nextStepColumn(columns, columnId) {
+  const ordered = orderedColumns(columns).filter((c) => c.kind !== 'dropped');
+  const index = ordered.findIndex((c) => c.record_id === columnId);
+  if (index < 0 || ordered[index].kind !== 'open') return null;
+  return ordered[index + 1] || null;
+}
+
+/**
+ * What a board's tile at the top of «Όλα» says: how many cards wait in the
+ * first column, how many are under way in the other open ones, how many are
+ * done (the folded ones too — it is a tally, not a view), and when a card last
+ * arrived somewhere or finished. Called-off cards are not counted: the tile
+ * reports progress, and a cancellation is not any.
+ *
+ * lastMovedAt reads what the board already has — card.position is the moment a
+ * card arrived in its column, and a finished task carries when it finished —
+ * so the tile needs no request of its own.
+ */
+export function boardSummary(board, tasksById, now = new Date()) {
+  const lanes = layoutBoard(board, tasksById, now);
+  const summary = { waiting: 0, doing: 0, done: 0, lastMovedAt: null };
+  let firstOpen = true;
+  for (const lane of lanes) {
+    const count = lane.cards.length + lane.older.length;
+    if (lane.column.kind === 'open') {
+      if (firstOpen) summary.waiting += count;
+      else summary.doing += count;
+      firstOpen = false;
+    } else if (lane.column.kind === 'done') {
+      summary.done += count;
+    }
+    for (const { card, task } of [...lane.cards, ...lane.older]) {
+      const moments = [card.position, endedAt(task)].filter((m) => typeof m === 'number' && m > 0);
+      for (const moment of moments) {
+        if (summary.lastMovedAt === null || moment > summary.lastMovedAt) summary.lastMovedAt = moment;
+      }
+    }
+  }
+  return summary;
+}
+
+/**
+ * Calendar days between a moment and now, in the phone's own time: 23:00 last
+ * night is 1 («χθες»), not 0, even though fewer than 24 hours have passed.
+ */
+export function daysAgo(ms, now = new Date()) {
+  if (typeof ms !== 'number' || Number.isNaN(ms)) return null;
+  const then = new Date(ms);
+  const a = Date.UTC(then.getFullYear(), then.getMonth(), then.getDate());
+  const b = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(0, Math.round((b - a) / DAY_MS));
+}
+
+// How far a finger must travel sideways, and how little up or down, for a drag
+// on the board to count as «show me the next column» rather than a scroll.
+// The mockup's numbers, which the owner tried on his phone before choosing.
+const SWIPE_MIN_X = 60;
+const SWIPE_MAX_Y = 50;
+
+/**
+ * Which column a phone shows after a drag of (dx, dy) pixels. Left shows the
+ * next column, right the previous; a short or mostly vertical drag is a scroll
+ * and changes nothing. The ends do not wrap round.
+ */
+export function swipeColumnIndex(index, dx, dy, count) {
+  if (Math.abs(dx) < SWIPE_MIN_X || Math.abs(dy) >= SWIPE_MAX_Y) return index;
+  const next = index + (dx < 0 ? 1 : -1);
+  return next < 0 || next >= count ? index : next;
+}
+
+/**
+ * The small line under each button of the «Μετακίνηση» sheet, as a key and its
+ * number: what pressing it will DO, said before it is pressed — the endings
+ * change the task itself, everywhere.
+ */
+export function moveOptionHint(column, currentColumnId, count) {
+  if (column.record_id === currentColumnId) return { key: 'here' };
+  if (column.kind === 'done') return { key: 'completes' };
+  if (column.kind === 'dropped') return { key: 'asks_why' };
+  return { key: 'cards', count };
+}
+
+/**
+ * The open board after a bottom-bar tab is pressed. «Όλα» pressed while already
+ * on a board goes back to the list — the usual meaning of pressing the tab you
+ * are on. Any other press leaves it open, so coming back to «Όλα» lands on the
+ * same board rather than on the list.
+ */
+export function boardAfterTabPress({ activeTab, pressed, openBoardId }) {
+  if (pressed === 'browse' && activeTab === 'browse') return null;
+  return openBoardId || null;
+}
+
+/**
+ * Which board «Δημιουργία» just made, from the list the server answered with:
+ * one the screen had not seen, with the name that was typed — else the last
+ * unseen one (a new board goes to the end). Not simply "the first unseen one":
+ * a board made on another phone meanwhile is unseen too, and opening that
+ * instead of yours reads as the app ignoring what you typed.
+ */
+export function pickCreatedBoard(seenBoards, answeredBoards, typedName) {
+  const seen = new Set((seenBoards || []).map((b) => b.record_id));
+  const fresh = (answeredBoards || []).filter((b) => !seen.has(b.record_id));
+  const name = (typedName || '').trim();
+  return fresh.find((b) => b.name === name) || fresh[fresh.length - 1] || null;
+}
+
+/**
  * The board and card this task sits on, or null. There is at most one per
  * person — the owner's «μία εργασία σε έναν πίνακα τη φορά».
  */

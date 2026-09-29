@@ -24,6 +24,7 @@ import { useAutoRefresh } from './hooks/useAutoRefresh';
 import { useMediaQuery, DESKTOP_QUERY } from './hooks/useMediaQuery';
 import { filterTasksByWorkspace } from './utils/workspaces';
 import { isVisibleTask } from './utils/taskDisplay';
+import { boardAfterTabPress } from './utils/boards';
 
 // Loaded on demand, not in the first download. Each of these is already
 // rendered behind a condition — Calendar only on its tab, the three modals
@@ -42,6 +43,27 @@ import { isVisibleTask } from './utils/taskDisplay';
 const CalendarView = lazy(() => import('./components/CalendarView'));
 const AddTaskModal = lazy(() => import('./components/AddTaskModal'));
 const SettingsModal = lazy(() => import('./components/SettingsModal'));
+// A board brings drag-and-drop with it (@dnd-kit) for the computer's columns,
+// and most opens of the app never reach one.
+const BoardPage = lazy(() => import('./components/BoardPage'));
+
+// Which board is open, for the browser tab's session: going to Today and back
+// lands on the same board, but a new launch starts on the list, like
+// everything else in the app.
+const OPEN_BOARD_KEY = 'boards.selected';
+
+function readOpenBoard() {
+  try { return sessionStorage.getItem(OPEN_BOARD_KEY); } catch { return null; }
+}
+
+function writeOpenBoard(id) {
+  try {
+    if (id) sessionStorage.setItem(OPEN_BOARD_KEY, id);
+    else sessionStorage.removeItem(OPEN_BOARD_KEY);
+  } catch {
+    // Private mode: the board is simply not remembered between tab switches.
+  }
+}
 const AgentChatModal = lazy(() =>
   // Named export, so it needs mapping to the default shape lazy() expects.
   import('./components/AgentChatModal').then((m) => ({ default: m.AgentChatModal }))
@@ -81,9 +103,29 @@ const TAB_TITLE_KEYS = {
  * and against a task list (the counts beside each category). Both are known at
  * this line and at no line above it.
  */
-function TaskViews({ activeTab, viewProps, onTaskCreated }) {
+function TaskViews({ activeTab, viewProps, onTaskCreated, openBoardId, onOpenBoard, onCloseBoard }) {
   const { activeId } = useWorkspaces();
   const scoped = { ...viewProps, tasks: filterTasksByWorkspace(viewProps.tasks, activeId) };
+
+  // A board open in «Όλα» is a page of its own (2026-09-29). It gets EVERY
+  // task, not the room-scoped list: a board shows every card on it, whatever
+  // room the switcher is set to — see BoardPage.
+  if (activeTab === 'browse' && openBoardId) {
+    return (
+      <Suspense fallback={null}>
+        <BoardPage
+          boardId={openBoardId}
+          tasks={viewProps.tasks}
+          onBack={onCloseBoard}
+          onOpenBoard={onOpenBoard}
+          onTaskUpdate={viewProps.onTaskUpdate}
+          onTaskDeleted={viewProps.onTaskDeleted}
+          onShowToast={viewProps.onShowToast}
+          onTaskAcknowledged={viewProps.onTaskAcknowledged}
+        />
+      </Suspense>
+    );
+  }
 
   return (
     <TaskFilterProvider tasks={scoped.tasks}>
@@ -94,9 +136,9 @@ function TaskViews({ activeTab, viewProps, onTaskCreated }) {
           <CalendarView {...scoped} onTaskCreated={onTaskCreated} />
         </Suspense>
       )}
-      {/* allTasks for the Boards tab only: a board shows every card on it,
-          whatever room the switcher is set to — see BoardsView. */}
-      {activeTab === 'browse' && <BrowseView {...scoped} allTasks={viewProps.tasks} />}
+      {/* allTasks for the board tiles only: they count every card on a board,
+          whatever room the switcher is set to — see BoardStrip. */}
+      {activeTab === 'browse' && <BrowseView {...scoped} allTasks={viewProps.tasks} onOpenBoard={onOpenBoard} />}
     </TaskFilterProvider>
   );
 }
@@ -154,6 +196,7 @@ function App() {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
   const [activeTab, setActiveTab] = useState('inbox');
+  const [openBoardId, setOpenBoardId] = useState(readOpenBoard);
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   // The tasks the last add produced. Only the Inbox reads it today — that is
   // where an add lands — but it rides in viewProps with expandedTaskId because
@@ -484,9 +527,28 @@ function App() {
   }
 
   function handleTabChange(tab) {
+    // «Όλα» pressed while a board is open goes back to the list; any other
+    // tab leaves the board open, so «Όλα» brings you back to it.
+    const board = boardAfterTabPress({ activeTab, pressed: tab, openBoardId });
+    if (board !== openBoardId) {
+      setOpenBoardId(board);
+      writeOpenBoard(board);
+    }
     setActiveTab(tab);
     setExpandedTaskId(null);
   }
+
+  const openBoard = useCallback((id) => {
+    setOpenBoardId(id);
+    writeOpenBoard(id);
+  }, []);
+  const closeBoard = useCallback(() => {
+    setOpenBoardId(null);
+    writeOpenBoard(null);
+  }, []);
+  // The board's page brings its own bar and has no AskBar under it — see
+  // BoardPage for why.
+  const isBoardPage = activeTab === 'browse' && Boolean(openBoardId);
 
   // Must stay identical to InboxView's own filter — a badge that disagrees with
   // the list it points at is worse than no badge.
@@ -565,6 +627,7 @@ function App() {
       {/* min-w-0 so a wide child — the calendar grid — shrinks to fit this
           column instead of shoving the sidebar off the screen. */}
       <div className="flex flex-col flex-1 min-w-0">
+      {!isBoardPage && (
       <AppBar
         title={t(TAB_TITLE_KEYS[activeTab])}
         profile={profile}
@@ -586,6 +649,7 @@ function App() {
         roomPicker={!isDesktop}
         tasks={tasks}
       />
+      )}
 
       {/* No pt-* here any more. The old one existed only to push content out
           from under two fixed circular buttons; AppBar is sticky and in flow,
@@ -616,11 +680,16 @@ function App() {
             activeTab={activeTab}
             viewProps={viewProps}
             onTaskCreated={handleTaskCreated}
+            openBoardId={openBoardId}
+            onOpenBoard={openBoard}
+            onCloseBoard={closeBoard}
           />
         )}
       </main>
 
-      {!isDesktop && expandedTaskId === null && (
+      {/* Not on a board's page: its + writes a card onto that board, never into
+          the Inbox, so the page draws its own. */}
+      {!isDesktop && expandedTaskId === null && !isBoardPage && (
         <FloatingActionButtons
           onAddClick={() => setIsAddModalOpen(true)}
           onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
@@ -635,7 +704,7 @@ function App() {
           silently the first time either changes. */}
       {!isDesktop && (
         <div className="fixed bottom-0 left-0 right-0 z-40">
-          <AskBar onOpen={openAgent} />
+          {!isBoardPage && <AskBar onOpen={openAgent} />}
           <BottomNav activeTab={activeTab} onTabChange={handleTabChange} inboxCount={pendingCount} />
         </div>
       )}

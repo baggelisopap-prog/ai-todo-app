@@ -268,8 +268,7 @@
     "sort_due_desc": "Λήγει: αργότερα πρώτα",
     "kind_dropped": "Ακυρωμένα",
     "event_dropped": "Ακυρώθηκε {{when}}",
-    "undrop": "Αναίρεση",
-    "tab_boards": "Πίνακες"
+    "undrop": "Αναίρεση"
   },
   "toast": {
     "added_one": "Προστέθηκε 1 εργασία",
@@ -681,7 +680,7 @@
     "older": "Παλαιότερες ({{count}})",
     "new_card": "Νέα κάρτα",
     "new_card_placeholder": "Τι πρέπει να γίνει;",
-    "drag_hint": "Κράτα πατημένη μια κάρτα για να τη μετακινήσεις, ή πάτα ⋯ → Μετακίνηση σε…",
+    "drag_hint": "Σύρε μια κάρτα σε άλλη στήλη, ή πάτα ⋯ → Μετακίνηση σε…",
     "board_menu": "Επιλογές πίνακα",
     "rename": "Μετονομασία",
     "columns_title": "Στήλες",
@@ -690,8 +689,6 @@
     "delete": "Διαγραφή πίνακα",
     "delete_title": "Διαγραφή του «{{name}}»;",
     "delete_body": "Φεύγει ο πίνακας και οι κάρτες του. Οι εργασίες μένουν όπως είναι, στις λίστες σου.",
-    "empty": "Δεν έχεις πίνακα ακόμα.",
-    "empty_hint": "Ένας πίνακας έχει στήλες, όπως το Trello. Εσύ διαλέγεις ποιες εργασίες μπαίνουν — από το ⋯ κάθε εργασίας, ή με «Νέα κάρτα».",
     "new": "Νέος πίνακας",
     "create": "Δημιουργία",
     "column_name": "Όνομα στήλης",
@@ -722,6 +719,32 @@
       "task_dropped": "{{actor}}: ακύρωσε «{{task}}»",
       "task_dropped_reason": "{{actor}}: ακύρωσε «{{task}}» — {{reason}}",
       "task_undropped": "{{actor}}: αναίρεσε την ακύρωση του «{{task}}»"
-    }
+    },
+    "back": "Πίσω στο «Όλα»",
+    "switch_title": "Πίνακες",
+    "strip_title": "Πίνακες",
+    "new_short": "Νέος",
+    "tabs_new": "Πίνακας",
+    "tile_waiting_one": "{{count}} να γίνει",
+    "tile_waiting": "{{count}} να γίνουν",
+    "tile_doing": "{{count}} σε εξέλιξη",
+    "tile_done_one": "{{count}} έγινε",
+    "tile_done": "{{count}} έγιναν",
+    "tile_moved_today": "κίνηση σήμερα",
+    "tile_moved_yesterday": "κίνηση χθες",
+    "tile_moved_days": "κίνηση πριν από {{count}} μέρες",
+    "column_empty": "Καμία κάρτα εδώ.",
+    "phone_hint": "Σύρε δεξιά–αριστερά για άλλη στήλη · κράτα πατημένη μια κάρτα για «Μετακίνηση»",
+    "move_title": "Μετακίνηση",
+    "move_hint_here": "εδώ είναι τώρα",
+    "move_hint_completes": "ολοκληρώνει την εργασία παντού",
+    "move_hint_asks_why": "θα ρωτήσει «Γιατί;»",
+    "move_hint_cards_one": "1 κάρτα",
+    "move_hint_cards": "{{count}} κάρτες",
+    "open_task": "Άνοιγμα εργασίας",
+    "moved": "Μπήκε στο «{{column}}»",
+    "moved_done": "Ολοκληρώθηκε · μπήκε στο «{{column}}»",
+    "moved_dropped": "Ακυρώθηκε · μπήκε στο «{{column}}»",
+    "undo": "Αναίρεση"
   }
 }

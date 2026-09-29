@@ -1,10 +1,11 @@
-import { useState, useMemo, lazy, Suspense } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import TaskList from './TaskList';
 import HistoryList from './HistoryList';
 import CustomSelect from './CustomSelect';
 import FilterBar from './FilterBar';
+import BoardStrip from './BoardStrip';
 import { searchTasks } from '../utils/searchTasks';
 import { isVisibleTask, isClosedForMe } from '../utils/taskDisplay';
 import { useMembers } from '../hooks/useMembers';
@@ -24,10 +25,6 @@ import {
   RANGE_YEAR,
   RANGE_ALL,
 } from '../utils/taskHistory';
-
-// Loaded on demand, like CalendarView in App.jsx: a board brings drag-and-drop
-// with it (@dnd-kit, ~75 kB), and most opens of «Όλα» never reach this tab.
-const BoardsView = lazy(() => import('./BoardsView'));
 
 /**
  * Browse: the whole library, in two tabs.
@@ -59,6 +56,7 @@ function BrowseView({
   onTaskRestored,
   onShowToast,
   onTaskAcknowledged,
+  onOpenBoard,
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState('active');
@@ -159,16 +157,18 @@ function BrowseView({
   const tabs = [
     { id: 'active', label: t('browse.tab_active') },
     { id: 'history', label: t('browse.tab_history') },
-    // A third tab since 2026-09-26: boards are a way of arranging the library,
-    // and the bottom bar is kept at four on purpose — see BoardsView.
-    { id: 'boards', label: t('browse.tab_boards') },
   ];
 
-  // A board is wider than a list: its columns sit side by side, so that tab
-  // lets go of the reading width the other two keep.
   return (
-    <div className={`${tab === 'boards' ? 'max-w-none' : 'max-w-3xl'} mx-auto p-4 md:p-6`}>
+    <div className="max-w-3xl mx-auto p-4 md:p-6">
       {/* Heading lives in AppBar — see TodayView for the reasoning. */}
+
+      {/* The boards, as tiles, above everything else (2026-09-29). They were a
+          third tab here until the owner chose, from mockups, to have a board
+          open as its own page — see BoardPage. A board shows every card on it
+          whatever the room switcher says, so the tiles count over the whole
+          library, not the room-scoped list. */}
+      <BoardStrip tasks={allTasks || tasks} onOpenBoard={onOpenBoard} />
 
       {/* Two tabs, underlined rather than pilled: they switch what the screen
           IS, while the pill-shaped controls below switch what it shows. Giving
@@ -193,23 +193,10 @@ function BrowseView({
             </button>
           );
         })}
+        {/* The door to a first board, for someone who has none yet. */}
+        <BoardStrip slot="tabs" tasks={allTasks || tasks} onOpenBoard={onOpenBoard} />
       </div>
 
-      {tab === 'boards' ? (
-        // The board has none of the controls below: no search, no filters, no
-        // sort. It shows what was put on it — the owner's «στέλνω εγώ» — and it
-        // gets EVERY task rather than the room-scoped list (see BoardsView).
-        <Suspense fallback={null}>
-          <BoardsView
-            tasks={allTasks || tasks}
-            onTaskUpdate={onTaskUpdate}
-            onTaskDeleted={onTaskDeleted}
-            onShowToast={onShowToast}
-            onTaskAcknowledged={onTaskAcknowledged}
-          />
-        </Suspense>
-      ) : (
-      <>
       {/* No debounce and no request. The tasks are already in memory, so this
           filters on every keystroke for free — which is also why it can be the
           first thing on the screen rather than hidden behind a magnifier. */}
@@ -335,8 +322,6 @@ function BrowseView({
           onTaskReplaced={onTaskAcknowledged}
           onShowToast={onShowToast}
         />
-      )}
-      </>
       )}
     </div>
   );

@@ -268,8 +268,7 @@
     "sort_due_desc": "Due: latest first",
     "kind_dropped": "Cancelled",
     "event_dropped": "Cancelled {{when}}",
-    "undrop": "Undo",
-    "tab_boards": "Boards"
+    "undrop": "Undo"
   },
   "toast": {
     "added_one": "Added 1 task",
@@ -681,7 +680,7 @@
     "older": "Older ({{count}})",
     "new_card": "New card",
     "new_card_placeholder": "What needs doing?",
-    "drag_hint": "Press and hold a card to move it, or tap ⋯ → Move to…",
+    "drag_hint": "Drag a card to another column, or tap ⋯ → Move to…",
     "board_menu": "Board options",
     "rename": "Rename",
     "columns_title": "Columns",
@@ -690,8 +689,6 @@
     "delete": "Delete board",
     "delete_title": "Delete «{{name}}»?",
     "delete_body": "The board and its cards go. The tasks stay exactly as they are, in your lists.",
-    "empty": "You have no boards yet.",
-    "empty_hint": "A board has columns, like Trello. You choose which tasks go on it — from any task's ⋯, or with «New card».",
     "new": "New board",
     "create": "Create",
     "column_name": "Column name",
@@ -722,6 +719,32 @@
       "task_dropped": "{{actor}}: cancelled «{{task}}»",
       "task_dropped_reason": "{{actor}}: cancelled «{{task}}» — {{reason}}",
       "task_undropped": "{{actor}}: undid the cancellation of «{{task}}»"
-    }
+    },
+    "back": "Back to All",
+    "switch_title": "Boards",
+    "strip_title": "Boards",
+    "new_short": "New",
+    "tabs_new": "Board",
+    "tile_waiting_one": "{{count}} to do",
+    "tile_waiting": "{{count}} to do",
+    "tile_doing": "{{count}} in progress",
+    "tile_done_one": "{{count}} done",
+    "tile_done": "{{count}} done",
+    "tile_moved_today": "active today",
+    "tile_moved_yesterday": "active yesterday",
+    "tile_moved_days": "active {{count}} days ago",
+    "column_empty": "No cards here.",
+    "phone_hint": "Swipe sideways for another column · press and hold a card to move it",
+    "move_title": "Move",
+    "move_hint_here": "it is here now",
+    "move_hint_completes": "completes the task everywhere",
+    "move_hint_asks_why": "will ask why",
+    "move_hint_cards_one": "1 card",
+    "move_hint_cards": "{{count}} cards",
+    "open_task": "Open task",
+    "moved": "Moved to «{{column}}»",
+    "moved_done": "Completed · moved to «{{column}}»",
+    "moved_dropped": "Cancelled · moved to «{{column}}»",
+    "undo": "Undo"
   }
 }
