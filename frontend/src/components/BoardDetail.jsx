@@ -66,6 +66,23 @@ const DND_SENSOR_MOUSE = { distance: 5 };
 const HOLD_MS = 450;
 const HOLD_TOLERANCE_PX = 8;
 
+// What a new card's sheet starts from: an approved task with nothing in it
+// yet (P3 and no date are the app's own defaults for a manual task).
+const NEW_CARD_TEMPLATE = {
+  record_id: null,
+  task_name: '',
+  description: '',
+  category: 'Unknown',
+  priority: 'P3',
+  due_date: null,
+  due_time: null,
+  start_date: null,
+  checklist: [],
+  category_id: null,
+  assigned_to: null,
+  approval_status: true,
+};
+
 // Which column each board last showed on a phone, for the life of the page —
 // leaving «Όλα» for Today and coming back lands on the same column.
 const lastColumnByBoard = new Map();
@@ -156,61 +173,6 @@ function DraggableCard({ task, column, onOpen, onMoveRequest, onRemove, cardProp
   );
 }
 
-function NewCardForm({ onCreate, onCancel, t }) {
-  const [draft, setDraft] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-
-  async function submit(e) {
-    e.preventDefault();
-    const name = draft.trim();
-    if (!name || isSaving) return;
-    setIsSaving(true);
-    try {
-      await onCreate(name);
-      setDraft('');
-    } catch {
-      // The provider has said why; the draft stays typed.
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="mt-2 flex flex-col gap-1.5">
-      <textarea
-        autoFocus
-        rows={2}
-        value={draft}
-        maxLength={80}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) submit(e);
-          if (e.key === 'Escape') onCancel();
-        }}
-        placeholder={t('boards.new_card_placeholder')}
-        aria-label={t('boards.new_card')}
-        className="w-full resize-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-card)] px-2.5 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-primary)]"
-      />
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={isSaving || !draft.trim()}
-          className="tap-44 px-3 py-1.5 rounded-md text-sm font-medium text-white bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-50"
-        >
-          {isSaving ? t('actions.adding') : t('actions.add')}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="tap-44 px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
-        >
-          {t('actions.cancel')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
 function OlderToggle({ lane, isOpen, onToggle, renderCard, t }) {
   if (lane.column.kind === 'open' || lane.older.length === 0) return null;
   return (
@@ -232,10 +194,9 @@ function OlderToggle({ lane, isOpen, onToggle, renderCard, t }) {
   );
 }
 
-function Lane({ lane, count, isOlderOpen, onToggleOlder, renderCard, onCreateCard, t }) {
+function Lane({ lane, count, isOlderOpen, onToggleOlder, renderCard, onNewCard, t }) {
   const { column } = lane;
   const { setNodeRef, isOver } = useDroppable({ id: column.record_id });
-  const [isAdding, setIsAdding] = useState(false);
 
   return (
     <section
@@ -259,17 +220,13 @@ function Lane({ lane, count, isOlderOpen, onToggleOlder, renderCard, onCreateCar
       <OlderToggle lane={lane} isOpen={isOlderOpen} onToggle={onToggleOlder} renderCard={renderCard} t={t} />
 
       {column.kind === 'open' && (
-        isAdding ? (
-          <NewCardForm onCreate={(name) => onCreateCard(column.record_id, name)} onCancel={() => setIsAdding(false)} t={t} />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setIsAdding(true)}
-            className="mt-2 w-full text-left px-2 py-2 rounded-md text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-          >
-            + {t('boards.new_card')}
-          </button>
-        )
+        <button
+          type="button"
+          onClick={() => onNewCard(column.record_id)}
+          className="mt-2 w-full text-left px-2 py-2 rounded-md text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+        >
+          + {t('boards.new_card')}
+        </button>
       )}
     </section>
   );
@@ -351,14 +308,13 @@ function WideCard({ task, column, nextColumn, onOpen, onHold, onNext, cardProps,
   );
 }
 
-function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onCreateCard, cardProps, t }) {
+function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps, t }) {
   const [index, setIndex] = useState(() => {
     const remembered = lastColumnByBoard.get(board.record_id);
     const found = lanes.findIndex((l) => l.column.record_id === remembered);
     return found >= 0 ? found : 0;
   });
   const [olderOpen, setOlderOpen] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
   const swipe = useRef(null);
   const chipRefs = useRef({});
 
@@ -368,7 +324,6 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onCreateCard, cardPr
   function show(next) {
     setIndex(next);
     setOlderOpen(false);
-    setIsAdding(false);
     lastColumnByBoard.set(board.record_id, lanes[next]?.column.record_id);
   }
 
@@ -377,14 +332,17 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onCreateCard, cardPr
     chipRefs.current[lane?.column.record_id]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [lane?.column.record_id]);
 
-  // The red + on a board page writes a card here, in the column you are
-  // looking at — or the first open one, if you are looking at an ending.
+  // The red + on a board page writes a card in the column you are looking
+  // at — or the first open one, if you are looking at an ending.
   function startAdding() {
-    if (lane.column.kind !== 'open') {
-      const firstOpen = lanes.findIndex((l) => l.column.kind === 'open');
-      if (firstOpen >= 0) show(firstOpen);
+    if (lane.column.kind === 'open') {
+      onNewCard(lane.column.record_id);
+      return;
     }
-    setIsAdding(true);
+    const firstOpen = lanes.findIndex((l) => l.column.kind === 'open');
+    if (firstOpen < 0) return;
+    show(firstOpen);
+    onNewCard(lanes[firstOpen].column.record_id);
   }
 
   if (!lane) return null;
@@ -467,21 +425,13 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onCreateCard, cardPr
         <OlderToggle lane={lane} isOpen={olderOpen} onToggle={() => setOlderOpen((o) => !o)} renderCard={renderWide} t={t} />
 
         {lane.column.kind === 'open' && (
-          isAdding ? (
-            <NewCardForm
-              onCreate={(name) => onCreateCard(lane.column.record_id, name)}
-              onCancel={() => setIsAdding(false)}
-              t={t}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsAdding(true)}
-              className="mt-2.5 w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-[var(--border-medium)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
-            >
-              + {t('boards.new_card')}
-            </button>
-          )
+          <button
+            type="button"
+            onClick={() => onNewCard(lane.column.record_id)}
+            className="mt-2.5 w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-[var(--border-medium)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+          >
+            + {t('boards.new_card')}
+          </button>
         )}
 
         <p className="mt-3.5 text-center text-xs text-[var(--text-muted)]">{t('boards.phone_hint')}</p>
@@ -491,16 +441,14 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onCreateCard, cardPr
           into the Inbox — the app's own + would have sent it through the
           extractor to wait for approval (finding 2 of the redesign). It sits
           lower than the app's, because this page has no AskBar under it. */}
-      {!isAdding && (
-        <button
-          type="button"
-          onClick={startAdding}
-          aria-label={t('boards.new_card')}
-          className="fixed bottom-safe-24 right-4 z-30 w-16 h-16 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center"
-        >
-          <PlusIcon className="w-6 h-6" />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={startAdding}
+        aria-label={t('boards.new_card')}
+        className="fixed bottom-safe-24 right-4 z-30 w-16 h-16 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center"
+      >
+        <PlusIcon className="w-6 h-6" />
+      </button>
     </div>
   );
 }
@@ -516,6 +464,8 @@ function BoardDetail({ board, tasks, onTaskUpdate, onTaskDeleted, onShowToast, o
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
   const [openTaskId, setOpenTaskId] = useState(null);
+  // The column a new card is being written for, while its sheet is open.
+  const [newCardColumnId, setNewCardColumnId] = useState(null);
   const [movingTaskId, setMovingTaskId] = useState(null);
   const [pendingDrop, setPendingDrop] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
@@ -664,7 +614,19 @@ function BoardDetail({ board, tasks, onTaskUpdate, onTaskDeleted, onShowToast, o
   const dragging = draggingId ? tasksById[draggingId] : null;
   const openTask = openTaskId ? tasksById[openTaskId] : null;
   const movingTask = movingTaskId ? tasksById[movingTaskId] : null;
-  const onCreateCard = (columnId, name) => createCard(board.record_id, columnId, name, newCardWorkspace);
+  const newCardColumn = newCardColumnId ? board.columns.find((c) => c.record_id === newCardColumnId) : null;
+
+  /**
+   * «Αποθήκευση» on a new card: made on this board in its column, then the
+   * same sheet shows the task that now exists — the owner's choice, so the
+   * reminder, calendar, repetition and assignee are right there. A failure
+   * throws back into the sheet, which keeps what was typed.
+   */
+  async function handleCreateCard(fields) {
+    const data = await createCard(board.record_id, newCardColumnId, fields);
+    setNewCardColumnId(null);
+    if (data?.task) setOpenTaskId(data.task.record_id);
+  }
 
   return (
     <div>
@@ -685,7 +647,7 @@ function BoardDetail({ board, tasks, onTaskUpdate, onTaskDeleted, onShowToast, o
                   isOlderOpen={Boolean(olderOpen[lane.column.record_id])}
                   onToggleOlder={() => setOlderOpen((o) => ({ ...o, [lane.column.record_id]: !o[lane.column.record_id] }))}
                   renderCard={renderCard}
-                  onCreateCard={onCreateCard}
+                  onNewCard={setNewCardColumnId}
                   t={t}
                 />
               ))}
@@ -708,7 +670,7 @@ function BoardDetail({ board, tasks, onTaskUpdate, onTaskDeleted, onShowToast, o
           onOpen={setOpenTaskId}
           onHold={setMovingTaskId}
           onNext={(taskId, column) => move(taskId, column)}
-          onCreateCard={onCreateCard}
+          onNewCard={setNewCardColumnId}
           cardProps={cardProps}
           t={t}
         />
@@ -722,6 +684,19 @@ function BoardDetail({ board, tasks, onTaskUpdate, onTaskDeleted, onShowToast, o
           onTaskDeleted={(id) => { onTaskDeleted?.(id); setOpenTaskId(null); }}
           onShowToast={onShowToast}
           onAcknowledged={onTaskAcknowledged}
+        />
+      )}
+
+      {newCardColumn && (
+        <TaskDetailSheet
+          // An empty task, in the room the card would go to — the sheet shows
+          // it and it can be changed before saving.
+          task={{ ...NEW_CARD_TEMPLATE, workspace_id: newCardWorkspace }}
+          createContext={`${board.name} · ${newCardColumn.name}`}
+          onCreate={handleCreateCard}
+          onClose={() => setNewCardColumnId(null)}
+          onUpdate={onTaskUpdate}
+          onShowToast={onShowToast}
         />
       )}
 

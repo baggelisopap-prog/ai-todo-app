@@ -324,22 +324,38 @@ def move_card(task_service, user_id: str, board_id: str, task_id: str, column_id
     return task
 
 
+# What «Νέα κάρτα» may carry besides its name and room: the fields of the
+# app's own manual create (POST /tasks), because since 2026-09-30 it opens the
+# whole task form rather than a title box — the owner's «να βάζω όλα όπως στη
+# νέα εργασία, όχι μόνο τίτλο».
+CARD_FIELDS = ("description", "priority", "category", "due_date", "due_time", "start_date",
+               "checklist", "category_id")
+
+
 def create_card(task_service, user_id: str, board_id: str, column_id: str, task_name: str,
-                workspace_id: Optional[str] = None) -> TaskRecord:
+                workspace_id: Optional[str] = None, fields: Optional[dict] = None) -> TaskRecord:
     """«Νέα κάρτα» typed straight into a column: an ordinary task — approved,
     since the person typed it themselves, exactly like POST /tasks — placed on
     this board in that column.
 
     workspace_id is the screen's to choose (the room the user is standing in,
-    else their default) and is checked like any other placement."""
+    else their default) and is checked like any other placement. `fields` are
+    the rest of the form; an empty one is left out, so the task's own defaults
+    apply (P3, no date) exactly as they do for POST /tasks. Every check runs
+    BEFORE anything is written, so a refusal never leaves half a card behind."""
     board = _require_board(user_id, board_id)
     column = _column(board, column_id)
     if column.kind != "open":
         raise BoardRefused("New cards start in one of the open columns.")
     cleaned = _clean_name(task_name, 80)
-    task_service.validate_workspace_placement(user_id, workspace_id, None)
+    extra = {k: v for k, v in (fields or {}).items() if k in CARD_FIELDS and v not in (None, "", [])}
+    # POST /tasks's rule: a start after the deadline is not a range. ISO dates
+    # compare correctly as text.
+    if extra.get("start_date") and extra.get("due_date") and extra["start_date"] > extra["due_date"]:
+        raise BoardRefused("A start date cannot be after the deadline.")
+    task_service.validate_workspace_placement(user_id, workspace_id, extra.get("category_id"))
 
-    task = task_service.create_task_manual(user_id, {"task_name": cleaned, "workspace_id": workspace_id})
+    task = task_service.create_task_manual(user_id, {"task_name": cleaned, "workspace_id": workspace_id, **extra})
     repository.upsert_board_card(user_id, board_id, task.record_id, column.record_id, _position())
     repository.log_board_activity(board_id, user_id, "card_created", actor_user_id=user_id,
                                   task_id=task.record_id, task_name=cleaned,

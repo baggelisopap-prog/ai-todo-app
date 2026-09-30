@@ -89,8 +89,7 @@ function BoardsProvider({ children, onShowToast, onTaskChanged }) {
     send: (boardId, taskId) => run(() => sendTaskToBoard(boardId, taskId)),
     removeCard: (boardId, taskId) => run(() => removeTaskFromBoard(boardId, taskId)),
     moveCard: (boardId, taskId, columnId, reason) => run(() => moveBoardCard(boardId, taskId, columnId, reason)),
-    createCard: (boardId, columnId, taskName, workspaceId) =>
-      run(() => createBoardCard(boardId, columnId, taskName, workspaceId)),
+    createCard: (boardId, columnId, fields) => run(() => createBoardCard(boardId, columnId, fields)),
   }), [run, t]);
 
   const boardOf = useCallback((taskId) => boardOfTask(boards, taskId), [boards]);

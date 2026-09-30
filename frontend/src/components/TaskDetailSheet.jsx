@@ -8,6 +8,7 @@ import { useModalBehavior } from '../hooks/useModalBehavior';
 import { useTaskActions } from '../hooks/useTaskActions';
 import { useRecurrence } from '../hooks/useRecurrence';
 import { useBoards } from '../hooks/useBoards';
+import { fieldsFromDraft } from '../utils/taskDraft';
 import CustomSelect from './CustomSelect';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import DictateButton from './DictateButton';
@@ -272,7 +273,7 @@ const INPUT_CLASSES =
  * `historyLine` is the only thing this sheet shows that the live one cannot:
  * how the task ended. Without it this would just be an old card.
  */
-function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskDeleted, onShowToast, onAcknowledged, readOnly = false, footerAction = null, historyLine = null }) {
+function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskDeleted, onShowToast, onAcknowledged, readOnly = false, footerAction = null, historyLine = null, onCreate = null, createContext = null }) {
   useModalBehavior(onClose);
   const { t } = useTranslation();
   // onAcknowledged folds a task the server hands back — the handover's OK,
@@ -288,7 +289,14 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   // The row below distinguishes the two cases by task.recurrence_rule_id.
   const rule = recurrence.ruleFor(task);
 
-  const [isEditing, setIsEditing] = useState(false);
+  // A NEW CARD ON A BOARD (2026-09-30) is this same sheet, opened empty and
+  // already editing — the owner's «να βάζω όλα όπως στη νέα εργασία, όχι μόνο
+  // τίτλο». Save calls onCreate instead of onUpdate, and the parent then swaps
+  // this sheet for the task it made, so the reminder, the calendar, the
+  // repetition and the assignee — which all act on a task that exists — are
+  // one tap away without reopening anything.
+  const isCreating = Boolean(onCreate);
+  const [isEditing, setIsEditing] = useState(isCreating);
   const [draft, setDraft] = useState(() => draftFromTask(task));
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -325,7 +333,8 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
   const members = memberState.workspaceId === draft.workspace_id ? memberState.members : [];
 
   useEffect(() => {
-    if (!isEditing || !draft.workspace_id) return undefined;
+    // Not for a new card: the assignee is offered once the card exists.
+    if (!isEditing || isCreating || !draft.workspace_id) return undefined;
     let cancelled = false;
     const workspaceId = draft.workspace_id;
     getWorkspaceMembers(workspaceId)
@@ -338,7 +347,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
         if (!cancelled) setMemberState({ workspaceId, members: [] });
       });
     return () => { cancelled = true; };
-  }, [isEditing, draft.workspace_id]);
+  }, [isEditing, isCreating, draft.workspace_id]);
 
   const [optimisticChecklist, setOptimisticChecklist] = useState(null);
   const [pendingToggleIdx, setPendingToggleIdx] = useState(null);
@@ -390,20 +399,15 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
     setIsSaving(true);
     setSaveError(null);
     try {
+      if (isCreating) {
+        // The parent replaces this sheet with the task it made; nothing more
+        // to do here. A failure lands in the catch below and keeps the form.
+        await onCreate(fieldsFromDraft(draft, { forCreate: true }));
+        return;
+      }
       await onUpdate(task.record_id, {
-        task_name: draft.task_name,
-        description: draft.description,
-        category: draft.category,
-        priority: draft.priority,
-        due_date: draft.due_date || null,
-        due_time: draft.due_time || null,
-        start_date: draft.start_date || null,
-        checklist: draft.checklist,
-        // '' back to null: the columns are nullable uuids, and an empty string
-        // is not a uuid. Null IS the value that means unfiled.
-        workspace_id: draft.workspace_id || null,
-        category_id: draft.category_id || null,
-        assigned_to: draft.assigned_to || null,
+        // '' back to null inside, for the reason fieldsFromDraft gives.
+        ...fieldsFromDraft(draft),
         // The button says so (actions.save_approve) — a silent approval would
         // be a side effect nobody asked for.
         ...(approvesOnEdit ? { approval_status: true } : {}),
@@ -583,7 +587,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
         {/* Header stays put while the body scrolls, so the circle and the menu
             are reachable without scrolling back up on a long task. */}
         <div className="flex items-start gap-3 p-4 border-b border-[var(--border-subtle)] flex-shrink-0">
-          {readOnly ? (
+          {readOnly || isCreating ? (
             /* The same circle, as a mark. Not a disabled button: a control that
                cannot act is a question with no answer, and this one only ever
                reported a state anyway. */
@@ -634,6 +638,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                 e.target.style.height = `${e.target.scrollHeight}px`;
               }}
               rows={1}
+              autoFocus={isCreating}
               placeholder={t('task.name_placeholder')}
               aria-label={t('task.name_placeholder')}
               className="flex-1 min-w-0 resize-none bg-transparent text-[17px] leading-snug font-semibold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
@@ -644,7 +649,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             </h2>
           )}
 
-          {!readOnly && (
+          {!readOnly && !isCreating && (
           <TaskMenu
             isPending={isPending}
             isCompleted={isCompleted}
@@ -829,6 +834,10 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
             </>
           ) : (
             <>
+              {/* Where a new card is going, said before it is saved. */}
+              {createContext && (
+                <p className="-mt-1 text-xs font-medium text-[var(--text-secondary)]">{createContext}</p>
+              )}
               {/* WHAT IS THERE, as rows. What is NOT, as pills underneath.
                   The form this replaces showed nine captioned boxes whether or
                   not they held anything — an empty "ΩΡΑ ΛΗΞΗΣ" took as much of
@@ -967,7 +976,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                     one member is every solo account, and a picker whose only
                     option is yourself is a field that asks a question with one
                     answer. */}
-                {members.length > 1 && (draft.assigned_to || showAssignee) && (
+                {!isCreating && members.length > 1 && (draft.assigned_to || showAssignee) && (
                   <SheetRow icon={<FieldIcon label={t('task.assignee_label')}><PersonIcon className="w-[18px] h-[18px]" /></FieldIcon>}>
                     <div className="flex-1 min-w-0">
                       <CustomSelect
@@ -1045,7 +1054,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
                     onClick={() => setShowStart(true)}
                   />
                 )}
-                {members.length > 1 && !draft.assigned_to && !showAssignee && (
+                {!isCreating && members.length > 1 && !draft.assigned_to && !showAssignee && (
                   <SheetPill
                     icon={<PersonIcon className="w-4 h-4" />}
                     label={t('task.assignee_label')}
@@ -1132,7 +1141,7 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
 
               What did NOT change: what it does, what it asks the server, and
               the fact that nothing happens to the task until you approve it. */}
-          {!readOnly && (
+          {!readOnly && !isCreating && (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="flex-1 min-w-0 flex items-center gap-2 rounded-md border border-[var(--border-medium)] bg-[var(--bg-input)] px-2.5 py-2 focus-within:border-[var(--border-focus)] focus-within:ring-2 focus-within:ring-[color:var(--ring-soft)] transition-colors">
@@ -1288,11 +1297,12 @@ function TaskDetailSheet({ task, variant = 'default', onClose, onUpdate, onTaskD
               >
                 {isSaving
                   ? t('actions.saving')
-                  : approvesOnEdit ? t('actions.save_approve') : t('actions.save')}
+                  : isCreating ? t('boards.add_to_board') : approvesOnEdit ? t('actions.save_approve') : t('actions.save')}
               </button>
               <button
                 type="button"
-                onClick={() => setIsEditing(false)}
+                // A new card that is not saved is simply not made.
+                onClick={isCreating ? onClose : () => setIsEditing(false)}
                 disabled={isSaving}
                 className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-transparent text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed transition-colors"
               >

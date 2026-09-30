@@ -1639,6 +1639,16 @@ class BoardCardCreateRequest(BaseModel):
     column_id: str
     task_name: str
     workspace_id: Optional[str] = None
+    # The rest of the task form (2026-09-30) — CreateTaskRequest's fields, all
+    # optional; boards.create_card leaves an empty one to the task's defaults.
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    category: Optional[str] = None
+    due_date: Optional[str] = None
+    due_time: Optional[str] = None
+    start_date: Optional[str] = None
+    checklist: Optional[list[ChecklistItem]] = None
+    category_id: Optional[str] = None
 
 
 class BoardCardWriteResponse(BaseModel):
@@ -1772,8 +1782,9 @@ def move_board_card(board_id: str, task_id: str, payload: BoardCardMoveRequest,
 def create_board_card(board_id: str, payload: BoardCardCreateRequest, user_id: str = Depends(get_current_user_id)):
     """«Νέα κάρτα» typed into a column: an ordinary, approved task, on this board."""
     def run():
+        fields = payload.model_dump(exclude={"column_id", "task_name", "workspace_id"})
         task = boards.create_card(service, user_id, board_id, payload.column_id,
-                                  payload.task_name, payload.workspace_id)
+                                  payload.task_name, payload.workspace_id, fields)
         return BoardCardWriteResponse(task=task, boards=boards.list_boards(user_id))
     return _board_call(run)
 

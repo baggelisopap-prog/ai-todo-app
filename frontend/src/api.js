@@ -868,11 +868,15 @@ export async function moveBoardCard(boardId, taskId, columnId, reason = null) {
   });
 }
 
-/** «Νέα κάρτα» typed into a column. Returns { task, boards }. */
-export async function createBoardCard(boardId, columnId, taskName, workspaceId = null) {
+/**
+ * «Νέα κάρτα» — the whole task form, written straight into a column.
+ * `fields` is what the task sheet sends (utils/taskDraft.fieldsFromDraft):
+ * task_name and workspace_id plus the rest. Returns { task, boards }.
+ */
+export async function createBoardCard(boardId, columnId, fields) {
   return request(`/boards/${boardId}/cards/new`, {
     method: 'POST',
-    body: JSON.stringify({ column_id: columnId, task_name: taskName, workspace_id: workspaceId }),
+    body: JSON.stringify({ ...fields, column_id: columnId }),
   });
 }
 

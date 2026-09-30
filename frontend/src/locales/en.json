@@ -679,7 +679,6 @@
     "checklist_progress": "{{done}} of {{total}} steps",
     "older": "Older ({{count}})",
     "new_card": "New card",
-    "new_card_placeholder": "What needs doing?",
     "drag_hint": "Drag a card to another column, or tap ⋯ → Move to…",
     "board_menu": "Board options",
     "rename": "Rename",
@@ -745,6 +744,7 @@
     "moved": "Moved to «{{column}}»",
     "moved_done": "Completed · moved to «{{column}}»",
     "moved_dropped": "Cancelled · moved to «{{column}}»",
-    "undo": "Undo"
+    "undo": "Undo",
+    "add_to_board": "Add to board"
   }
 }

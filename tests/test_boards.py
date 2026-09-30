@@ -147,6 +147,7 @@ class FakeTasks:
 
     def validate_workspace_placement(self, user_id, workspace_id, category_id, check_membership=True):
         self.calls.append(("validate", workspace_id))
+        self.validated_category = category_id
 
     def create_task_manual(self, user_id, fields, approval_status=True):
         self.calls.append(("create", fields))
@@ -332,6 +333,46 @@ def test_a_new_card_is_an_approved_task_placed_in_its_column(store):
     assert task.task_name == "Βάση δεδομένων" and task.approval_status is True
     assert ("validate", "ws-1") in tasks.calls
     assert store.cards[task.record_id].column_id == column.record_id
+
+
+def test_a_new_card_carries_every_field_the_form_gave(store):
+    """2026-09-30, the owner: «Νέα κάρτα» opens the whole task form, not a
+    title box — so everything typed there reaches the task in one go."""
+    board = boards.create_board(ME, "Χ", NAMES)
+    tasks = FakeTasks()
+    fields = {"description": "τιμολόγια Q3", "priority": "P1", "due_date": "2026-10-02",
+              "due_time": "10:00", "start_date": "2026-10-01", "category_id": "cat-1",
+              "checklist": [{"text": "ΦΠΑ", "done": False}]}
+
+    boards.create_card(tasks, ME, board.record_id, _cols(board)["Σχεδιασμός"].record_id,
+                       "Λογιστής", "ws-1", fields)
+
+    created = next(f for name, f in tasks.calls if name == "create")
+    assert {k: created[k] for k in fields} == fields
+    assert created["task_name"] == "Λογιστής" and created["workspace_id"] == "ws-1"
+    assert tasks.validated_category == "cat-1"
+
+
+def test_a_new_card_leaves_empty_fields_to_the_defaults(store):
+    board = boards.create_board(ME, "Χ", NAMES)
+    tasks = FakeTasks()
+
+    boards.create_card(tasks, ME, board.record_id, _cols(board)["Σχεδιασμός"].record_id, "x", None,
+                       {"priority": None, "due_date": "", "checklist": [], "description": ""})
+
+    created = next(f for name, f in tasks.calls if name == "create")
+    assert set(created) == {"task_name", "workspace_id"}
+
+
+def test_a_new_card_starting_after_its_deadline_is_refused_before_anything_is_made(store):
+    board = boards.create_board(ME, "Χ", NAMES)
+    tasks = FakeTasks()
+
+    with pytest.raises(boards.BoardRefused):
+        boards.create_card(tasks, ME, board.record_id, _cols(board)["Σχεδιασμός"].record_id, "x", None,
+                           {"start_date": "2026-10-05", "due_date": "2026-10-02"})
+    assert not any(name == "create" for name, _ in tasks.calls)
+    assert store.cards == {}
 
 
 def test_a_new_card_cannot_start_as_done(store):
@@ -529,6 +570,22 @@ def test_a_move_answers_with_the_task_as_it_now_stands(client, store, monkeypatc
     assert r.status_code == 200
     assert r.json()["task"]["is_completed"] is True
     assert r.json()["boards"][0]["record_id"] == board.record_id
+
+
+def test_a_new_card_request_passes_the_whole_form_on(client, store, monkeypatch):
+    board = boards.create_board(ME, "Χ", NAMES)
+    tasks = FakeTasks()
+    monkeypatch.setattr(main, "service", tasks)
+
+    r = client.post(f"/boards/{board.record_id}/cards/new", json={
+        "column_id": _cols(board)["Σχεδιασμός"].record_id, "task_name": "Λογιστής", "workspace_id": "ws-1",
+        "priority": "P1", "due_date": "2026-10-02", "checklist": [{"text": "ΦΠΑ", "done": False}],
+    })
+
+    assert r.status_code == 201
+    created = next(f for name, f in tasks.calls if name == "create")
+    assert created["priority"] == "P1" and created["due_date"] == "2026-10-02"
+    assert created["checklist"] == [{"text": "ΦΠΑ", "done": False}]
 
 
 def test_the_activity_carries_the_actors_name(client, store):
