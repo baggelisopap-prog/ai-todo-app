@@ -225,7 +225,11 @@ JSX) — older than this work, dev-only.
 simulated; `swipeColumnIndex` is tested, its wiring is not); press-and-hold on an iPhone; a drag on
 the computer after the split (the code is the old one, moved); live data.
 
-#### A new card opens the whole task sheet — BUILT 2026-09-30, NOT committed, NOT pushed
+#### A new card opens the whole task sheet — PUSHED and LIVE 2026-09-30 (`61c8934`); NOT yet seen by him
+
+> Pushed `2e9e55f..3d930a0` with his yes. About 75 s later both sides served it: the site's
+> `index-Bx3a1H75.js` carries `add_to_board`, and the server's API description lists `due_date`
+> and `checklist` on `BoardCardCreateRequest`. No migration.
 
 His first reaction to stage A (2026-09-30): «όταν περνάω νεό στο board (to do) θέλω να ανοίγη να
 βάζω όλα όπως είναι στο νέο τασκ οχι μονο τίτλο». Asked which «new task» he meant (the AI text box
