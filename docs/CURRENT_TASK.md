@@ -225,6 +225,43 @@ JSX) — older than this work, dev-only.
 simulated; `swipeColumnIndex` is tested, its wiring is not); press-and-hold on an iPhone; a drag on
 the computer after the split (the code is the old one, moved); live data.
 
+#### A new card opens the whole task sheet — BUILT 2026-09-30, NOT committed, NOT pushed
+
+His first reaction to stage A (2026-09-30): «όταν περνάω νεό στο board (to do) θέλω να ανοίγη να
+βάζω όλα όπως είναι στο νέο τασκ οχι μονο τίτλο». Asked which «new task» he meant (the AI text box
+or the task sheet): «την καρτέλα της εργασίας με όλα τα πεδία οπως όταν περνάμε χειροκίνητα». After
+saving: «Ναι, μένει ανοιχτή» — the sheet stays open on the task it made.
+
+- «+ Νέα κάρτα» (every open column, both layouts) and the board page's red + open
+  `TaskDetailSheet` in a new mode (`onCreate`, `createContext`): empty, already editing, the name
+  focused, «Ανακαίνιση στούντιο · Να γίνει» on top, room and category showing (pre-set to the room
+  the switcher is on, else the default room). «Προσθήκη στον πίνακα» creates; «Ακύρωση» makes
+  nothing. Then the same place shows the new task, where reminder, Google Calendar, repetition and
+  the assignee — all of which act on an existing task — are one tap away. Hidden while creating:
+  the ⋯ menu, the completion circle, the AI box, the assignee.
+- The title-only inline form is gone; this also replaces stage B's 4γ «Νέα κάρτα» sheet.
+- Server: `POST /boards/{id}/cards/new` takes POST /tasks's fields (description, priority,
+  category, dates, start, checklist, category_id); `boards.create_card` drops empty ones (so P3 /
+  no date stay the defaults), refuses a start after the deadline and checks the category's room
+  BEFORE writing anything. No migration.
+- `utils/taskDraft.fieldsFromDraft` — one builder for the sheet's edit AND create payloads.
+
+Proof, actual output:
+
+```
+pytest tests/ -q          -> 783 passed (779 before; +4 in test_boards.py)
+npm run check             -> exit 0; ui-check OK — 107 files, 666 keys; 423 PASS, 0 FAIL
+                             (new script task-draft.test.mjs: 6 checks)
+npm run build             -> ✓ built
+npm run lint              -> the same 13 problems in the same six files
+```
+
+Seen in the local harness (invented data, 390px): the + opens the empty sheet with its context
+line; name + date + «Προσθήκη στον πίνακα» sent task_name, due_date, workspace_id and priority P3,
+the card appeared in «Να γίνει» (4 → 5) and the sheet then showed the task with reminder /
+calendar / repetition; «Ακύρωση» made nothing. NOT seen: his phone, live data, a category or a
+checklist chosen in the create sheet (covered by the server tests only).
+
 ## What NOBODY has watched
 
 1. **The board screen on his phone** — columns, press-and-hold, the ⋯ menu. He judges UI by looking;
