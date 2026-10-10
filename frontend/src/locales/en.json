@@ -72,7 +72,8 @@
     "overdue_header": "Overdue",
     "tomorrow": "TOMORROW",
     "no_date": "NO DATE",
-    "running_header": "Running"
+    "running_header": "Running",
+    "awaiting_reply_header": "Awaiting a reply"
   },
   "today": {
     "pending_approval_header": "Pending approval ({{count}})"

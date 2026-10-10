@@ -947,6 +947,43 @@ def get_active_hostaway_tasks(
     ]
 
 
+def get_hostaway_tasks_awaiting_reply(
+    user_id: str, tasks: Optional[list[TaskRecord]] = None
+) -> list[TaskRecord]:
+    """
+    The guest messages that go on ringing this user's phone until somebody
+    answers the guest — the escalation loop iterates over exactly this list,
+    and GET /tasks reports it to the screen as `awaiting_reply_ids`.
+
+    ONE definition for both, on purpose (2026-10-10). The owner was reminded
+    every two hours about a guest asking for an invoice at check-out, and could
+    not find the task: he had approved it and moved it to the check-out day, so
+    it was in neither the Inbox nor Today. The alarm was right to ring and the
+    screen was right by its own rules — they were asking different questions.
+    Now Today shows this list in its own group, and a task that rings is a task
+    you can see.
+
+    An ANSWERED task is left out even while it stays open: on a P1 a human reply
+    deliberately does not close the task (replying is not fixing — see the
+    threading design §3.2), but it must stop nagging.
+
+    `hostaway_last_notified_at` must be present AND readable, because the loop
+    measures the next ring from it and skips a task it cannot measure (a task
+    created before the field existed has none): such a task never rings, so it
+    is not reported as ringing either.
+    """
+    awaiting = []
+    for t in get_active_hostaway_tasks(user_id, tasks=tasks):
+        if t.hostaway_answered_at or not t.hostaway_last_notified_at:
+            continue
+        try:
+            datetime.fromisoformat(t.hostaway_last_notified_at)
+        except (ValueError, TypeError):
+            continue
+        awaiting.append(t)
+    return awaiting
+
+
 def update_hostaway_last_notified(user_id: str, record_id: str, last_notified_at: str) -> None:
     """Stamps when this guest message was last escalated.
 

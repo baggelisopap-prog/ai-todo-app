@@ -26,7 +26,9 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body || '',
     icon: '/favicon.svg',
-    data: { view: data.view || 'today' },
+    // task_id: the task this push is about, when it is about one — the tap
+    // opens its sheet (2026-10-10). Absent on the daily summary.
+    data: { view: data.view || 'today', taskId: data.task_id || null },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -35,18 +37,20 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetView = event.notification.data?.view || 'today';
+  const taskId = event.notification.data?.taskId || null;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
         if ('focus' in client) {
           client.focus();
-          client.postMessage({ type: 'NAVIGATE', view: targetView });
+          client.postMessage({ type: 'NAVIGATE', view: targetView, taskId });
           return;
         }
       }
       if (clients.openWindow) {
-        return clients.openWindow(`/?view=${targetView}`);
+        const task = taskId ? `&task=${encodeURIComponent(taskId)}` : '';
+        return clients.openWindow(`/?view=${targetView}${task}`);
       }
     })
   );

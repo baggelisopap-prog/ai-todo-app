@@ -72,7 +72,8 @@
     "overdue_header": "Εκπρόθεσμες",
     "tomorrow": "ΑΥΡΙΟ",
     "no_date": "ΧΩΡΙΣ ΗΜΕΡΟΜΗΝΙΑ",
-    "running_header": "Τρέχουν"
+    "running_header": "Τρέχουν",
+    "awaiting_reply_header": "Περιμένουν απάντηση"
   },
   "today": {
     "pending_approval_header": "Σε αναμονή έγκρισης ({{count}})"

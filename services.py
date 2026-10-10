@@ -1132,7 +1132,10 @@ class TaskService:
             )
         return "link_cleared"
 
-    def send_push_to_user(self, user_id: str, title: str, body: str, view: Optional[str] = None) -> dict:
+    def send_push_to_user(
+        self, user_id: str, title: str, body: str,
+        view: Optional[str] = None, task_id: Optional[str] = None,
+    ) -> dict:
         """
         Sends a push notification to every subscription belonging to
         user_id. Cleans up subscriptions that the push service reports as
@@ -1142,6 +1145,11 @@ class TaskService:
         `view` is an optional tab id (e.g. "today") tagged onto the push
         payload so the service worker's notificationclick handler knows
         which in-app view to open/switch to.
+
+        `task_id` (2026-10-10) is the task a push is ABOUT, when it is about
+        one: tapping it then opens that task's sheet. Before, a push named its
+        task only in words, and the owner tapped a reminder for a task he could
+        not then find anywhere on the screen it opened.
         """
         subscriptions = repository.list_push_subscriptions(user_id)
         sent = 0
@@ -1152,6 +1160,8 @@ class TaskService:
         payload = {"title": title, "body": body}
         if view:
             payload["view"] = view
+        if task_id:
+            payload["task_id"] = task_id
 
         for sub in subscriptions:
             try:
@@ -1531,6 +1541,7 @@ class TaskService:
                         title=task.task_name,
                         body=f"Σε 15 λεπτά: {task.task_name}" if not task.description else task.description,
                         view="today",
+                        task_id=task.record_id,
                     )
                     if result.get("sent", 0) > 0:
                         repository.mark_notification_sent(user_id, task.record_id)
@@ -1731,24 +1742,17 @@ class TaskService:
         advances the timestamp. This repeats indefinitely — no cap on the
         number of re-notifications — for as long as the task remains open.
         """
-        hostaway_tasks = repository.get_active_hostaway_tasks(user_id, tasks=user_tasks)
+        # The same list GET /tasks hands the screen for Today's «Περιμένουν
+        # απάντηση» group (2026-10-10). The answered / unstamped / unreadable
+        # skips used to be written out in this loop; they live in that one
+        # function now, so the screen cannot be told about a different set of
+        # tasks than the one this loop rings for.
+        hostaway_tasks = repository.get_hostaway_tasks_awaiting_reply(user_id, tasks=user_tasks)
 
         escalations_sent = 0
 
         for task in hostaway_tasks:
-            if task.hostaway_answered_at:
-                # A human replied to this conversation. On a P1 the task
-                # deliberately stays open (replying is not fixing — see the
-                # threading design §3.2), but it must stop nagging.
-                continue
-
-            if not task.hostaway_last_notified_at:
-                continue  # missing tracking field (e.g. task created before this feature existed)
-
-            try:
-                last_notified = datetime.fromisoformat(task.hostaway_last_notified_at)
-            except (ValueError, TypeError):
-                continue
+            last_notified = datetime.fromisoformat(task.hostaway_last_notified_at)
 
             interval = HOSTAWAY_ESCALATION_INTERVALS.get(task.priority, timedelta(hours=2))
 
@@ -1758,6 +1762,7 @@ class TaskService:
                         user_id,
                         title=f"⏰ {task.task_name}",
                         body="Ακόμα δεν έχει απαντηθεί.",
+                        task_id=task.record_id,
                     )
                     repository.update_hostaway_last_notified(user_id, task.record_id, now.isoformat())
                     escalations_sent += 1

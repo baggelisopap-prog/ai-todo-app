@@ -9,40 +9,11 @@ import { getGoogleCalendarEvents, convertCalendarEventToTask, dismissCalendarEve
 import { openEventInGoogle } from '../utils/openEventInGoogle';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
-import { isVisibleTask, isClosedForMe, isRunning } from '../utils/taskDisplay';
 import { useMembers } from '../hooks/useMembers';
+// The piles live in utils/ so scripts/today-piles.test.mjs can reach them.
+import { splitByDay, countAll } from '../utils/todayPiles';
 
-/**
- * The three piles this screen shows, from one list of tasks.
- *
- * Pulled out of the component so it can be run TWICE: once over the filtered
- * list for what to draw, and once over the unfiltered one to answer "how much
- * is the filter hiding". Without the second number an empty day says "Τίποτα
- * για σήμερα 🎉" while the work sits behind a forgotten P1.
- */
-function splitByDay(list, today, myId) {
-  // isClosedForMe rather than !is_completed: a task a colleague closed stays on
-  // this screen, struck through, until its creator or its assignee presses OK.
-  // Every other completion — mine, and every one made before 2026-09-17 —
-  // answers exactly as !is_completed did.
-  const open = list.filter(
-    (task) => task.approval_status && !isClosedForMe(task, myId) && isVisibleTask(task)
-  );
-  return {
-    today: open.filter((task) => task.due_date === today),
-    overdue: open.filter((task) => task.due_date && task.due_date < today),
-    // Started, due later (2026-09-26): the reason a start date exists at all.
-    running: open.filter((task) => isRunning(task, today)),
-    pending: list.filter(
-      (task) => task.due_date === today && !task.approval_status && isVisibleTask(task)
-    ),
-  };
-}
-
-const countAll = (piles) =>
-  piles.today.length + piles.overdue.length + piles.pending.length + piles.running.length;
-
-function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskAcknowledged }) {
+function TodayView({ tasks, awaitingReplyIds = [], expandedTaskId, onToggleExpand, onTaskUpdate, onTaskDeleted, onShowToast, onTaskAcknowledged }) {
   const { t } = useTranslation();
   // One shared copy for every screen, so choosing κήπος here is still κήπος in
   // the Calendar. It used to be three useStates per screen, which is why it
@@ -102,7 +73,8 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   // The category, priority and assignment filters in one call — the chain used
   // to be spelled out here, and it had already drifted from Browse's copy of
   // it over what a task with no priority counts as. See utils/taskFilters.js.
-  const piles = splitByDay(apply(tasks), today, myId);
+  const piles = splitByDay(apply(tasks), today, myId, awaitingReplyIds);
+  const awaitingTasks = piles.awaiting;
   const todayTasks = piles.today;
   const overdueTasks = piles.overdue;
   const pendingTodayTasks = piles.pending;
@@ -111,7 +83,7 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
   const isEmpty = countAll(piles) === 0;
   // Only asked when the screen is empty AND something is filtered, so the cost
   // is a second pass over the list in the one case that needs an explanation.
-  const hiddenByFilters = isEmpty && activeCount > 0 ? countAll(splitByDay(tasks, today, myId)) : 0;
+  const hiddenByFilters = isEmpty && activeCount > 0 ? countAll(splitByDay(tasks, today, myId, awaitingReplyIds)) : 0;
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6">
@@ -175,6 +147,29 @@ function TodayView({ tasks, expandedTaskId, onToggleExpand, onTaskUpdate, onTask
         )
       ) : (
         <>
+          {/* «Περιμένουν απάντηση» (2026-10-10) — the guest messages ringing
+              this phone until somebody answers the guest, whatever their date.
+              FIRST, because it is the one group on this screen that is
+              actively interrupting him, and its ⏰ is the one the push wears.
+              Not foldable: a group you can hide is the same bug again. */}
+          {awaitingTasks.length > 0 && (
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold text-[var(--priority-p1-text)] uppercase tracking-wide mb-3">
+                ⏰ {t('sections.awaiting_reply_header')} <span className="ml-1">({awaitingTasks.length})</span>
+              </h2>
+              <TaskList
+                tasks={awaitingTasks}
+                sortBy="due_date"
+                expandedTaskId={expandedTaskId}
+                onToggleExpand={onToggleExpand}
+                onUpdateTask={onTaskUpdate}
+                onTaskAcknowledged={onTaskAcknowledged}
+                onTaskDeleted={onTaskDeleted}
+                onShowToast={onShowToast}
+              />
+            </div>
+          )}
+
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
               {t('sections.today_header')} <span className="ml-1 text-[var(--text-muted)]">({todayTasks.length})</span>

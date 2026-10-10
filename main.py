@@ -70,6 +70,12 @@ class TasksListResponse(BaseModel):
     """Response body for GET /tasks"""
     tasks: list[TaskRecord]
     count: int
+    # The ids among `tasks` that keep ringing THIS user's phone until the guest
+    # is answered — Today's «Περιμένουν απάντηση» group (2026-10-10). A list of
+    # ids beside the tasks rather than a flag on each: every other endpoint
+    # returns a bare TaskRecord, and a flag missing from those would drop the
+    # task out of the group after any edit until the next refresh.
+    awaiting_reply_ids: list[str] = []
 
 class UpdateTaskRequest(BaseModel):
     """Request body for PATCH /tasks/{record_id}"""
@@ -675,6 +681,35 @@ async def extract_image(image: UploadFile = File(...), context: str = Form(None)
         )
 
 
+def _awaiting_reply_ids(user_id: str, tasks: list[TaskRecord]) -> list[str]:
+    """
+    Which of these tasks the escalation loop is ringing this user about.
+
+    The decision is repository.get_hostaway_tasks_awaiting_reply — the loop's
+    own list. The two narrowings before it decide nothing:
+      - is_mine, because the loop reads get_owned_or_assigned_tasks and is_mine
+        is that read's truth table (pinned in tests/test_agent_workspaces.py);
+        a guest task handed to a colleague rings the colleague, not me.
+      - a ring stamp present, so a list with no guest message in it — most of
+        them, every minute, on every open screen — never pays for the category
+        lookup.
+
+    Never raises: the task list is the app, and this is a group on top of it.
+    """
+    candidates = [
+        t for t in tasks
+        if agent_tools.is_mine(t, user_id) and t.hostaway_last_notified_at
+    ]
+    if not candidates:
+        return []
+    try:
+        awaiting = repository.get_hostaway_tasks_awaiting_reply(user_id, tasks=candidates)
+    except Exception:
+        logger.exception("Failed to work out which tasks are awaiting a reply")
+        return []
+    return [t.record_id for t in awaiting]
+
+
 @app.get("/tasks", response_model=TasksListResponse, status_code=status.HTTP_200_OK)
 def list_tasks(
     workspace_id: Optional[str] = None,
@@ -694,7 +729,10 @@ def list_tasks(
         # second round trip would buy nothing.
         if workspace_id is not None:
             tasks = [t for t in tasks if t.workspace_id == workspace_id]
-        return TasksListResponse(tasks=tasks, count=len(tasks))
+        return TasksListResponse(
+            tasks=tasks, count=len(tasks),
+            awaiting_reply_ids=_awaiting_reply_ids(user_id, tasks),
+        )
     except Exception as e:
         logger.exception("Failed to retrieve tasks")
         raise HTTPException(

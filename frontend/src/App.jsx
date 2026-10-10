@@ -10,6 +10,7 @@ import SideNav from './components/SideNav';
 import InboxView from './components/InboxView';
 import TodayView from './components/TodayView';
 import BrowseView from './components/BrowseView';
+import TaskDetailSheet from './components/TaskDetailSheet';
 import FloatingActionButtons from './components/FloatingActionButtons';
 import Toast from './components/Toast';
 import RecurrenceProvider from './components/RecurrenceProvider';
@@ -103,31 +104,52 @@ const TAB_TITLE_KEYS = {
  * and against a task list (the counts beside each category). Both are known at
  * this line and at no line above it.
  */
-function TaskViews({ activeTab, viewProps, onTaskCreated, openBoardId, onOpenBoard, onCloseBoard }) {
+function TaskViews({ activeTab, viewProps, onTaskCreated, openBoardId, onOpenBoard, onCloseBoard, notifiedTask, onCloseNotified }) {
   const { activeId } = useWorkspaces();
   const scoped = { ...viewProps, tasks: filterTasksByWorkspace(viewProps.tasks, activeId) };
+
+  // The task a tapped notification named, drawn here rather than in App because
+  // the sheet reads the workspace, board and recurrence contexts, and this is
+  // the first line below all of them. Unapproved — a fresh guest message — it
+  // opens as the Inbox would show it, approve button included.
+  const notifiedSheet = notifiedTask && (
+    <TaskDetailSheet
+      task={notifiedTask}
+      variant={notifiedTask.approval_status ? 'default' : 'inbox'}
+      onClose={onCloseNotified}
+      onUpdate={viewProps.onTaskUpdate}
+      onTaskDeleted={(id) => { viewProps.onTaskDeleted?.(id); onCloseNotified(); }}
+      onShowToast={viewProps.onShowToast}
+      onAcknowledged={viewProps.onTaskAcknowledged}
+    />
+  );
 
   // A board open in «Όλα» is a page of its own (2026-09-29). It gets EVERY
   // task, not the room-scoped list: a board shows every card on it, whatever
   // room the switcher is set to — see BoardPage.
   if (activeTab === 'browse' && openBoardId) {
     return (
-      <Suspense fallback={null}>
-        <BoardPage
-          boardId={openBoardId}
-          tasks={viewProps.tasks}
-          onBack={onCloseBoard}
-          onOpenBoard={onOpenBoard}
-          onTaskUpdate={viewProps.onTaskUpdate}
-          onTaskDeleted={viewProps.onTaskDeleted}
-          onShowToast={viewProps.onShowToast}
-          onTaskAcknowledged={viewProps.onTaskAcknowledged}
-        />
-      </Suspense>
+      <>
+        <Suspense fallback={null}>
+          <BoardPage
+            boardId={openBoardId}
+            tasks={viewProps.tasks}
+            onBack={onCloseBoard}
+            onOpenBoard={onOpenBoard}
+            onTaskUpdate={viewProps.onTaskUpdate}
+            onTaskDeleted={viewProps.onTaskDeleted}
+            onShowToast={viewProps.onShowToast}
+            onTaskAcknowledged={viewProps.onTaskAcknowledged}
+          />
+        </Suspense>
+        {notifiedSheet}
+      </>
     );
   }
 
   return (
+    <>
+    {notifiedSheet}
     <TaskFilterProvider tasks={scoped.tasks}>
       {activeTab === 'inbox' && <InboxView {...scoped} />}
       {activeTab === 'today' && <TodayView {...scoped} />}
@@ -140,6 +162,7 @@ function TaskViews({ activeTab, viewProps, onTaskCreated, openBoardId, onOpenBoa
           whatever room the switcher is set to — see BoardStrip. */}
       {activeTab === 'browse' && <BrowseView {...scoped} allTasks={viewProps.tasks} onOpenBoard={onOpenBoard} />}
     </TaskFilterProvider>
+    </>
   );
 }
 
@@ -185,6 +208,10 @@ function App() {
   const { t } = useTranslation();
 
   const [tasks, setTasks] = useState([]);
+  // The guest messages ringing this phone until the guest is answered, as the
+  // server lists them beside the tasks — Today's «Περιμένουν απάντηση». Every
+  // GET /tasks replaces it, so it is never more than the auto-refresh old.
+  const [awaitingReplyIds, setAwaitingReplyIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -198,6 +225,12 @@ function App() {
   const [activeTab, setActiveTab] = useState('inbox');
   const [openBoardId, setOpenBoardId] = useState(readOpenBoard);
   const [expandedTaskId, setExpandedTaskId] = useState(null);
+  // The task a tapped notification is ABOUT (2026-10-10). Its sheet opens over
+  // whatever screen is showing, rather than through expandedTaskId, because
+  // expanding a row only works if that row is on the screen — and the reason
+  // this exists is a reminder for a task that was on no screen he looked at.
+  // A room or a filter left switched on must not be able to hide it again.
+  const [notifiedTaskId, setNotifiedTaskId] = useState(null);
   // The tasks the last add produced. Only the Inbox reads it today — that is
   // where an add lands — but it rides in viewProps with expandedTaskId because
   // it is the same kind of thing: which row the screen is pointing at.
@@ -274,6 +307,7 @@ function App() {
         setError(null);
         const data = await getAllTasks();
         setTasks(data.tasks);
+        setAwaitingReplyIds(data.awaiting_reply_ids || []);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -291,20 +325,24 @@ function App() {
   }, [session]);
 
   // Notification-tap navigation: the app opened fresh via a deep link
-  // (?view=...) from the service worker's notificationclick handler, or
-  // the app was already open and the service worker posts a message to
-  // switch tabs instead of forcing a reload.
+  // (?view=...&task=...) from the service worker's notificationclick handler,
+  // or the app was already open and the service worker posts a message to
+  // switch tabs instead of forcing a reload. `task` is the one the push was
+  // about, when it was about one.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const viewParam = params.get('view');
     if (viewParam) {
       setActiveTab(viewParam);
+      setNotifiedTaskId(params.get('task'));
       window.history.replaceState({}, '', window.location.pathname);
     }
 
     function handleServiceWorkerMessage(event) {
       if (event.data?.type === 'NAVIGATE' && event.data.view) {
         setActiveTab(event.data.view);
+        setExpandedTaskId(null);
+        setNotifiedTaskId(event.data.taskId || null);
       }
     }
     navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage);
@@ -350,7 +388,10 @@ function App() {
   // add a few rows reads as the app crashing and coming back.
   const refreshTasks = useCallback(() => {
     return getAllTasks()
-      .then((data) => setTasks(data.tasks))
+      .then((data) => {
+        setTasks(data.tasks);
+        setAwaitingReplyIds(data.awaiting_reply_ids || []);
+      })
       .catch((err) => setToast({ message: err.message, variant: 'error' }));
   }, []);
 
@@ -367,7 +408,10 @@ function App() {
   const refreshTasksQuietly = useCallback(() => {
     if (!session) return;
     getAllTasks()
-      .then((data) => setTasks(data.tasks))
+      .then((data) => {
+        setTasks(data.tasks);
+        setAwaitingReplyIds(data.awaiting_reply_ids || []);
+      })
       .catch((err) => console.error('Background task refresh failed:', err));
   }, [session]);
 
@@ -536,6 +580,7 @@ function App() {
     }
     setActiveTab(tab);
     setExpandedTaskId(null);
+    setNotifiedTaskId(null);
   }
 
   const openBoard = useCallback((id) => {
@@ -556,8 +601,17 @@ function App() {
     (task) => isVisibleTask(task) && !task.is_completed && !task.approval_status
   ).length;
 
+  // Looked up rather than stored, so the sheet always shows the task as it is
+  // NOW — an edit made in it folds back through setTasks like any other — and
+  // an id that matches nothing (deleted since, or not loaded yet) opens nothing
+  // and hides nothing.
+  const notifiedTask = notifiedTaskId
+    ? tasks.find((task) => task.record_id === notifiedTaskId) ?? null
+    : null;
+
   const viewProps = {
     tasks,
+    awaitingReplyIds,
     expandedTaskId,
     newTaskIds,
     onToggleExpand: handleToggleExpand,
@@ -683,13 +737,15 @@ function App() {
             openBoardId={openBoardId}
             onOpenBoard={openBoard}
             onCloseBoard={closeBoard}
+            notifiedTask={notifiedTask}
+            onCloseNotified={() => setNotifiedTaskId(null)}
           />
         )}
       </main>
 
       {/* Not on a board's page: its + writes a card onto that board, never into
           the Inbox, so the page draws its own. */}
-      {!isDesktop && expandedTaskId === null && !isBoardPage && (
+      {!isDesktop && expandedTaskId === null && !notifiedTask && !isBoardPage && (
         <FloatingActionButtons
           onAddClick={() => setIsAddModalOpen(true)}
           onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
