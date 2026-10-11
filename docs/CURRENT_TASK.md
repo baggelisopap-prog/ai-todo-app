@@ -1,6 +1,11 @@
 ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, LIVE; a task created after the deploy works; the owner does NOT like the UI/UX — redesign CHOSEN 2026-09-29 (proposals 1 + 2 + 4 + 5α + 5β); stage A (1 + 2) LIVE, waiting for his look; stage B (4 + 5α + 5β) not built
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
+> **Side fix in between, 2026-10-10/11, not part of this task:** a guest message that keeps ringing
+> is now on Today, and tapping a reminder opens its task (`06d6bce`, LIVE). What is and is not
+> watched is in its PROJECT_STATUS.md bullet, at the top of «Shipped and live». The boards work
+> below is unchanged by it.
+
 > **LIVE SINCE 2026-09-27, ~11:19 Athens.** The owner ran the three migrations
 > («έτρεξα τα 3 migrations, κάνε push»); before pushing they were read back from the live
 > database, read-only: `tasks: dropped_at, dropped_by, drop_reason, start_date -> PRESENT`, 0 rows
