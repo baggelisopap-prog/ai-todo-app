@@ -2428,61 +2428,71 @@ def _create_hostaway_task(
     # see TaskService._check_hostaway_escalations / HOSTAWAY_ESCALATION_INTERVALS
     # in services.py, run from the existing scheduler cycle.
     priority_emoji = {"P1": "🔴", "P2": "🟡", "P3": "🟢"}.get(priority, "")
-    try:
-        service.send_push_to_user(
-            user_id, title=f"{priority_emoji} {task_name}", body=classification["summary"]
-        )
-    except Exception as e:
-        logging.error(f"[hostaway webhook] Failed to send instant notification: {e}")
 
-    # Which box this lands in. Escalation matches on this category's id (see
-    # repository.get_active_hostaway_tasks), so a task created without it is
-    # created already invisible to the escalation loop.
-    system_category = repository.get_system_category(user_id, "hostaway")
-    if system_category is None:
-        logging.warning(
-            f"[hostaway webhook] No 'hostaway' system category for {user_id} — "
-            "task will be created unfiled and will NOT escalate"
-        )
-
+    # The push goes AFTER the save, so that it can name the task and a tap
+    # opens it (2026-10-11, the owner's pick of three ways). Until then it went
+    # first, and that was deliberate: nothing below could cost it. The
+    # `finally` keeps that — a failed save, or the category lookup raising,
+    # still rings, only without a link. The price he accepted: the push now
+    # waits for the save, which on a hung database is up to the client's 120 s.
+    task, saved = None, False
     try:
-        service.create_task_manual(user_id, {
-            "task_name": task_name,
-            # Same shape the append path re-renders, so a threaded task and a
-            # fresh one read identically and _hostaway_meta_block has one
-            # thing to find.
-            "description": _render_hostaway_description(
-                classification["summary"],
-                f"Property: {listing_name}\n"
-                f"Dates: {reservation_details['arrival_date']} → "
-                f"{reservation_details['departure_date']}",
-                message_body,
-            ),
-            # Both the old word and the new pair, for the whole of Slice 1: the
-            # `category` column is still live and is dropped only by migration
-            # Part B. An unfiled guest task is far better than no task at all,
-            # so a missing system category degrades rather than refuses.
-            "category": "Hostaway",
-            "workspace_id": system_category.workspace_id if system_category else None,
-            "category_id": system_category.record_id if system_category else None,
-            "priority": priority,
-            "due_date": now.strftime("%Y-%m-%d"),
-            "due_time": None,
-            "checklist": [],
-            "hostaway_created_at": now_str,
-            "hostaway_last_notified_at": now_str,
-            "hostaway_conversation_id": str(conversation_id) if conversation_id else None,
-            "hostaway_last_message_at": message_date,
-            "hostaway_message_count": 1,
-            "hostaway_thread": message_body,
-        })
-        logging.info(
-            f"[hostaway webhook] Created task for {user_id}: {task_name} (priority={priority})"
-        )
-        return True
-    except Exception as e:
-        logging.error(f"[hostaway webhook] Failed to create task for {user_id}: {e}")
-        return False
+        # Which box this lands in. Escalation matches on this category's id (see
+        # repository.get_active_hostaway_tasks), so a task created without it is
+        # created already invisible to the escalation loop.
+        system_category = repository.get_system_category(user_id, "hostaway")
+        if system_category is None:
+            logging.warning(
+                f"[hostaway webhook] No 'hostaway' system category for {user_id} — "
+                "task will be created unfiled and will NOT escalate"
+            )
+
+        try:
+            task = service.create_task_manual(user_id, {
+                "task_name": task_name,
+                # Same shape the append path re-renders, so a threaded task and a
+                # fresh one read identically and _hostaway_meta_block has one
+                # thing to find.
+                "description": _render_hostaway_description(
+                    classification["summary"],
+                    f"Property: {listing_name}\n"
+                    f"Dates: {reservation_details['arrival_date']} → "
+                    f"{reservation_details['departure_date']}",
+                    message_body,
+                ),
+                # Both the old word and the new pair, for the whole of Slice 1: the
+                # `category` column is still live and is dropped only by migration
+                # Part B. An unfiled guest task is far better than no task at all,
+                # so a missing system category degrades rather than refuses.
+                "category": "Hostaway",
+                "workspace_id": system_category.workspace_id if system_category else None,
+                "category_id": system_category.record_id if system_category else None,
+                "priority": priority,
+                "due_date": now.strftime("%Y-%m-%d"),
+                "due_time": None,
+                "checklist": [],
+                "hostaway_created_at": now_str,
+                "hostaway_last_notified_at": now_str,
+                "hostaway_conversation_id": str(conversation_id) if conversation_id else None,
+                "hostaway_last_message_at": message_date,
+                "hostaway_message_count": 1,
+                "hostaway_thread": message_body,
+            })
+            saved = True
+            logging.info(
+                f"[hostaway webhook] Created task for {user_id}: {task_name} (priority={priority})"
+            )
+        except Exception as e:
+            logging.error(f"[hostaway webhook] Failed to create task for {user_id}: {e}")
+    finally:
+        try:
+            service.send_push_to_user(
+                user_id, title=f"{priority_emoji} {task_name}", body=classification["summary"],
+                task_id=task.record_id if task else None,
+            )
+        except Exception as e:
+            logging.error(f"[hostaway webhook] Failed to send instant notification: {e}")
+    return saved
 
 
 HOSTAWAY_WEBHOOK_SECRET = os.getenv("HOSTAWAY_WEBHOOK_SECRET")
@@ -2767,6 +2777,7 @@ async def hostaway_webhook(request: Request):
                         user_id,
                         title=f"{emoji} {existing_task.task_name}",
                         body=classification["summary"],
+                        task_id=existing_task.record_id,
                     )
                 except Exception as e:
                     logging.error(f"[hostaway webhook] Failed to send escalation notification: {e}")

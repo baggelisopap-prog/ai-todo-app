@@ -417,6 +417,23 @@ function App() {
 
   useAutoRefresh(refreshTasksQuietly);
 
+  // A tapped push about a task this list has never fetched — a guest message
+  // the server saved a second before pushing, with the app already open —
+  // would find nothing to open until the next minute's refresh, and then pop
+  // open out of nowhere (2026-10-11). So the tap fetches, once per task, and
+  // only when it is missing: the first load already fetched everything else.
+  const fetchedForNotifiedId = useRef(null);
+  useEffect(() => {
+    if (!notifiedTaskId) {
+      fetchedForNotifiedId.current = null;
+      return;
+    }
+    if (isLoading || fetchedForNotifiedId.current === notifiedTaskId) return;
+    if (tasks.some((task) => task.record_id === notifiedTaskId)) return;
+    fetchedForNotifiedId.current = notifiedTaskId;
+    refreshTasksQuietly();
+  }, [notifiedTaskId, isLoading, tasks, refreshTasksQuietly]);
+
   // Everything the "+" produces — typed, dictated, photographed — comes back
   // without `approval_status`, i.e. waiting to be approved, and Inbox is the
   // only screen that lists those. Added from Calendar or Today, the task was

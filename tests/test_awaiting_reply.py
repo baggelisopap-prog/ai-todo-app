@@ -265,3 +265,98 @@ def test_a_failure_to_work_it_out_never_costs_the_task_list(client, monkeypatch)
     assert r.status_code == 200
     assert len(r.json()["tasks"]) == 1
     assert r.json()["awaiting_reply_ids"] == []
+
+
+# --- the webhook's own two pushes (2026-10-11) --------------------------------
+#
+# The first push about a new guest message went out BEFORE the task was saved,
+# so it had no id to carry and a tap opened the app wherever. Offered three ways
+# out, the owner chose to save first and push second («α νομιζω ειναι το
+# καλυτερο»), knowing the push now waits for the save. What must NOT change is
+# that the push arrives: a failed save, or a failed lookup before it, still
+# sends it — only without a link.
+
+@pytest.fixture
+def webhook(monkeypatch):
+    from tests import test_webhook_fanout as fanout
+
+    monkeypatch.setattr(main, "HOSTAWAY_WEBHOOK_SECRET", fanout.WEBHOOK_SECRET)
+    calls = fanout._wire(monkeypatch, [fanout._connection(ME)])
+    calls["order"] = []
+
+    def _save(user_id, fields):
+        calls["order"].append("saved")
+        calls["created"].append((user_id, fields))
+        return _guest_task(record_id="new-guest-task")  # the row the database hands back
+
+    def _push(user_id, **kw):
+        calls["order"].append("pushed")
+        calls["pushes"].append((user_id, kw))
+
+    monkeypatch.setattr(main.service, "create_task_manual", _save)
+    monkeypatch.setattr(main.service, "send_push_to_user", _push)
+    return calls, fanout
+
+
+def test_the_first_push_about_a_guest_message_opens_the_task_it_created(webhook):
+    calls, fanout = webhook
+
+    fanout._post(fanout._incoming())
+
+    assert calls["order"] == ["saved", "pushed"]
+    assert calls["pushes"][0][1]["task_id"] == "new-guest-task"
+
+
+def test_a_failed_save_still_rings_only_without_a_link(webhook, monkeypatch):
+    """Before this change the push went first precisely so that a failed save
+    could not cost it. Saving first must keep that."""
+    calls, fanout = webhook
+
+    def _boom(user_id, fields):
+        raise RuntimeError("PGRST204: an unknown column")
+
+    monkeypatch.setattr(main.service, "create_task_manual", _boom)
+
+    fanout._post(fanout._incoming())
+
+    assert len(calls["pushes"]) == 1
+    _, push = calls["pushes"][0]
+    assert push["title"] == "🔴 Hostaway: Κώστας - Pine Lodge"
+    assert push.get("task_id") is None
+
+
+def test_a_failed_lookup_before_the_save_still_rings(webhook, monkeypatch):
+    """The Hostaway box is looked up between the old push and the save, and an
+    error there was never caught — it reached the handler after the push had
+    gone. Whatever the handler then does with it, the push must still go."""
+    calls, fanout = webhook
+
+    def _boom(user_id, key):
+        raise RuntimeError("database hiccup")
+
+    monkeypatch.setattr(main.repository, "get_system_category", _boom)
+
+    try:
+        fanout._post(fanout._incoming())
+    except RuntimeError:
+        pass
+
+    assert len(calls["pushes"]) == 1
+    assert calls["pushes"][0][1].get("task_id") is None
+
+
+def test_the_more_urgent_push_opens_the_task_it_is_about(webhook, monkeypatch):
+    """A follow-up inside the 90-second window folds into the open task and
+    pushes again only if it made it more urgent. That task exists already."""
+    calls, fanout = webhook
+    open_task = _guest_task(record_id="open-guest-task", priority="P3",
+                            hostaway_conversation_id="49446111",
+                            hostaway_last_message_at="2026-08-13 15:59:30",
+                            hostaway_thread="καλησπέρα σας")
+    monkeypatch.setattr(main.repository, "get_open_tasks_for_conversation", lambda u, c: [open_task])
+    monkeypatch.setattr(main.repository, "update_hostaway_thread_fields", lambda *a: None)
+
+    fanout._post(fanout._incoming())  # classified P1 by the fake, so more urgent than P3
+
+    assert calls["created"] == []
+    assert [push["task_id"] for _, push in calls["pushes"]] == ["open-guest-task"]
