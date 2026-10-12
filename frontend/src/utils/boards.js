@@ -197,14 +197,39 @@ export function moveOptionHint(column, currentColumnId, count) {
 }
 
 /**
- * The open board after a bottom-bar tab is pressed. «Όλα» pressed while already
- * on a board goes back to the list — the usual meaning of pressing the tab you
- * are on. Any other press leaves it open, so coming back to «Όλα» lands on the
- * same board rather than on the list.
+ * BOARD MODE (2026-10-12, the owner's «switch to board mode», chosen from
+ * mockups over a fifth bottom tab). The boards are not one of the four tabs:
+ * a switch in the top bar takes the whole app to them, where the bottom tabs
+ * and the AskBar give their room to the board, and the same switch brings it
+ * back. Until then the boards were tiles at the top of «Όλα» («χύμα», he
+ * called it), and an open board was a page inside that tab.
+ *
+ * BOARDS_TAB is the value App's activeTab holds while in board mode — a screen
+ * with no button in the bottom bar, which is the whole point.
  */
-export function boardAfterTabPress({ activeTab, pressed, openBoardId }) {
-  if (pressed === 'browse' && activeTab === 'browse') return null;
-  return openBoardId || null;
+export const BOARDS_TAB = 'boards';
+
+/**
+ * Where the switch goes. Into board mode from any task screen; out of it, back
+ * to the screen that was left for it — so a look at a board from the Calendar
+ * returns to the Calendar — or to the Inbox, where the app starts, when there
+ * is nothing to go back to.
+ */
+export function tabAfterModeSwitch(activeTab, returnTab) {
+  if (activeTab !== BOARDS_TAB) return BOARDS_TAB;
+  return returnTab && returnTab !== BOARDS_TAB ? returnTab : 'inbox';
+}
+
+/**
+ * Whether the switch is drawn. Only for someone who has a board: his rule from
+ * the first boards brainstorm is that whoever does not use boards sees nothing
+ * new (the first board is made from the small «+ Πίνακας» in «Όλα»). Inside
+ * board mode it is ALWAYS drawn, because it is the way out — deleting your
+ * last board must not leave you in a mode with no door.
+ */
+export function showModeSwitch({ inBoards, boardCount, isLoaded }) {
+  if (inBoards) return true;
+  return Boolean(isLoaded) && boardCount > 0;
 }
 
 /**

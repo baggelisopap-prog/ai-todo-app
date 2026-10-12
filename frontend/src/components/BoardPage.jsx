@@ -31,14 +31,18 @@ const NEW_BOARD = '__new__';
  *   - no «Ρώτα με ό,τι θες…», because the assistant does not see boards at
  *     all, by the owner's decision. A board assistant is parked for later.
  *
- * The bottom navigation stays. Leaving for Today and coming back lands here
- * again; pressing «Όλα» while here goes back to the list (App remembers which
- * board is open).
+ * Since 2026-10-12 this page lives in BOARD MODE (see BOARDS_TAB in
+ * utils/boards.js), so the bottom tabs are gone too and the board has the whole
+ * height. ‹ goes back to the list of boards; `modeSwitch`, beside the ⋯, goes
+ * back to the tasks in one tap — the owner asked for it here as well as on the
+ * list. Coming back into board mode lands on this board again (App remembers
+ * which one is open). Until then the bottom tabs stayed under this page and
+ * pressing «Όλα» was the way back to the list.
  *
  * Lazy-loaded from App: it brings drag-and-drop (@dnd-kit) with it for the
  * computer's columns, and most opens of the app never reach a board.
  */
-function BoardPage({ boardId, tasks, onBack, onOpenBoard, onTaskUpdate, onTaskDeleted, onShowToast, onTaskAcknowledged }) {
+function BoardPage({ boardId, tasks, onBack, onOpenBoard, onTaskUpdate, onTaskDeleted, onShowToast, onTaskAcknowledged, modeSwitch = null }) {
   const { t } = useTranslation();
   const { boards, isLoaded, create, rename, remove } = useBoards();
   const confirm = useConfirm();
@@ -106,6 +110,8 @@ function BoardPage({ boardId, tasks, onBack, onOpenBoard, onTaskUpdate, onTaskDe
               <path d="M19 9l-7 7-7-7" />
             </svg>
           </button>
+
+          {modeSwitch}
 
           <KebabMenu
             ariaLabel={t('boards.board_menu')}

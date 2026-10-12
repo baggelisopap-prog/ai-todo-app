@@ -52,15 +52,24 @@ import { getInitials } from '../utils/profile';
  * grey button in the corner a thumb reaches last, sitting beside the title it
  * was already truncating.
  */
-function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = true, showAgent = true, wide = false, roomPicker = false, tasks }) {
+/**
+ * `modeSwitch` — the «Πίνακες» / «Εργασίες» switch (BoardModeSwitch), passed in
+ * whole so this bar does not need to know about boards. It draws nothing for
+ * someone with no board.
+ *
+ * `showRoom` — false in board mode. A board shows every card on it whatever
+ * room the switcher says, so the room's coloured rule over it would report a
+ * filter that is not filtering — the same reason BoardPage's own bar has none.
+ */
+function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = true, showAgent = true, wide = false, roomPicker = false, tasks, modeSwitch = null, showRoom = true }) {
   const { t } = useTranslation();
   const { workspaces, activeId } = useWorkspaces();
 
-  const activeRoom = workspaces.find((w) => w.record_id === activeId);
+  const activeRoom = showRoom ? workspaces.find((w) => w.record_id === activeId) : undefined;
   // UNFILED is a legitimate position with no colour of its own, so it gets the
   // coloured rule too — in the token's neutral, which is what «no room» looks
   // like everywhere else in the app.
-  const isFiltered = activeId !== null;
+  const isFiltered = showRoom && activeId !== null;
 
   return (
     // sticky rather than fixed: it scrolls with the document's flow, so no
@@ -82,6 +91,8 @@ function AppBar({ title, profile, onOpenAgent, onOpenSettings, showProfile = tru
             {title}
           </h1>
         )}
+
+        {modeSwitch}
 
         {showAgent && (
           <button

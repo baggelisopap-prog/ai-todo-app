@@ -5,23 +5,25 @@ import { boardSummary, daysAgo, pickCreatedBoard } from '../utils/boards';
 import NameDialog from './NameDialog';
 
 /**
- * The boards at the top of «Όλα», one tile each (2026-09-29 — proposal 1 of the
- * redesign). They used to be «Όλα»'s third tab; now they are the first thing
- * the screen shows, and a tap opens the board as its own page.
- *
- * A tile says how the board is doing without opening it: a bar split into
- * waiting / under way / done, the same three as numbers, and when anything on
- * it last moved. Everything is read from what the app already holds — no
- * request per tile.
+ * The boards, one tile each. A tile says how the board is doing without
+ * opening it: a bar split into waiting / under way / done, the same three as
+ * numbers, and when anything on it last moved. Everything is read from what
+ * the app already holds — no request per tile.
  *
  * TWO PLACES, one component (`slot`):
- *   'top'  — the strip of tiles, drawn only for someone who HAS a board;
+ *   'list' — board mode's own screen (2026-10-12, see BOARDS_TAB in
+ *            utils/boards.js): every board at full width, then «+ Νέος
+ *            πίνακας». A tap opens the board as its own page. Until then these
+ *            tiles were a sideways-scrolling strip at the top of «Όλα»
+ *            (2026-09-29), which the owner called «χύμα» — tasks and boards
+ *            on one screen, the boards pushing the list down;
  *   'tabs' — a small «+ Πίνακας» beside «Όλα»'s tabs, drawn only for someone
- *            who has none. That is the door to the first board, and it is no
- *            louder than the «Πίνακες» tab it replaces — the owner's rule is
- *            that whoever does not use boards sees nothing new.
+ *            who has no board. That is the door to the first board — the
+ *            board-mode switch only appears once there is one — and it is no
+ *            louder than that: the owner's rule is that whoever does not use
+ *            boards sees nothing new.
  */
-function BoardStrip({ slot = 'top', tasks, onOpenBoard }) {
+function BoardStrip({ slot = 'list', tasks, onOpenBoard }) {
   const { t } = useTranslation();
   const { boards, isLoaded, create } = useBoards();
   const [isCreating, setIsCreating] = useState(false);
@@ -65,25 +67,17 @@ function BoardStrip({ slot = 'top', tasks, onOpenBoard }) {
     );
   }
 
-  if (boards.length === 0) return null;
   const now = new Date();
 
   return (
-    <section aria-label={t('boards.strip_title')} className="mb-4">
-      <div className="flex items-baseline justify-between px-0.5 mb-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-          {t('boards.strip_title')}
-        </h2>
-        <button
-          type="button"
-          onClick={() => setIsCreating(true)}
-          className="tap-44 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-        >
-          + {t('boards.new_short')}
-        </button>
-      </div>
+    <section aria-label={t('boards.strip_title')}>
+      {/* With no board left — the last one deleted while in board mode — the
+          screen says so rather than showing a lone button. */}
+      {boards.length === 0 && (
+        <p className="px-0.5 pb-3 text-sm text-[var(--text-secondary)]">{t('boards.list_empty')}</p>
+      )}
 
-      <div className="flex gap-2.5 overflow-x-auto -mx-4 px-4 pt-0.5 pb-1 md:mx-0 md:px-0">
+      <div className="flex flex-col gap-2.5">
         {boards.map((board) => {
           const s = boardSummary(board, tasksById, now);
           const ago = daysAgo(s.lastMovedAt, now);
@@ -93,9 +87,14 @@ function BoardStrip({ slot = 'top', tasks, onOpenBoard }) {
               key={board.record_id}
               type="button"
               onClick={() => onOpenBoard(board.record_id)}
-              className="flex-shrink-0 w-[214px] flex flex-col gap-2 p-3 rounded-xl text-left bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] hover:bg-[var(--bg-hover)]"
+              className="relative w-full flex flex-col gap-2 pl-4 pr-11 py-3.5 rounded-xl text-left bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] hover:bg-[var(--bg-hover)]"
             >
-              <span className="text-[15px] font-semibold leading-snug text-[var(--text-primary)] line-clamp-2">{board.name}</span>
+              {/* › says the tile opens something, which a strip of tiles
+                  scrolling sideways did not need to say. */}
+              <svg className="absolute right-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+              <span className="text-[16.5px] font-semibold leading-snug text-[var(--text-primary)] line-clamp-2">{board.name}</span>
               {/* Grey waiting, blue under way, green done — the first column,
                   the other open ones, «Έγινε». */}
               <span aria-hidden="true" className="flex h-1.5 gap-0.5 rounded-sm overflow-hidden bg-[var(--bg-hover)]">
@@ -122,6 +121,14 @@ function BoardStrip({ slot = 'top', tasks, onOpenBoard }) {
           );
         })}
       </div>
+
+      <button
+        type="button"
+        onClick={() => setIsCreating(true)}
+        className="block w-full mt-3 p-3.5 rounded-xl border-[1.5px] border-dashed border-[var(--border-medium)] text-[14.5px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+      >
+        + {t('boards.new')}
+      </button>
       {dialog}
     </section>
   );

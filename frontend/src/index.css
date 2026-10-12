@@ -209,8 +209,10 @@ body {
 .bottom-safe-20 {
   bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
 }
-.bottom-safe-24 {
-  bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+/* A board's + in board mode, where nothing sits under it — no tabs, no AskBar.
+   Was .bottom-safe-24 (6rem) while the bottom tabs stayed under the board. */
+.bottom-safe-6 {
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
 }
 /* The phone's dock has two floors now — AskBar sitting on BottomNav — so
    anything floating above it has further to climb than the 6rem that cleared

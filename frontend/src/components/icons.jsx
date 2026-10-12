@@ -155,6 +155,28 @@ export function BrowseIcon({ className = 'w-[22px] h-[22px]' }) {
   );
 }
 
+/** A board: columns of different heights, for the switch into board mode. */
+export function BoardsIcon({ className = 'w-[18px] h-[18px]' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <rect x="7" y="7" width="3" height="9" rx="0.5" />
+      <rect x="14" y="7" width="3" height="5" rx="0.5" />
+    </svg>
+  );
+}
+
+/** A ticked list, for the switch back out of board mode to the tasks. */
+export function TasksIcon({ className = 'w-[18px] h-[18px]' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="4 12 8 16 16 6" />
+      <line x1="13" y1="17" x2="20" y2="17" />
+      <line x1="16" y1="12" x2="20" y2="12" />
+    </svg>
+  );
+}
+
 /**
  * The filter funnel, for the row that says which filters are on.
  *

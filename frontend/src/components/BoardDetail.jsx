@@ -440,12 +440,13 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
       {/* The page's red +. It writes a card straight onto this board, never
           into the Inbox — the app's own + would have sent it through the
           extractor to wait for approval (finding 2 of the redesign). It sits
-          lower than the app's, because this page has no AskBar under it. */}
+          in the corner: in board mode nothing is under it, neither AskBar nor
+          the bottom tabs. */}
       <button
         type="button"
         onClick={startAdding}
         aria-label={t('boards.new_card')}
-        className="fixed bottom-safe-24 right-4 z-30 w-16 h-16 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center"
+        className="fixed bottom-safe-6 right-4 z-30 w-16 h-16 rounded-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white shadow-[var(--shadow-fab)] flex items-center justify-center"
       >
         <PlusIcon className="w-6 h-6" />
       </button>

@@ -15,6 +15,8 @@ import FloatingActionButtons from './components/FloatingActionButtons';
 import Toast from './components/Toast';
 import RecurrenceProvider from './components/RecurrenceProvider';
 import BoardsProvider from './components/BoardsProvider';
+import BoardModeSwitch from './components/BoardModeSwitch';
+import BoardStrip from './components/BoardStrip';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
 import AppBar from './components/AppBar';
 import WorkspaceProvider from './components/WorkspaceProvider';
@@ -25,7 +27,7 @@ import { useAutoRefresh } from './hooks/useAutoRefresh';
 import { useMediaQuery, DESKTOP_QUERY } from './hooks/useMediaQuery';
 import { filterTasksByWorkspace } from './utils/workspaces';
 import { isVisibleTask } from './utils/taskDisplay';
-import { boardAfterTabPress } from './utils/boards';
+import { BOARDS_TAB, tabAfterModeSwitch } from './utils/boards';
 
 // Loaded on demand, not in the first download. Each of these is already
 // rendered behind a condition — Calendar only on its tab, the three modals
@@ -48,9 +50,9 @@ const SettingsModal = lazy(() => import('./components/SettingsModal'));
 // and most opens of the app never reach one.
 const BoardPage = lazy(() => import('./components/BoardPage'));
 
-// Which board is open, for the browser tab's session: going to Today and back
-// lands on the same board, but a new launch starts on the list, like
-// everything else in the app.
+// Which board is open, for the browser tab's session: leaving board mode for
+// the tasks and coming back lands on the same board, but a new launch starts
+// on the list, like everything else in the app.
 const OPEN_BOARD_KEY = 'boards.selected';
 
 function readOpenBoard() {
@@ -83,6 +85,8 @@ const TAB_TITLE_KEYS = {
   today: 'nav.today',
   calendar: 'nav.calendar',
   browse: 'nav.browse',
+  // Board mode: a screen with no bottom tab — see BOARDS_TAB.
+  [BOARDS_TAB]: 'boards.strip_title',
 };
 
 /**
@@ -104,7 +108,7 @@ const TAB_TITLE_KEYS = {
  * and against a task list (the counts beside each category). Both are known at
  * this line and at no line above it.
  */
-function TaskViews({ activeTab, viewProps, onTaskCreated, openBoardId, onOpenBoard, onCloseBoard, notifiedTask, onCloseNotified }) {
+function TaskViews({ activeTab, viewProps, onTaskCreated, openBoardId, onOpenBoard, onCloseBoard, notifiedTask, onCloseNotified, boardModeSwitch }) {
   const { activeId } = useWorkspaces();
   const scoped = { ...viewProps, tasks: filterTasksByWorkspace(viewProps.tasks, activeId) };
 
@@ -124,24 +128,31 @@ function TaskViews({ activeTab, viewProps, onTaskCreated, openBoardId, onOpenBoa
     />
   );
 
-  // A board open in «Όλα» is a page of its own (2026-09-29). It gets EVERY
-  // task, not the room-scoped list: a board shows every card on it, whatever
-  // room the switcher is set to — see BoardPage.
-  if (activeTab === 'browse' && openBoardId) {
+  // Board mode (2026-10-12): the list of boards, or one board as a page of its
+  // own. Both get EVERY task, not the room-scoped list: a board shows every
+  // card on it, whatever room the switcher is set to — see BoardPage.
+  if (activeTab === BOARDS_TAB) {
     return (
       <>
-        <Suspense fallback={null}>
-          <BoardPage
-            boardId={openBoardId}
-            tasks={viewProps.tasks}
-            onBack={onCloseBoard}
-            onOpenBoard={onOpenBoard}
-            onTaskUpdate={viewProps.onTaskUpdate}
-            onTaskDeleted={viewProps.onTaskDeleted}
-            onShowToast={viewProps.onShowToast}
-            onTaskAcknowledged={viewProps.onTaskAcknowledged}
-          />
-        </Suspense>
+        {openBoardId ? (
+          <Suspense fallback={null}>
+            <BoardPage
+              boardId={openBoardId}
+              tasks={viewProps.tasks}
+              onBack={onCloseBoard}
+              onOpenBoard={onOpenBoard}
+              onTaskUpdate={viewProps.onTaskUpdate}
+              onTaskDeleted={viewProps.onTaskDeleted}
+              onShowToast={viewProps.onShowToast}
+              onTaskAcknowledged={viewProps.onTaskAcknowledged}
+              modeSwitch={boardModeSwitch}
+            />
+          </Suspense>
+        ) : (
+          <div className="max-w-3xl mx-auto p-4 md:p-6">
+            <BoardStrip slot="list" tasks={viewProps.tasks} onOpenBoard={onOpenBoard} />
+          </div>
+        )}
         {notifiedSheet}
       </>
     );
@@ -158,8 +169,8 @@ function TaskViews({ activeTab, viewProps, onTaskCreated, openBoardId, onOpenBoa
           <CalendarView {...scoped} onTaskCreated={onTaskCreated} />
         </Suspense>
       )}
-      {/* allTasks for the board tiles only: they count every card on a board,
-          whatever room the switcher is set to — see BoardStrip. */}
+      {/* allTasks and onOpenBoard for the «+ Πίνακας» door only: a first board
+          made there opens straight away, in board mode — see BoardStrip. */}
       {activeTab === 'browse' && <BrowseView {...scoped} allTasks={viewProps.tasks} onOpenBoard={onOpenBoard} />}
     </TaskFilterProvider>
     </>
@@ -224,6 +235,8 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('inbox');
   const [openBoardId, setOpenBoardId] = useState(readOpenBoard);
+  // The task screen board mode was entered from, so «Εργασίες» goes back to it.
+  const returnTabRef = useRef('inbox');
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   // The task a tapped notification is ABOUT (2026-10-10). Its sheet opens over
   // whatever screen is showing, rather than through expandedTaskId, because
@@ -588,29 +601,44 @@ function App() {
   }
 
   function handleTabChange(tab) {
-    // «Όλα» pressed while a board is open goes back to the list; any other
-    // tab leaves the board open, so «Όλα» brings you back to it.
-    const board = boardAfterTabPress({ activeTab, pressed: tab, openBoardId });
-    if (board !== openBoardId) {
-      setOpenBoardId(board);
-      writeOpenBoard(board);
-    }
+    // A tab press no longer touches the open board: boards left «Όλα» for
+    // board mode on 2026-10-12, so the open board is only board mode's to
+    // change. (Until then pressing «Όλα» on a board went back to the list.)
     setActiveTab(tab);
     setExpandedTaskId(null);
     setNotifiedTaskId(null);
   }
 
+  // The «Πίνακες» / «Εργασίες» switch. Into board mode the open board, if any,
+  // is still open — coming back lands where you left. Out of it, back to the
+  // task screen it was entered from.
+  function switchBoardMode() {
+    if (activeTab !== BOARDS_TAB) returnTabRef.current = activeTab;
+    setActiveTab(tabAfterModeSwitch(activeTab, returnTabRef.current));
+    setExpandedTaskId(null);
+    setNotifiedTaskId(null);
+  }
+
+  // Opening a board is always in board mode. The one door from outside it is
+  // a first board just made from «Όλα»'s «+ Πίνακας», which opens it at once.
   const openBoard = useCallback((id) => {
     setOpenBoardId(id);
     writeOpenBoard(id);
-  }, []);
+    if (activeTab !== BOARDS_TAB) {
+      returnTabRef.current = activeTab;
+      setActiveTab(BOARDS_TAB);
+    }
+  }, [activeTab]);
   const closeBoard = useCallback(() => {
     setOpenBoardId(null);
     writeOpenBoard(null);
   }, []);
-  // The board's page brings its own bar and has no AskBar under it — see
-  // BoardPage for why.
-  const isBoardPage = activeTab === 'browse' && Boolean(openBoardId);
+  // In board mode the board has the screen: no bottom tabs, no AskBar (the
+  // assistant does not see boards, by the owner's decision) and no app «+».
+  // An open board brings its own bar too — see BoardPage for why.
+  const isBoardMode = activeTab === BOARDS_TAB;
+  const isBoardPage = isBoardMode && Boolean(openBoardId);
+  const boardModeSwitch = <BoardModeSwitch inBoards={isBoardMode} onSwitch={switchBoardMode} />;
 
   // Must stay identical to InboxView's own filter — a badge that disagrees with
   // the list it points at is worse than no badge.
@@ -717,8 +745,11 @@ function App() {
         // screen. On a desktop the rooms stay in SideNav and the slot keeps the
         // screen's name. `tasks` is for the count beside each room in the
         // picker — the whole library, so the number says how much is in there.
-        roomPicker={!isDesktop}
+        // Not in board mode: the boards show every card whatever the room.
+        roomPicker={!isDesktop && !isBoardMode}
+        showRoom={!isBoardMode}
         tasks={tasks}
+        modeSwitch={boardModeSwitch}
       />
       )}
 
@@ -729,8 +760,9 @@ function App() {
           pb-56 is clearance for the phone's bottom dock and its floating
           button. Neither is rendered on a desktop, so neither is the gap. It
           was pb-48 while the dock was the nav alone; AskBar added a second
-          floor, and without the extra the last task sat under it. */}
-      <main className={`flex-1 ${isDesktop ? 'pb-8' : 'pb-56'}`}>
+          floor, and without the extra the last task sat under it. Board mode
+          has no dock — only a board's own + in the corner, which pb-28 clears. */}
+      <main className={`flex-1 ${isDesktop ? 'pb-8' : isBoardMode ? 'pb-28' : 'pb-56'}`}>
         {isLoading && (
           <div className="max-w-3xl mx-auto p-4 text-[var(--text-muted)] text-sm italic">
             {t('app.loading_tasks')}
@@ -756,13 +788,16 @@ function App() {
             onCloseBoard={closeBoard}
             notifiedTask={notifiedTask}
             onCloseNotified={() => setNotifiedTaskId(null)}
+            boardModeSwitch={boardModeSwitch}
           />
         )}
       </main>
 
-      {/* Not on a board's page: its + writes a card onto that board, never into
-          the Inbox, so the page draws its own. */}
-      {!isDesktop && expandedTaskId === null && !notifiedTask && !isBoardPage && (
+      {/* Not in board mode. A board's page draws its own +, which writes a card
+          onto that board, never into the Inbox; the list of boards has its
+          «+ Νέος πίνακας», and a task + there would add to a screen that is
+          not showing. */}
+      {!isDesktop && expandedTaskId === null && !notifiedTask && !isBoardMode && (
         <FloatingActionButtons
           onAddClick={() => setIsAddModalOpen(true)}
           onVoiceComplete={(newTasks) => handleTasksAdded(newTasks)}
@@ -774,10 +809,12 @@ function App() {
           position of its own and BottomNav gave its up — pinning the bar
           "one nav height from the bottom" would have meant hardcoding a
           number that depends on the nav's fonts and labels, and that breaks
-          silently the first time either changes. */}
-      {!isDesktop && (
+          silently the first time either changes.
+          Gone in board mode: the board gets the height, and the way back is
+          the «Εργασίες» switch at the top (2026-10-12). */}
+      {!isDesktop && !isBoardMode && (
         <div className="fixed bottom-0 left-0 right-0 z-40">
-          {!isBoardPage && <AskBar onOpen={openAgent} />}
+          <AskBar onOpen={openAgent} />
           <BottomNav activeTab={activeTab} onTabChange={handleTabChange} inboxCount={pendingCount} />
         </div>
       )}

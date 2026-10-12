@@ -163,12 +163,12 @@ function BrowseView({
     <div className="max-w-3xl mx-auto p-4 md:p-6">
       {/* Heading lives in AppBar — see TodayView for the reasoning. */}
 
-      {/* The boards, as tiles, above everything else (2026-09-29). They were a
-          third tab here until the owner chose, from mockups, to have a board
-          open as its own page — see BoardPage. A board shows every card on it
-          whatever the room switcher says, so the tiles count over the whole
-          library, not the room-scoped list. */}
-      <BoardStrip tasks={allTasks || tasks} onOpenBoard={onOpenBoard} />
+      {/* No boards here any more (2026-10-12). They were tiles above
+          everything else on this screen from 2026-09-29, and a third tab
+          before that; now they live in board mode, behind the «Πίνακες»
+          switch in the top bar — see BOARDS_TAB in utils/boards.js. What stays
+          is the small «+ Πίνακας» beside the tabs below, for someone with no
+          board yet. */}
 
       {/* Two tabs, underlined rather than pilled: they switch what the screen
           IS, while the pill-shaped controls below switch what it shows. Giving

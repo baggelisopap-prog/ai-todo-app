@@ -20,7 +20,9 @@ import {
   daysAgo,
   swipeColumnIndex,
   moveOptionHint,
-  boardAfterTabPress,
+  BOARDS_TAB,
+  tabAfterModeSwitch,
+  showModeSwitch,
   pickCreatedBoard,
 } from '../src/utils/boards.js';
 
@@ -134,14 +136,25 @@ check('«Έγινε» warns that it completes the task', moveOptionHint(columns[
 check('«Ακυρώθηκε» warns that it will ask why', moveOptionHint(columns[2], 'a', 4), { key: 'asks_why' });
 check('an open column says how many cards it holds', moveOptionHint(columns[1], 'a', 2), { key: 'cards', count: 2 });
 
-// Pressing «Όλα» while a board is open goes back to the list; any other tab
-// leaves the board where it is, so «Όλα» brings you back to it.
-check('«Όλα» on a board goes back to the list',
-  boardAfterTabPress({ activeTab: 'browse', pressed: 'browse', openBoardId: 'B1' }), null);
-check('leaving for Today keeps the board open',
-  boardAfterTabPress({ activeTab: 'browse', pressed: 'today', openBoardId: 'B1' }), 'B1');
-check('coming back to «Όλα» returns to the board',
-  boardAfterTabPress({ activeTab: 'today', pressed: 'browse', openBoardId: 'B1' }), 'B1');
+// Board mode (2026-10-12, the owner's «switch to board mode»): one switch in
+// the top bar takes the whole app to the boards and back.
+check('«Πίνακες» from a task screen goes to board mode',
+  tabAfterModeSwitch('calendar', 'today'), BOARDS_TAB);
+check('«Εργασίες» goes back to the screen you left for the boards',
+  tabAfterModeSwitch(BOARDS_TAB, 'calendar'), 'calendar');
+check('«Εργασίες» with nothing remembered lands where the app starts',
+  tabAfterModeSwitch(BOARDS_TAB, null), 'inbox');
+check('«Εργασίες» never "returns" to board mode itself',
+  tabAfterModeSwitch(BOARDS_TAB, BOARDS_TAB), 'inbox');
+
+// The switch is shown only to someone who has a board — his rule that whoever
+// does not use boards sees nothing new — but inside board mode it is always
+// there, because it is the way out.
+check('no board, no switch', showModeSwitch({ inBoards: false, boardCount: 0, isLoaded: true }), false);
+check('a board, a switch', showModeSwitch({ inBoards: false, boardCount: 1, isLoaded: true }), true);
+check('not before the boards have loaded', showModeSwitch({ inBoards: false, boardCount: 0, isLoaded: false }), false);
+check('inside board mode, always — even with the last board just deleted',
+  showModeSwitch({ inBoards: true, boardCount: 0, isLoaded: true }), true);
 
 // After «Δημιουργία», the board to open is the new one — even when the list
 // the screen held was out of date (a board made on another phone meanwhile).
