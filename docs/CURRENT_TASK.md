@@ -2,9 +2,10 @@ ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **Side fix in between, 2026-10-10/11, not part of this task:** a guest message that keeps ringing
-> is now on Today, and tapping a reminder opens its task (`06d6bce`, LIVE). What is and is not
-> watched is in its PROJECT_STATUS.md bullet, at the top of «Shipped and live». The boards work
-> below is unchanged by it.
+> is now on Today, and tapping a reminder opens its task (`06d6bce`, LIVE); since `c437901`
+> (pushed 2026-10-12, site LIVE) the webhook's own two pushes open their task too. What is and
+> is not watched is in their two PROJECT_STATUS.md bullets, at the top of «Shipped and live». The
+> boards work below is unchanged by them.
 
 > **LIVE SINCE 2026-09-27, ~11:19 Athens.** The owner ran the three migrations
 > («έτρεξα τα 3 migrations, κάνε push»); before pushing they were read back from the live
