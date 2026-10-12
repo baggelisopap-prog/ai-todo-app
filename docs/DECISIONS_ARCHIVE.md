@@ -1,6 +1,13 @@
 # DECISIONS_ARCHIVE — superseded decisions (reference only)
 _Kept in git, EXCLUDED from the Project knowledge index so retrieval can never surface a cancelled decision as current. Do not act on anything here; it is history._
 
+### Superseded: boards are a third tab of «Όλα», not a fifth bottom button — taken while the owner was away
+Superseded twice: on 2026-09-29 by tiles at the top of «Όλα» with a board as its own page (his «βάλτο τώρα όπως το 1»), and on 2026-10-12 by board mode behind a top-bar switch — see DECISIONS.md, "boards are a MODE of the app". It stayed in DECISIONS.md through the first of those, which it should not have. The original entry:
+
+> He left the build running («χωρίς να σταματησεις για εμενα») with the screen questions open, having been told they would be decided by the simplest option and listed. A fifth bottom tab is ruled out by an earlier decision and by code: at five tabs the Greek labels clip, and `scripts/ui-check.mjs` enforces `TAB_LIMIT = 4`. «Όλα» is the library and boards are a way of arranging it. A board shows every card on it whatever the room switcher says — hiding half a hand-picked set would look like loss. The board screen is lazy-loaded, so drag-and-drop (@dnd-kit) stays out of the first download. **For his review, with the other ten choices listed in CURRENT_TASK.md.**
+
+Still true and still in force elsewhere: a board shows every card whatever the room switcher says, and the board page is lazy-loaded. The "Greek labels clip at five tabs" claim was re-measured on 2026-10-12 and fit exactly (72/72px at 360px on Segoe UI).
+
 ### Superseded: the workspace switcher's shape is a function of how many workspaces there are
 Shipped and superseded the same day, 2026-09-12. `switcherShape()` chose between a row of chips (two to five workspaces) and a single menu (six and up), with the thresholds tested rather than guessed, because the owner's instruction was about users in general: «αναλογα με τον αριθμο να γινεται γτ δεν ξερω ο καθε χρηστης ποσα θα εχει».
 
