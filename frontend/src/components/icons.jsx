@@ -167,6 +167,23 @@ export function BoardsIcon({ className = 'w-[18px] h-[18px]' }) {
 }
 
 /** A ticked list, for the switch back out of board mode to the tasks. */
+// The phone board's strip: → before the next column, ← after the one before.
+export function ArrowRightIcon({ className = 'w-5 h-5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+export function ArrowLeftIcon({ className = 'w-5 h-5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
 export function TasksIcon({ className = 'w-[18px] h-[18px]' }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

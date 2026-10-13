@@ -189,23 +189,58 @@ export function nearestColumn(progress, count) {
   return Math.max(0, Math.min(count - 1, Math.round(progress)));
 }
 
-/**
- * Where the chip strip sits for one chip: whole, and in the middle where the
- * ends of the strip allow. The strip does not scroll on its own — the owner's
- * «όχι μπάρα που μπορεί να κάτσει όπου νά 'ναι» — so this is the only place
- * it is ever put.
+/*
+ * The strip above the columns — the owner's «Βελάκια», same day: «στο κέντρο
+ * αυτό που είμαι ολόκληρο με το ίδιο μέγεθος γραμματοσειράς, και δεξιά αριστερά
+ * … ολόκληρο αλλά με μικρότερα γράμματα και ένα βελάκι δεξιά πράσινο και ένα
+ * αριστερά κόκκινο». It is not scrolled: each chip is placed by where the board
+ * is, so mid-swipe the next one grows and walks into the middle. (Until then,
+ * hours earlier, it was a row of chips the board scrolled, the chosen one whole
+ * and the others cut at the edge.)
  */
-export function chipRestingScroll({ chipLeft, chipWidth, stripWidth, maxScroll }) {
-  return Math.max(0, Math.min(maxScroll, chipLeft + chipWidth / 2 - stripWidth / 2));
+export const SIDE_SCALE = 0.8; // 14px writing becomes about 11px at the sides
+const SIDE_SCALE_MIN = 0.65;
+const SIDE_PAD = 14; // the sides keep this far from the screen's edge
+const SIDE_GAP = 3; // and at least this far from the middle chip
+const ARROW_SPACE = 24; // the 20px arrow and its 4px gap, beside a side chip
+
+/**
+ * Where a chip sits, `d` columns from where the board is: its centre `x` on
+ * the strip, its size, how drawn it is, and how lit its green → (`next`, on a
+ * chip to the right) and red ← (`prev`, on a chip to the left) are. An arrow
+ * lights over the last half of the way, so mid-swipe the middle is not crowded.
+ */
+export function chipPlacement(d, { stripWidth, chipWidth, side }) {
+  const far = Math.abs(d);
+  const scale = 1 - (1 - side) * Math.min(1, far);
+  const half = (chipWidth * scale) / 2;
+  const middle = stripWidth / 2;
+  const left = SIDE_PAD + half;
+  const right = stripWidth - SIDE_PAD - half;
+  let x;
+  if (d <= -1) x = left - (-1 - d) * middle;
+  else if (d < 0) x = middle + (left - middle) * -d;
+  else if (d <= 1) x = middle + (right - middle) * d;
+  else x = right + (d - 1) * middle;
+  const lit = (v) => Math.max(0, Math.min(1, (v - 0.5) * 2));
+  return { x, scale, opacity: far <= 1 ? 1 : Math.max(0, 2 - far), next: lit(d), prev: lit(-d) };
 }
 
-/** Mid-swipe the strip is part way between the two chips' places, so it moves with the finger. */
-export function stripScrollAt(progress, places) {
-  const last = places.length - 1;
-  const p = Math.max(0, Math.min(last, progress));
-  const a = Math.floor(p);
-  const b = Math.min(a + 1, last);
-  return places[a] + (places[b] - places[a]) * (p - a);
+/**
+ * How small the sides are on this phone: SIDE_SCALE, or less on a narrow one —
+ * as much as the widest pair (a side, with its arrow, beside the middle chip it
+ * can sit next to) needs to fit whole. `chipWidths` are at full size, in order.
+ */
+export function sideScale(stripWidth, chipWidths) {
+  let scale = SIDE_SCALE;
+  chipWidths.forEach((middle, j) => {
+    for (const i of [j - 1, j + 1]) {
+      if (i < 0 || i >= chipWidths.length) continue;
+      const room = stripWidth / 2 - middle / 2 - SIDE_PAD - SIDE_GAP;
+      scale = Math.min(scale, room / (chipWidths[i] + ARROW_SPACE));
+    }
+  });
+  return Math.max(SIDE_SCALE_MIN, scale);
 }
 
 /**

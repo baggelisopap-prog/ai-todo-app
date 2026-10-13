@@ -21,8 +21,8 @@ import {
   nextStepColumn,
   atColumn,
   nearestColumn,
-  chipRestingScroll,
-  stripScrollAt,
+  chipPlacement,
+  sideScale,
   arrivalOffset,
 } from '../utils/boards';
 import { formatDate } from '../utils/formatDate';
@@ -35,7 +35,7 @@ import DropDialog from './DropDialog';
 import TaskDetailSheet from './TaskDetailSheet';
 import BoardMoveSheet from './BoardMoveSheet';
 import Avatar from './Avatar';
-import { PlusIcon } from './icons';
+import { PlusIcon, ArrowLeftIcon, ArrowRightIcon } from './icons';
 
 /**
  * One board's cards (2026-09-26; reshaped 2026-09-29 after the owner saw it).
@@ -55,9 +55,11 @@ import { PlusIcon } from './icons';
  *   - a PHONE shows one column at a time, full width, so a card reads like a
  *     row of Today instead of a name broken over three lines. The columns are
  *     chips across the top with their counts. The columns sit side by side and
- *     follow the finger, coming to rest on exactly one per swipe; the chips
- *     move with them (2026-10-13, «πιο ομαλή η μετάβαση»; before, the column
- *     changed only on release, and the chip strip scrolled on its own).
+ *     follow the finger, coming to rest on exactly one per swipe (2026-10-13,
+ *     «πιο ομαλή η μετάβαση»; before, the column changed only on release). The
+ *     strip shows the column you are on in the middle and the one before and
+ *     after it smaller, with a red ← and a green → («Βελάκια», the same day;
+ *     before, a row of chips cut at the edge, and earlier it scrolled on its own).
  *     Each card has a «next step» button, and press-and-hold opens
  *     «Μετακίνηση». There is no drag on a phone — it was the least exact
  *     gesture on a small screen, and on an iPhone the hold grabbed the text.
@@ -336,18 +338,28 @@ function glideToColumn(track, i) {
   track.scrollTo({ left: col.offsetLeft, behavior: still ? 'auto' : 'smooth' });
 }
 
-/** Where the strip sits for each chip, read off the chips as they are drawn now. */
-function chipPlaces(strip) {
-  const box = strip.getBoundingClientRect();
-  const maxScroll = strip.scrollWidth - strip.clientWidth;
-  return Array.from(strip.children).map((chip) => {
-    const r = chip.getBoundingClientRect();
-    return chipRestingScroll({
-      chipLeft: r.left - box.left + strip.scrollLeft,
-      chipWidth: r.width,
-      stripWidth: strip.clientWidth,
-      maxScroll,
-    });
+/**
+ * Puts every chip of the strip where the board is: the column you are on in
+ * the middle, the one before and after smaller at the sides with their arrows,
+ * the rest out of sight. `progress` is fractional mid-swipe, so the chips move
+ * with the finger. Widths are read first, all at once, then everything written.
+ */
+function drawStrip(strip, progress) {
+  const chips = Array.from(strip.children);
+  const stripWidth = strip.clientWidth;
+  if (!stripWidth) return;
+  const widths = chips.map((chip) => chip.offsetWidth);
+  const side = sideScale(stripWidth, widths);
+  chips.forEach((chip, i) => {
+    const at = chipPlacement(i - progress, { stripWidth, chipWidth: widths[i], side });
+    chip.style.transform = `translate(${at.x - widths[i] / 2}px, -50%) scale(${at.scale})`;
+    chip.style.opacity = String(at.opacity);
+    chip.style.visibility = at.opacity < 0.02 ? 'hidden' : '';
+    chip.style.pointerEvents = at.opacity < 0.5 ? 'none' : '';
+    const next = chip.querySelector('[data-arrow="next"]');
+    const prev = chip.querySelector('[data-arrow="prev"]');
+    if (next) next.style.opacity = String(at.next);
+    if (prev) prev.style.opacity = String(at.prev);
   });
 }
 
@@ -390,8 +402,10 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
 
     function drawAtRest() {
       track.style.height = `${heightOf(m.settled)}px`;
-      strip.scrollLeft = chipPlaces(strip)[m.settled] ?? 0;
+      drawStrip(strip, m.settled);
     }
+    // After a render — a count changed, so did its chip's width.
+    m.redraw = () => { if (!m.moving) drawStrip(strip, m.settled); };
 
     // A swipe begins: every other column is drawn from its own top, level with
     // where you are looking, so the one you arrive at opens at its start.
@@ -406,7 +420,7 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
     function onScroll() {
       if (!m.moving) begin();
       const p = progress();
-      strip.scrollLeft = stripScrollAt(p, chipPlaces(strip));
+      drawStrip(strip, Math.max(0, Math.min(last(), p)));
       setLit(nearestColumn(p, last() + 1));
       // Tall enough for both columns in view, so the one coming in is never cut.
       const a = Math.max(0, Math.min(last(), Math.floor(p)));
@@ -481,6 +495,11 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
     };
   }, [board.record_id, count]);
 
+  // Every render: a chip's count may have changed, and with it its width.
+  useLayoutEffect(() => {
+    motion.current.redraw?.();
+  });
+
   // The red + on a board page writes a card in the column you are looking
   // at — or the first open one, if you are looking at an ending.
   function startAdding() {
@@ -511,15 +530,16 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
 
   return (
     <div>
-      {/* The columns as chips, stuck under the board's own bar (h-14 + its
-          2px rule = 58px) so you always know where you are and how many
-          cards each column holds. The strip never scrolls on its own: the
-          board moves it, so the chosen chip is always whole. */}
+      {/* The columns, stuck under the board's own bar (h-14 + its 2px rule =
+          58px) so you always know where you are and how many cards each
+          column holds: the one you are on in the middle, the one before and
+          after it whole but smaller, with a red ← and a green →. drawStrip
+          places every chip; the strip itself never scrolls. */}
       <div
         ref={stripRef}
         role="tablist"
         aria-label={t('boards.columns_title')}
-        className="sticky top-[58px] z-20 -mx-4 px-4 py-2.5 flex gap-1.5 overflow-x-hidden bg-[var(--bg-card)] border-b border-[var(--border-subtle)]"
+        className="sticky top-[58px] z-20 -mx-4 h-[54px] overflow-hidden bg-[var(--bg-card)] border-b border-[var(--border-subtle)]"
       >
         {lanes.map((l, i) => {
           const isActive = i === litIndex;
@@ -530,17 +550,25 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
               role="tab"
               aria-selected={isActive}
               onClick={() => glideToColumn(trackRef.current, i)}
-              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+              // One weight for every chip, so a chip keeps its width when it
+              // becomes the middle one and nothing shifts half way.
+              className={`absolute left-0 top-1/2 origin-center inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                 isActive
-                  ? 'bg-[var(--brand-primary)] border-[var(--brand-primary)] text-white font-medium'
+                  ? 'bg-[var(--brand-primary)] border-[var(--brand-primary)] text-white'
                   : 'bg-[var(--bg-card)] border-[var(--border-medium)] text-[var(--text-secondary)]'
               }`}
             >
+              <span data-arrow="next" aria-hidden="true" className="absolute top-1/2 -mt-2.5 right-[calc(100%+4px)] pointer-events-none text-[var(--success-text)]">
+                <ArrowRightIcon />
+              </span>
               {l.column.kind === 'done' && <span aria-hidden="true">✓</span>}
               {l.column.kind === 'dropped' && <span aria-hidden="true">⊘</span>}
               {l.column.name}
               <span className={`text-xs font-semibold tabular-nums ${isActive ? 'text-white/85' : 'text-[var(--text-muted)]'}`}>
                 {l.cards.length + l.older.length}
+              </span>
+              <span data-arrow="prev" aria-hidden="true" className="absolute top-1/2 -mt-2.5 left-[calc(100%+4px)] pointer-events-none text-[var(--brand-primary)]">
+                <ArrowLeftIcon />
               </span>
             </button>
           );

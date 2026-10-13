@@ -20,8 +20,8 @@ import {
   daysAgo,
   atColumn,
   nearestColumn,
-  chipRestingScroll,
-  stripScrollAt,
+  chipPlacement,
+  sideScale,
   arrivalOffset,
   moveOptionHint,
   BOARDS_TAB,
@@ -137,15 +137,32 @@ check('let go before half way, it is the column it left', nearestColumn(1.3, 4),
 check('never before the first column', nearestColumn(-0.3, 4), 0);
 check('never past the last column', nearestColumn(3.4, 4), 3);
 
-// The chip strip is moved by the board, never on its own: the chosen chip
-// whole, in the middle where the ends of the strip allow.
-const strip = { stripWidth: 390, maxScroll: 80 };
-check('a chip near the start leaves the strip at its start', chipRestingScroll({ chipLeft: 16, chipWidth: 90, ...strip }), 0);
-check('a chip in the middle is centred', chipRestingScroll({ chipLeft: 200, chipWidth: 100, ...strip }), 55);
-check('the last chip never takes the strip past its end', chipRestingScroll({ chipLeft: 340, chipWidth: 120, ...strip }), 80);
-check('mid-swipe the strip is part way between the two chips\' places', stripScrollAt(2.5, [0, 0, 50, 80]), 65);
-check('at rest the strip is at its chip\'s place', stripScrollAt(3, [0, 0, 50, 80]), 80);
-check('pulled past the last column, the strip stays at its end', stripScrollAt(3.2, [0, 0, 50, 80]), 80);
+// The strip above the columns (2026-10-13, the owner's «Βελάκια»): the column
+// you are on in the middle at full size; the one before on the left and the one
+// after on the right, whole but smaller, with a red ← and a green →. `d` is how
+// many columns a chip is from where the board is (−1 the one before, 0.5 half
+// way to becoming the next). Widths in px; a 390px strip, a 100px chip.
+const W = 390;
+const place = (d, side = 0.8) => {
+  const at = chipPlacement(d, { stripWidth: W, chipWidth: 100, side });
+  return { x: Math.round(at.x * 10) / 10, scale: Math.round(at.scale * 100) / 100, opacity: at.opacity, next: at.next, prev: at.prev };
+};
+check('the column you are on: in the middle, full size, no arrow', place(0), { x: 195, scale: 1, opacity: 1, next: 0, prev: 0 });
+check('the next one: whole at the right edge, smaller, green → lit', place(1), { x: 336, scale: 0.8, opacity: 1, next: 1, prev: 0 });
+check('the one before: whole at the left edge, smaller, red ← lit', place(-1), { x: 54, scale: 0.8, opacity: 1, next: 0, prev: 1 });
+check('half way through a swipe: between the middle and the edge, part grown, no arrow yet',
+  place(0.5), { x: 263, scale: 0.9, opacity: 1, next: 0, prev: 0 });
+check('two columns away: not drawn', place(2).opacity, 0);
+check('on its way in from beyond the next: half drawn', place(1.5).opacity, 0.5);
+check('three quarters of the way to the side, its arrow is half lit', place(0.75).next, 0.5);
+
+// The sides shrink on a narrow phone, only as much as the widest pair needs
+// to fit whole with its arrow — never below 0.65 of full size.
+check('a wide phone keeps the sides at 0.8', sideScale(412, [80, 110, 90, 120]), 0.8);
+// widest pair: «150» on the right of «90» — room 180 − 45 − 14 − 3 = 118 for 150 + a 24px arrow
+check('a narrow phone shrinks them to fit the widest pair', Math.round(sideScale(360, [80, 110, 90, 150]) * 1000) / 1000, 0.678);
+check('never smaller than 0.65', sideScale(250, [80, 110, 90, 120]), 0.65);
+check('one column alone has no sides to fit', sideScale(360, [300]), 0.8);
 
 // Scrolled down a long column, the next one opens at its top: it is drawn as
 // far down as you had scrolled, so it arrives level with your eye.
