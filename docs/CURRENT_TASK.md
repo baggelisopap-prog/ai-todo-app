@@ -1,4 +1,4 @@
-ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, LIVE; a task created after the deploy works; the owner does NOT like the UI/UX — redesign CHOSEN 2026-09-29 (proposals 1 + 2 + 4 + 5α + 5β); stage A (1 + 2) LIVE, waiting for his look; stage B (4 + 5α + 5β) not built; BOARD MODE (his «switch to board mode», `58a6f2c`) LIVE 2026-10-12, not yet seen by him
+ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, LIVE; a task created after the deploy works; the owner does NOT like the UI/UX — redesign CHOSEN 2026-09-29 (proposals 1 + 2 + 4 + 5α + 5β); stage A (1 + 2) LIVE, waiting for his look; stage B (4 + 5α + 5β) not built; BOARD MODE (his «switch to board mode», `58a6f2c`) LIVE 2026-10-12, not yet seen by him; the PHONE BOARD SWIPE (columns follow the finger, one per swipe, `71ad3ee`) LIVE 2026-10-13, not yet seen by him
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **Side fix in between, 2026-10-10/11, not part of this task:** a guest message that keeps ringing
@@ -309,12 +309,52 @@ seen at 23:40:07 Athens, the push having landed at 23:39:28.
 (no history is kept, so it leaves the app, as before); the clipped board name next to the switch
 (drawn and measured on the mockup only: 180px needed, 157 at 390px).
 
+#### The phone board's swipe — PUSHED and LIVE 2026-10-13 (`71ad3ee`), frontend only; NOT yet seen by him
+
+His words, in order: «μήπως οι κάθε κάρτα βνα είν κάθετα ξκαι όχι παράλειλα και να φάινεται όλο
+(μονο για το κινητό, γτ έτσι δεν βλέπω όλο το Pipeline πάνω»; shown Α (all stacked), Β (stacked,
+endings folded), Γ (one column, four chips across) — «κοίτα θα το αφήσουμε όπως ειναι αλλα θα το
+βελτιώσουμε θέλω να είναι ποιο ομαλη η μετάβαση καθε swipe του δαχτυλου να αλλάζει και μία
+κατηγορία όχι μπαρα που μπορεί να κατσει όπου νάνε»; asked which «bar» he meant (the chip strip or
+the cards), «ναια αυτο εννοω» — so both were done; drawn as «Ομαλό» on
+https://claude.ai/artifact/UZHxrF8MvVnb8fxE3WkcEP; then «pushare».
+
+- `PhoneBoard` (BoardDetail.jsx) draws every column on one scroll-snap track (`-mx-4`, each column
+  full width, `snap-start snap-always`); the browser moves it. A `useLayoutEffect` listens to its
+  scroll: it slides the chip strip (`stripScrollAt` over `chipRestingScroll` per chip), lights the
+  nearest chip, keeps the track as tall as the two columns in view, and on rest (120 ms still, no
+  finger down) records the column. A board left between columns is finished off (`atColumn`).
+- «Opens at its top»: when a swipe begins below the columns' top, the other columns are drawn
+  `arrivalOffset` px lower; on arrival the drawing comes off and the page scrolls up by the same
+  amount in one frame.
+- The strip is `overflow-x-hidden`; chips call `glideToColumn` (smooth, or instant under reduced
+  motion). The red + on an ending glides to the first open column, as before it switched to it.
+- `swipeColumnIndex` and its 60/50px thresholds deleted with their six checks; `.scrollbar-none`
+  new in index.css. A ResizeObserver redraws the resting column when it grows or shrinks.
+
+Proof, actual output: `boards.test.mjs` RED on `does not provide an export named
+'arrivalOffset'`, then 57 PASS / 0 FAIL (15 new). `npm run check` exit 1 on `ui-check: 1
+problem(s)`, in the untracked `UpcomingView.jsx` of a parallel session (not committed); the other
+23 scripts exit 0, 453 PASS. `npm run build` exit 0. Lint 13, the same 13 with the change set
+aside. Real touch input in Chrome's emulator at 390px: the mockup 22/22, the app itself (local,
+invented data) 24/24 — the list is in its PROJECT_STATUS.md bullet. Live: `index-ARUpO4kM.js` at
+14:19:21 Athens, 23 s after the push; `BoardPage-Ig4V1uXF.js` carries the new track.
+
+**NOT seen:** his phone (the feel is each browser's own snap; no Safari ran it); press-and-hold
+on a real phone — in the emulator the release after the hold closes «Μετακίνηση» as a tap on its
+backdrop, on the OLD board identically (run side by side), so if his phone does it, it is older
+than this; «Παλαιότερες» inside the track; five or more columns; a column added while open.
+
 ## What NOBODY has watched
 
 1. **The board screen on his phone** — columns, press-and-hold, the ⋯ menu. He judges UI by looking;
    expect changes. Settles it: «Πίνακες» at the top → a board → «+ Νέος πίνακας». _(It said
    «Όλα» → Πίνακες → Νέος πίνακας until board mode moved the boards out of «Όλα».)_
-2. **A drag across columns on a real phone** (touch sensor inside a sideways-scrolling strip).
+2. **The board's swipe on a real phone** — one column per swipe, the strip following, and that a
+   hold still opens «Μετακίνηση» and stays open. _(It said «A drag across columns on a real phone
+   (touch sensor inside a sideways-scrolling strip)»; corrected 2026-10-13 against the code: a
+   phone has had no drag since stage A — the drag and its touch sensor are the computer's lanes
+   only, `isDesktop`.)_
 3. **«Στείλε σε πίνακα…» and «Ακύρωση εργασίας…» in the ⋯ menu**, and the «Γιατί;» dialog.
 4. **A cancelled task leaving Today and appearing in History → Ακυρωμένα**, with undo.
 5. **«Τρέχουν» on Today** for a task with a start date, and «από → έως» on its row.
