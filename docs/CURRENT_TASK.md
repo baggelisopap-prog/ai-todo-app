@@ -1,4 +1,4 @@
-ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, LIVE; a task created after the deploy works; the owner does NOT like the UI/UX — redesign CHOSEN 2026-09-29 (proposals 1 + 2 + 4 + 5α + 5β); stage A (1 + 2) LIVE, waiting for his look; stage B (4 + 5α + 5β) not built; BOARD MODE (his «switch to board mode», `58a6f2c`) LIVE 2026-10-12, not yet seen by him; the PHONE BOARD SWIPE (columns follow the finger, one per swipe, `71ad3ee`) LIVE 2026-10-13, not yet seen by him
+ACTIVE TASK — Boards, cancelling a task with a reason, and a start date: three code commits (`3711d60`, `92c9572`, `6fd05ee`), migrated by the owner and PUSHED 2026-09-27, LIVE; a task created after the deploy works; the owner does NOT like the UI/UX — redesign CHOSEN 2026-09-29 (proposals 1 + 2 + 4 + 5α + 5β); stage A (1 + 2) LIVE, waiting for his look; stage B (4 + 5α + 5β) not built; BOARD MODE (his «switch to board mode», `58a6f2c`) LIVE 2026-10-12, not yet seen by him; the PHONE BOARD SWIPE (columns follow the finger, one per swipe, `71ad3ee`) and its «Βελάκια» strip (`6a368b9`) LIVE 2026-10-13, not yet seen by him
 _Overwrite this whole file when a new task starts. Keep the "ACTIVE TASK —" first line exact (cold-start anchor)._
 
 > **Side fix in between, 2026-10-10/11, not part of this task:** a guest message that keeps ringing
@@ -344,6 +344,34 @@ invented data) 24/24 — the list is in its PROJECT_STATUS.md bullet. Live: `ind
 on a real phone — in the emulator the release after the hold closes «Μετακίνηση» as a tap on its
 backdrop, on the OLD board identically (run side by side), so if his phone does it, it is older
 than this; «Παλαιότερες» inside the track; five or more columns; a column added while open.
+
+#### The strip as «Βελάκια» — PUSHED and LIVE 2026-10-13 (`6a368b9`), frontend only; NOT yet seen by him
+
+His words: «καλό αλλά άκου τι θέλω το μεγεθος του κάθε board να μένει εως έχει, αλλά οταν ειναισ
+το πρώτο να δειχνει ενα βελάκι με δεξια το επόμενο βήμα να φαίνεται όλο αλλά ποιο μικρο οταν
+ειναι στο κέντρο να έχει και το αριστερο και το δεξί … ένα βελάκι δεξια πράσινο και ένα αριστερα
+κοκκινο … tO DO(ολο αλλα μικροτερα γραμματα <- in progress(ολο με το μεγεθος που έχει)->done(με
+μικρα γράμματα)»; drawn as «Βελάκια» (mockup v4); «περνα το»; asked before pushing — «ναι».
+
+- The strip (`h-[54px]`, `overflow-hidden`) holds every chip absolutely placed; `drawStrip` in
+  BoardDetail.jsx reads all widths, then writes each chip's transform from `chipPlacement(i −
+  progress, …)` and `sideScale(width, widths)` (utils/boards.js), on every scroll event, at rest,
+  and after every render (a count may change a width). One font weight for every chip, so the
+  width does not jump when a chip becomes the middle one.
+- Arrows: `data-arrow="next"` (→, `--success-text`) outside a chip's left edge, `data-arrow="prev"`
+  (←, `--brand-primary`) outside its right; lit by `chipPlacement`.
+- Removed: `chipRestingScroll`, `stripScrollAt`, their six checks; the strip's scroll position.
+
+Proof, actual output: `boards.test.mjs` RED on `does not provide an export named
+'chipPlacement'`, then 62 PASS / 0 FAIL (11 new). `npm run check`: only `ui-check`'s finding in the
+untracked `UpcomingView.jsx`; the other 23 scripts exit 0, 458 PASS. Build exit 0; lint on the four
+changed files exit 0. The app itself (local, invented data) with real touch input: 31/31 at 360px
+and 31/31 at 390px. A quick 120px flick in 80ms came to rest on [0,0,1] and [0,1,1] over two runs of
+three — the browser's own call, as before; never between columns. Live: `index-DN-1JlW8.js` at
+14:53:54 Athens, 19 s after the push.
+
+**NOT seen:** his phone, any Safari; a long column name of his own (the sides stop shrinking at
+0.65); a count changing while the board is open.
 
 ## What NOBODY has watched
 
