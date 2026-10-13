@@ -433,6 +433,15 @@ body {
   border-radius: 4px;
 }
 
+/* A row that moves sideways under the finger with no bar drawn under it: the
+   phone board's columns, where the chips already say where you are. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
 }

@@ -167,21 +167,55 @@ export function daysAgo(ms, now = new Date()) {
   return Math.max(0, Math.round((b - a) / DAY_MS));
 }
 
-// How far a finger must travel sideways, and how little up or down, for a drag
-// on the board to count as «show me the next column» rather than a scroll.
-// The mockup's numbers, which the owner tried on his phone before choosing.
-const SWIPE_MIN_X = 60;
-const SWIPE_MAX_Y = 50;
+/*
+ * The phone board's swipe (2026-10-13). The columns sit side by side and follow
+ * the finger; the browser's own scroll-snap brings them to rest on exactly one,
+ * however hard the flick. These are the sums around it, in «progress»: how many
+ * column widths the board has moved, so 1.4 is part way into the second column.
+ * Before this, nothing moved under the finger and the column changed on release
+ * after a 60px sideways drag — the owner asked for «πιο ομαλή η μετάβαση».
+ */
+
+// How close to a column counts as resting on it: a fraction of a pixel on a
+// phone, never an offset anyone could see.
+const AT_COLUMN = 0.02;
+
+export function atColumn(progress) {
+  return Math.abs(progress - Math.round(progress)) <= AT_COLUMN;
+}
+
+/** The column nearest the board, never outside the board. */
+export function nearestColumn(progress, count) {
+  return Math.max(0, Math.min(count - 1, Math.round(progress)));
+}
 
 /**
- * Which column a phone shows after a drag of (dx, dy) pixels. Left shows the
- * next column, right the previous; a short or mostly vertical drag is a scroll
- * and changes nothing. The ends do not wrap round.
+ * Where the chip strip sits for one chip: whole, and in the middle where the
+ * ends of the strip allow. The strip does not scroll on its own — the owner's
+ * «όχι μπάρα που μπορεί να κάτσει όπου νά 'ναι» — so this is the only place
+ * it is ever put.
  */
-export function swipeColumnIndex(index, dx, dy, count) {
-  if (Math.abs(dx) < SWIPE_MIN_X || Math.abs(dy) >= SWIPE_MAX_Y) return index;
-  const next = index + (dx < 0 ? 1 : -1);
-  return next < 0 || next >= count ? index : next;
+export function chipRestingScroll({ chipLeft, chipWidth, stripWidth, maxScroll }) {
+  return Math.max(0, Math.min(maxScroll, chipLeft + chipWidth / 2 - stripWidth / 2));
+}
+
+/** Mid-swipe the strip is part way between the two chips' places, so it moves with the finger. */
+export function stripScrollAt(progress, places) {
+  const last = places.length - 1;
+  const p = Math.max(0, Math.min(last, progress));
+  const a = Math.floor(p);
+  const b = Math.min(a + 1, last);
+  return places[a] + (places[b] - places[a]) * (p - a);
+}
+
+/**
+ * How far down to draw the other columns while a swipe begins, so the one you
+ * arrive at opens at its top, level with your eye, rather than wherever the
+ * page happened to be scrolled. `columnsTop` is the page scroll at which the
+ * columns start right under the stuck chips.
+ */
+export function arrivalOffset(scrollY, columnsTop) {
+  return Math.max(0, Math.round(scrollY - columnsTop));
 }
 
 /**

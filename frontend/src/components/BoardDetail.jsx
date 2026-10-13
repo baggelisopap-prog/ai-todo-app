@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -15,7 +15,16 @@ import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useMembers } from '../hooks/useMembers';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useMediaQuery, DESKTOP_QUERY } from '../hooks/useMediaQuery';
-import { layoutBoard, columnFor, nextStepColumn, swipeColumnIndex } from '../utils/boards';
+import {
+  layoutBoard,
+  columnFor,
+  nextStepColumn,
+  atColumn,
+  nearestColumn,
+  chipRestingScroll,
+  stripScrollAt,
+  arrivalOffset,
+} from '../utils/boards';
 import { formatDate } from '../utils/formatDate';
 import { dueTone, DUE_TONE_CLASSES, checklistProgress, effectiveStart } from '../utils/taskDisplay';
 import { priorityColor } from '../utils/priorityColor';
@@ -45,7 +54,10 @@ import { PlusIcon } from './icons';
  * φορά»):
  *   - a PHONE shows one column at a time, full width, so a card reads like a
  *     row of Today instead of a name broken over three lines. The columns are
- *     chips across the top with their counts; a sideways swipe changes column.
+ *     chips across the top with their counts. The columns sit side by side and
+ *     follow the finger, coming to rest on exactly one per swipe; the chips
+ *     move with them (2026-10-13, «πιο ομαλή η μετάβαση»; before, the column
+ *     changed only on release, and the chip strip scrolled on its own).
  *     Each card has a «next step» button, and press-and-hold opens
  *     «Μετακίνηση». There is no drag on a phone — it was the least exact
  *     gesture on a small screen, and on an iPhone the hold grabbed the text.
@@ -308,29 +320,166 @@ function WideCard({ task, column, nextColumn, onOpen, onHold, onNext, cardProps,
   );
 }
 
+// How long the board must go without moving to count as at rest.
+const SWIPE_IDLE_MS = 120;
+
+function phoneColumns(track) {
+  return Array.from(track.children);
+}
+
+/** Glide to column i — a chip tap, or the red + finding an open column. */
+function glideToColumn(track, i) {
+  const cols = phoneColumns(track);
+  const col = cols[Math.max(0, Math.min(cols.length - 1, i))];
+  if (!col) return;
+  const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  track.scrollTo({ left: col.offsetLeft, behavior: still ? 'auto' : 'smooth' });
+}
+
+/** Where the strip sits for each chip, read off the chips as they are drawn now. */
+function chipPlaces(strip) {
+  const box = strip.getBoundingClientRect();
+  const maxScroll = strip.scrollWidth - strip.clientWidth;
+  return Array.from(strip.children).map((chip) => {
+    const r = chip.getBoundingClientRect();
+    return chipRestingScroll({
+      chipLeft: r.left - box.left + strip.scrollLeft,
+      chipWidth: r.width,
+      stripWidth: strip.clientWidth,
+      maxScroll,
+    });
+  });
+}
+
 function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps, t }) {
+  // The column the board rests on.
   const [index, setIndex] = useState(() => {
     const remembered = lastColumnByBoard.get(board.record_id);
     const found = lanes.findIndex((l) => l.column.record_id === remembered);
     return found >= 0 ? found : 0;
   });
+  // The chip drawn as chosen. It follows the finger, so it changes half way
+  // through a swipe, before the board has come to rest.
+  const [lit, setLit] = useState(index);
   const [olderOpen, setOlderOpen] = useState(false);
-  const swipe = useRef(null);
-  const chipRefs = useRef({});
+  const trackRef = useRef(null);
+  const stripRef = useRef(null);
+  // What a swipe under way needs from one scroll event to the next. None of it
+  // is drawn by React: the board moves at the finger's pace, not a render's.
+  const motion = useRef({ settled: index, moving: false, touching: false, offset: 0, idle: null });
 
-  const safeIndex = Math.min(index, lanes.length - 1);
+  const count = lanes.length;
+  const safeIndex = Math.min(index, count - 1);
   const lane = lanes[safeIndex];
+  const litIndex = Math.min(lit, count - 1);
 
-  function show(next) {
-    setIndex(next);
-    setOlderOpen(false);
-    lastColumnByBoard.set(board.record_id, lanes[next]?.column.record_id);
-  }
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    const strip = stripRef.current;
+    if (!track || !strip) return undefined;
+    const m = motion.current;
+    const last = () => track.children.length - 1;
+    const progress = () => track.scrollLeft / (track.clientWidth || 1);
+    const heightOf = (j) => {
+      const col = phoneColumns(track)[j];
+      return col ? col.offsetHeight + (j === m.settled ? 0 : m.offset) : 0;
+    };
+    // The page scroll at which the columns start right under the stuck chips.
+    const columnsTop = () =>
+      track.getBoundingClientRect().top + window.scrollY - (parseFloat(getComputedStyle(strip).top) || 0) - strip.offsetHeight;
 
-  // Keep the chosen chip in view when a swipe moved past the edge of the strip.
-  useEffect(() => {
-    chipRefs.current[lane?.column.record_id]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-  }, [lane?.column.record_id]);
+    function drawAtRest() {
+      track.style.height = `${heightOf(m.settled)}px`;
+      strip.scrollLeft = chipPlaces(strip)[m.settled] ?? 0;
+    }
+
+    // A swipe begins: every other column is drawn from its own top, level with
+    // where you are looking, so the one you arrive at opens at its start.
+    function begin() {
+      m.moving = true;
+      m.offset = arrivalOffset(window.scrollY, columnsTop());
+      phoneColumns(track).forEach((col, j) => {
+        col.style.transform = j === m.settled || !m.offset ? '' : `translateY(${m.offset}px)`;
+      });
+    }
+
+    function onScroll() {
+      if (!m.moving) begin();
+      const p = progress();
+      strip.scrollLeft = stripScrollAt(p, chipPlaces(strip));
+      setLit(nearestColumn(p, last() + 1));
+      // Tall enough for both columns in view, so the one coming in is never cut.
+      const a = Math.max(0, Math.min(last(), Math.floor(p)));
+      track.style.height = `${Math.max(heightOf(a), heightOf(Math.min(a + 1, last())))}px`;
+      clearTimeout(m.idle);
+      m.idle = setTimeout(settle, SWIPE_IDLE_MS);
+    }
+
+    function settle() {
+      if (m.touching) return;
+      const p = progress();
+      const i = nearestColumn(p, last() + 1);
+      // At rest between two columns — the width changed under a swipe, say,
+      // when a long column brought the page's scrollbar. Finish the move.
+      if (!atColumn(p)) {
+        glideToColumn(track, i);
+        m.idle = setTimeout(settle, 400);
+        return;
+      }
+      phoneColumns(track).forEach((col) => { col.style.transform = ''; });
+      // The new column was drawn m.offset lower; scroll up by the same amount
+      // as the drawing comes off, and nothing on the screen moves.
+      if (i !== m.settled && m.offset) window.scrollTo(0, window.scrollY - m.offset);
+      const changed = i !== m.settled;
+      m.settled = i;
+      m.offset = 0;
+      m.moving = false;
+      drawAtRest();
+      setLit(i);
+      if (changed) {
+        setIndex(i);
+        setOlderOpen(false);
+        lastColumnByBoard.set(board.record_id, phoneColumns(track)[i]?.dataset.columnId);
+      }
+    }
+
+    // A finger held still mid-swipe is not «at rest».
+    const onTouchStart = () => { m.touching = true; };
+    const onTouchEnd = () => {
+      m.touching = false;
+      clearTimeout(m.idle);
+      m.idle = setTimeout(settle, SWIPE_IDLE_MS);
+    };
+
+    m.settled = Math.min(m.settled, last());
+    const resting = phoneColumns(track)[m.settled];
+    if (resting) track.scrollLeft = resting.offsetLeft;
+    drawAtRest();
+
+    // A column that grows or shrinks while you rest on it (a card moved on,
+    // older cards opened), or a board that changes width.
+    const resized = new ResizeObserver(() => {
+      if (m.moving) return;
+      const col = phoneColumns(track)[m.settled];
+      if (col && Math.abs(track.scrollLeft - col.offsetLeft) > 1) track.scrollLeft = col.offsetLeft;
+      drawAtRest();
+    });
+    resized.observe(track);
+    phoneColumns(track).forEach((col) => resized.observe(col));
+
+    track.addEventListener('scroll', onScroll, { passive: true });
+    track.addEventListener('touchstart', onTouchStart, { passive: true });
+    track.addEventListener('touchend', onTouchEnd, { passive: true });
+    track.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      clearTimeout(m.idle);
+      resized.disconnect();
+      track.removeEventListener('scroll', onScroll);
+      track.removeEventListener('touchstart', onTouchStart);
+      track.removeEventListener('touchend', onTouchEnd);
+      track.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [board.record_id, count]);
 
   // The red + on a board page writes a card in the column you are looking
   // at — or the first open one, if you are looking at an ending.
@@ -341,7 +490,7 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
     }
     const firstOpen = lanes.findIndex((l) => l.column.kind === 'open');
     if (firstOpen < 0) return;
-    show(firstOpen);
+    glideToColumn(trackRef.current, firstOpen);
     onNewCard(lanes[firstOpen].column.record_id);
   }
 
@@ -364,22 +513,23 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
     <div>
       {/* The columns as chips, stuck under the board's own bar (h-14 + its
           2px rule = 58px) so you always know where you are and how many
-          cards each column holds. */}
+          cards each column holds. The strip never scrolls on its own: the
+          board moves it, so the chosen chip is always whole. */}
       <div
+        ref={stripRef}
         role="tablist"
         aria-label={t('boards.columns_title')}
-        className="sticky top-[58px] z-20 -mx-4 px-4 py-2.5 flex gap-1.5 overflow-x-auto bg-[var(--bg-card)] border-b border-[var(--border-subtle)]"
+        className="sticky top-[58px] z-20 -mx-4 px-4 py-2.5 flex gap-1.5 overflow-x-hidden bg-[var(--bg-card)] border-b border-[var(--border-subtle)]"
       >
         {lanes.map((l, i) => {
-          const isActive = i === safeIndex;
+          const isActive = i === litIndex;
           return (
             <button
               key={l.column.record_id}
-              ref={(el) => { chipRefs.current[l.column.record_id] = el; }}
               type="button"
               role="tab"
               aria-selected={isActive}
-              onClick={() => show(i)}
+              onClick={() => glideToColumn(trackRef.current, i)}
               className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
                 isActive
                   ? 'bg-[var(--brand-primary)] border-[var(--brand-primary)] text-white font-medium'
@@ -397,44 +547,50 @@ function PhoneBoard({ board, lanes, onOpen, onHold, onNext, onNewCard, cardProps
         })}
       </div>
 
+      {/* Every column, side by side, a phone's width each. The finger moves
+          them and the browser's scroll-snap brings them to rest on one —
+          snap-always, so even a hard flick stops at the next column. */}
       <div
-        role="tabpanel"
-        aria-label={lane.column.name}
-        className="pt-4 min-h-[50vh] touch-pan-y"
-        onTouchStart={(e) => {
-          const touch = e.touches[0];
-          swipe.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
-        }}
-        onTouchEnd={(e) => {
-          const from = swipe.current;
-          const touch = e.changedTouches[0];
-          swipe.current = null;
-          if (!from || !touch) return;
-          const next = swipeColumnIndex(safeIndex, touch.clientX - from.x, touch.clientY - from.y, lanes.length);
-          if (next !== safeIndex) show(next);
-        }}
+        ref={trackRef}
+        className="relative -mx-4 flex items-start overflow-x-auto overflow-y-hidden snap-x snap-mandatory overscroll-x-contain scrollbar-none"
       >
-        <ul className="flex flex-col gap-2">
-          {lane.cards.map(({ card, task }) => renderWide(card, task, lane.column))}
-        </ul>
-
-        {lane.cards.length === 0 && lane.older.length === 0 && (
-          <p className="py-6 text-center text-xs text-[var(--text-muted)]">{t('boards.column_empty')}</p>
-        )}
-
-        <OlderToggle lane={lane} isOpen={olderOpen} onToggle={() => setOlderOpen((o) => !o)} renderCard={renderWide} t={t} />
-
-        {lane.column.kind === 'open' && (
-          <button
-            type="button"
-            onClick={() => onNewCard(lane.column.record_id)}
-            className="mt-2.5 w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-[var(--border-medium)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+        {lanes.map((l, i) => (
+          <div
+            key={l.column.record_id}
+            data-column-id={l.column.record_id}
+            role="tabpanel"
+            aria-label={l.column.name}
+            className="w-full flex-shrink-0 snap-start snap-always px-4 pt-4 min-h-[50vh]"
           >
-            + {t('boards.new_card')}
-          </button>
-        )}
+            <ul className="flex flex-col gap-2">
+              {l.cards.map(({ card, task }) => renderWide(card, task, l.column))}
+            </ul>
 
-        <p className="mt-3.5 text-center text-xs text-[var(--text-muted)]">{t('boards.phone_hint')}</p>
+            {l.cards.length === 0 && l.older.length === 0 && (
+              <p className="py-6 text-center text-xs text-[var(--text-muted)]">{t('boards.column_empty')}</p>
+            )}
+
+            <OlderToggle
+              lane={l}
+              isOpen={olderOpen && i === safeIndex}
+              onToggle={() => setOlderOpen((o) => !o)}
+              renderCard={renderWide}
+              t={t}
+            />
+
+            {l.column.kind === 'open' && (
+              <button
+                type="button"
+                onClick={() => onNewCard(l.column.record_id)}
+                className="mt-2.5 w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-[var(--border-medium)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+              >
+                + {t('boards.new_card')}
+              </button>
+            )}
+
+            <p className="mt-3.5 text-center text-xs text-[var(--text-muted)]">{t('boards.phone_hint')}</p>
+          </div>
+        ))}
       </div>
 
       {/* The page's red +. It writes a card straight onto this board, never

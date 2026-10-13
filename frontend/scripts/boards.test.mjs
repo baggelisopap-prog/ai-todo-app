@@ -18,7 +18,11 @@ import {
   nextStepColumn,
   boardSummary,
   daysAgo,
-  swipeColumnIndex,
+  atColumn,
+  nearestColumn,
+  chipRestingScroll,
+  stripScrollAt,
+  arrivalOffset,
   moveOptionHint,
   BOARDS_TAB,
   tabAfterModeSwitch,
@@ -122,13 +126,31 @@ check('late last night is 1 day ago', daysAgo(new Date(2026, 8, 28, 23, 0).getTi
 check('four calendar days back is 4', daysAgo(new Date(2026, 8, 25, 12, 0).getTime(), morning), 4);
 check('no moment is no answer', daysAgo(null, morning), null);
 
-// A sideways swipe on a phone changes the column; anything else is a scroll.
-check('a swipe to the left shows the next column', swipeColumnIndex(0, -80, 10, 4), 1);
-check('a swipe to the right shows the previous column', swipeColumnIndex(2, 80, 10, 4), 1);
-check('there is nothing before the first column', swipeColumnIndex(0, 80, 10, 4), 0);
-check('there is nothing after the last column', swipeColumnIndex(3, -80, 10, 4), 3);
-check('a short drag is not a swipe', swipeColumnIndex(1, -40, 0, 4), 1);
-check('a mostly vertical drag is a scroll, not a swipe', swipeColumnIndex(1, -80, 70, 4), 1);
+// The phone board's swipe (2026-10-13, the owner's «κάθε swipe μία κατηγορία»):
+// the columns follow the finger and come to rest on exactly one. `progress` is
+// how many column widths the board has moved — 1.4 is part way into the second.
+check('mid-swipe is between two columns', atColumn(1.4), false);
+check('a board on a column is resting on it', atColumn(2), true);
+check('a hair off a column still counts as resting on it', atColumn(1.01), true);
+check('let go past half way, the next column is the nearest', nearestColumn(1.6, 4), 2);
+check('let go before half way, it is the column it left', nearestColumn(1.3, 4), 1);
+check('never before the first column', nearestColumn(-0.3, 4), 0);
+check('never past the last column', nearestColumn(3.4, 4), 3);
+
+// The chip strip is moved by the board, never on its own: the chosen chip
+// whole, in the middle where the ends of the strip allow.
+const strip = { stripWidth: 390, maxScroll: 80 };
+check('a chip near the start leaves the strip at its start', chipRestingScroll({ chipLeft: 16, chipWidth: 90, ...strip }), 0);
+check('a chip in the middle is centred', chipRestingScroll({ chipLeft: 200, chipWidth: 100, ...strip }), 55);
+check('the last chip never takes the strip past its end', chipRestingScroll({ chipLeft: 340, chipWidth: 120, ...strip }), 80);
+check('mid-swipe the strip is part way between the two chips\' places', stripScrollAt(2.5, [0, 0, 50, 80]), 65);
+check('at rest the strip is at its chip\'s place', stripScrollAt(3, [0, 0, 50, 80]), 80);
+check('pulled past the last column, the strip stays at its end', stripScrollAt(3.2, [0, 0, 50, 80]), 80);
+
+// Scrolled down a long column, the next one opens at its top: it is drawn as
+// far down as you had scrolled, so it arrives level with your eye.
+check('not scrolled past the columns\' top: nothing to make up', arrivalOffset(100, 240), 0);
+check('scrolled 700px into a column: the next is drawn 700px down', arrivalOffset(940, 240), 700);
 
 // The «Μετακίνηση» sheet says what each button will do before it is pressed.
 check('the column the card is in says so', moveOptionHint(columns[3], 'a', 4), { key: 'here' });
